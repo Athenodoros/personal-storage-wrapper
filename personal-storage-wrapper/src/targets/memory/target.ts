@@ -1,11 +1,11 @@
-import { decodeFromArrayBuffer, encodeToArrayBuffer } from "../../utilities/buffers/encoding";
-import { Deserialiser, Result, SyncTarget, SyncTargetValue, ValueResult } from "../types";
+import { decodeFromArrayBuffer } from "../../utilities/buffers/encoding";
+import { Result, Target, TargetValue, ValueResult } from "../types";
 import { MemoryTargetSerialisationConfig, MemoryTargetType } from "./types";
 
-export class MemorySyncTarget implements SyncTarget<MemoryTargetType, MemoryTargetSerialisationConfig> {
+export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerialisationConfig> {
     type = MemoryTargetType;
 
-    private value: SyncTargetValue;
+    private value: TargetValue;
     private delaysInMillis: number[];
     private delayIndex: number;
     private preserveStateOnSave: boolean;
@@ -13,7 +13,7 @@ export class MemorySyncTarget implements SyncTarget<MemoryTargetType, MemoryTarg
     constructor(
         delaysInMillis: number[] = [0],
         preserveStateOnSave: boolean = false,
-        value: SyncTargetValue = null,
+        value: TargetValue = null,
         delayIndex: number = 0
     ) {
         this.value = value;
@@ -29,13 +29,13 @@ export class MemorySyncTarget implements SyncTarget<MemoryTargetType, MemoryTarg
         return new Promise<T>((resolve) => setTimeout(() => resolve(thunk()), delay));
     };
 
-    // Data management
-    read = (): Result<SyncTargetValue> => this.delayed(() => new ValueResult(this.value));
+    // Data handlers
+    read = (): Result<TargetValue> => this.delayed(() => new ValueResult(this.value));
     timestamp = (): Result<Date | null> => this.delayed(() => new ValueResult(this.value?.timestamp ?? null));
-    write = (contents: ArrayBuffer): Result<Date> =>
+    write = (buffer: ArrayBuffer): Result<Date> =>
         this.delayed(() => {
             const timestamp = new Date();
-            this.value = { timestamp, contents };
+            this.value = { timestamp, buffer };
             return new ValueResult(timestamp);
         });
 
@@ -47,24 +47,9 @@ export class MemorySyncTarget implements SyncTarget<MemoryTargetType, MemoryTarg
                   type: "preserve" as const,
                   value: this.value && {
                       timestamp: this.value.timestamp,
-                      contents: decodeFromArrayBuffer(this.value.contents),
+                      encoded: decodeFromArrayBuffer(this.value.buffer),
                   },
                   delayIndex: this.delayIndex,
               }
             : { delaysInMillis: this.delaysInMillis, type: "reset" as const };
-
-    //
 }
-
-export const MemorySyncTargetDeserialiser: Deserialiser<MemoryTargetType, MemoryTargetSerialisationConfig> = (config) =>
-    config.type === "preserve"
-        ? new MemorySyncTarget(
-              config.delaysInMillis,
-              true,
-              config.value && {
-                  timestamp: config.value.timestamp,
-                  contents: encodeToArrayBuffer(config.value.contents),
-              },
-              config.delayIndex
-          )
-        : new MemorySyncTarget(config.delaysInMillis, false);

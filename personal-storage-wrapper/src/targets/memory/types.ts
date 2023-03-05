@@ -3,7 +3,7 @@ export type MemoryTargetType = typeof MemoryTargetType;
 
 interface MemoryTargetSerialisationConfigPreserved {
     type: "preserve";
-    value: { timestamp: Date; contents: string } | null;
+    value: { timestamp: Date; encoded: string } | null;
     delayIndex: number;
 }
 

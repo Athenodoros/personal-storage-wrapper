@@ -32,18 +32,20 @@ export class ErrorResult<Value> {
 }
 
 /**
- * Sync target descriptions
+ * Target descriptions
  */
-export type SyncTargetValue = { timestamp: Date; contents: ArrayBuffer } | null;
+export type TargetValue = { timestamp: Date; buffer: ArrayBuffer } | null;
 
-export interface SyncTarget<Type extends string, SerialisationConfig> {
+export interface Target<Type extends string, SerialisationConfig> {
     type: Type;
 
-    write: (value: ArrayBuffer) => Result<Date>;
-    read: () => Result<SyncTargetValue>;
+    // Data handlers
+    write: (buffer: ArrayBuffer) => Result<Date>;
+    read: () => Result<TargetValue>;
     timestamp: () => Result<Date | null>;
 
+    // Serialisation
     serialise: () => SerialisationConfig;
 }
 
-export type Deserialiser<Type extends string, Config> = (config: Config) => SyncTarget<Type, Config>;
+export type Deserialiser<Type extends string, Config> = (config: Config) => Promise<Target<Type, Config> | null>;

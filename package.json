@@ -1,0 +1,13 @@
+{
+    "private": true,
+    "workspaces": [
+        "personal-storage-wrapper",
+        "personal-storage-wrapper-example",
+        "personal-storage-wrapper-react"
+    ],
+    "scripts": {
+        "dev": "yarn workspace personal-storage-wrapper-example dev",
+        "test": "yarn workspace personal-storage-wrapper test",
+        "coverage": "yarn workspace personal-storage-wrapper coverage"
+    }
+}

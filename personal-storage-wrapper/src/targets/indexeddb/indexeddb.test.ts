@@ -4,8 +4,8 @@
 
 import "fake-indexeddb/auto";
 import { expect, test } from "vitest";
-import { IndexedDBTarget, IndexedDBTargetDeserialiser } from ".";
 import { encodeTextToBuffer } from "../../utilities/buffers";
+import { IndexedDBTarget } from "./target";
 
 const TEST_BUFFER = await encodeTextToBuffer("Hello, World!");
 
@@ -60,7 +60,7 @@ test("Correctly serialises and retains values", async () => {
     await target.write(TEST_BUFFER);
 
     const config = JSON.stringify(target.serialise());
-    const newTarget = await IndexedDBTargetDeserialiser(JSON.parse(config));
+    const newTarget = await IndexedDBTarget.deserialise(JSON.parse(config));
     expect(newTarget).not.toBeNull();
 
     const read = await newTarget!.read();

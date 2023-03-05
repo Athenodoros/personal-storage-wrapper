@@ -1,4 +1,5 @@
-import { ErrorResult, Result, Target, TargetValue, ValueResult } from "../types";
+import { Result } from "../result";
+import { Deserialiser, Target, TargetValue } from "../types";
 import { IndexedDBTargetSerialisationConfig, IndexedDBTargetType } from "./types";
 
 interface StoredIDBFile {
@@ -43,36 +44,32 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
 
     // Data Handlers
     write = (buffer: ArrayBuffer): Result<Date> =>
-        new Promise((resolve) => {
+        new Result((resolve) => {
             const timestamp = new Date();
-            const request = this.db
-                .transaction(["stores"], "readwrite")
-                .objectStore("stores")
-                .put({ id: this.id, buffer, timestamp } as StoredIDBFile);
-            request.onsuccess = () => resolve(new ValueResult(timestamp));
-            request.onerror = () => resolve(new ErrorResult());
+            const file: StoredIDBFile = { id: this.id, buffer, timestamp };
+            const request = this.db.transaction(["stores"], "readwrite").objectStore("stores").put(file);
+            request.onsuccess = () => resolve({ type: "value", value: timestamp });
+            request.onerror = () => resolve({ type: "error" });
         });
 
     read = (): Result<TargetValue> =>
-        new Promise((resolve) => {
+        new Result((resolve) => {
             const request = this.db.transaction(["stores"]).objectStore("stores").get(this.id);
             request.onsuccess = () => {
                 const result: StoredIDBFile | undefined = request.result;
-                resolve(new ValueResult(result ? { timestamp: result.timestamp, buffer: result.buffer } : null));
+                resolve({
+                    type: "value",
+                    value: result ? { timestamp: result.timestamp, buffer: result.buffer } : null,
+                });
             };
-            request.onerror = () => resolve(new ErrorResult());
+            request.onerror = () => resolve({ type: "error" });
         });
 
-    timestamp = (): Result<Date | null> =>
-        new Promise((resolve) => {
-            const request = this.db.transaction(["stores"]).objectStore("stores").get(this.id);
-            request.onsuccess = () => {
-                const result: StoredIDBFile | undefined = request.result;
-                resolve(new ValueResult(result?.timestamp ?? null));
-            };
-            request.onerror = () => resolve(new ErrorResult());
-        });
+    timestamp = (): Result<Date | null> => this.read().map((value) => value?.timestamp ?? null);
 
     // Serialisation
+    static deserialise: Deserialiser<IndexedDBTargetType, IndexedDBTargetSerialisationConfig> = ({ id }) =>
+        IndexedDBTarget.create(id);
+
     serialise = (): IndexedDBTargetSerialisationConfig => ({ id: this.id });
 }

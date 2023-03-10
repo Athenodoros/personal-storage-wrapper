@@ -1,4 +1,4 @@
-export const DropboxTargetType = "memory" as const;
+export const DropboxTargetType = "dropbox" as const;
 export type DropboxTargetType = typeof DropboxTargetType;
 
 export interface DropboxConnection {

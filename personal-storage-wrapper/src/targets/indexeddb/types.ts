@@ -1,4 +1,4 @@
-export const IndexedDBTargetType = "memory" as const;
+export const IndexedDBTargetType = "indexedb" as const;
 export type IndexedDBTargetType = typeof IndexedDBTargetType;
 
 export interface IndexedDBTargetSerialisationConfig {

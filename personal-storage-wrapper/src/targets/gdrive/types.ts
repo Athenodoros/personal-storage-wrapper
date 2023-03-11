@@ -9,13 +9,17 @@ export interface GDriveConnection {
 }
 
 export interface GDriveUserDetails {
-    id: string;
     email: string;
     name: string;
 }
 
-export type GDriveTargetSerialisationConfig = {
-    file: string;
+export interface GDriveFileReference {
+    id: string;
+    mime: string;
+}
+
+export interface GDriveTargetSerialisationConfig {
+    file: GDriveFileReference;
     connection: GDriveConnection;
     user: GDriveUserDetails;
-};
+}

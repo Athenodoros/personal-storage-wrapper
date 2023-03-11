@@ -1,18 +1,27 @@
 import { Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
-import { GDriveConnection, GDriveTargetSerialisationConfig, GDriveTargetType, GDriveUserDetails } from "./types";
+import { catchRedirectForAuth, redirectForAuth, runAuthInPopup } from "./auth";
+import { getUserMetadata, queryForFile } from "./queries";
+import { runGDriveJSONQuery, runGDriveQuery } from "./requests";
+import {
+    GDriveConnection,
+    GDriveFileReference,
+    GDriveTargetSerialisationConfig,
+    GDriveTargetType,
+    GDriveUserDetails,
+} from "./types";
 
 export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerialisationConfig> {
     type: GDriveTargetType = GDriveTargetType;
     private onRefreshNeeded: () => void;
     private connection: GDriveConnection;
     private user: GDriveUserDetails;
-    private file: string;
+    private file: GDriveFileReference;
 
     private constructor(
         connection: GDriveConnection,
         user: GDriveUserDetails,
-        file: string,
+        file: GDriveFileReference,
         onRefreshNeeded: () => void
     ) {
         this.connection = connection;
@@ -21,11 +30,61 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         this.onRefreshNeeded = onRefreshNeeded;
     }
 
+    // Constructors for new targets
+    static redirectForAuth = redirectForAuth;
+
+    private static createFromMaybeConnection = async (
+        connection: Promise<GDriveConnection | null>,
+        onRefreshNeeded: () => void,
+        file: FileInitDescription
+    ): Promise<GDriveTarget | null> => {
+        const result = await connection;
+        if (result === null) return null;
+
+        const user = await getUserMetadata(result);
+        if (user.type === "error") return null;
+
+        if (file.type === "id")
+            return new GDriveTarget(result, user.value, { id: file.id, mime: file.mime }, onRefreshNeeded);
+        const files = await queryForFile(onRefreshNeeded, result, file.name, file.mime, file.parent);
+        if (files.type === "error" || files.value.files.length === 0) return null;
+
+        return new GDriveTarget(
+            result,
+            user.value,
+            { id: files.value.files[0].id, mime: files.value.files[0].mimeType },
+            onRefreshNeeded
+        );
+    };
+
+    static catchRedirectForAuth = async (
+        clientId: string,
+        onRefreshNeeded: () => void,
+        file: FileInitDescription,
+        useAppData: boolean = true,
+        redirectURI?: string
+    ): Promise<GDriveTarget | null> =>
+        this.createFromMaybeConnection(catchRedirectForAuth(clientId, useAppData, redirectURI), onRefreshNeeded, file);
+
+    static setupInPopup = async (
+        clientId: string,
+        onRefreshNeeded: () => void,
+        file: FileInitDescription,
+        useAppData: boolean = true,
+        redirectURI?: string,
+        scopes?: string[]
+    ): Promise<GDriveTarget | null> =>
+        this.createFromMaybeConnection(
+            runAuthInPopup(clientId, useAppData, redirectURI, scopes),
+            onRefreshNeeded,
+            file
+        );
+
     // Data handlers
     timestamp = (): Result<Date | null> =>
-        this.fetchJSONRequest<FileDetails>(
-            `https://www.googleapis.com/drive/v3/files/${this.file}?fields=modifiedTime`
-        ).map((file) => (file ? new Date(file.modifiedTime) : null));
+        this.fetchJSON<FileDetails>(`https://www.googleapis.com/drive/v3/files/${this.file}?fields=modifiedTime`).map(
+            (file) => (file ? new Date(file.modifiedTime) : null)
+        );
     read = (): Result<TargetValue> =>
         this.timestamp().flatmap(
             (timestamp) =>
@@ -40,14 +99,12 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
                 })
         );
     write = (buffer: ArrayBuffer): Result<Date> =>
-        this.fetchJSONRequest<FileDetails>(
+        this.fetchJSON<FileDetails>(
             `https://www.googleapis.com/upload/drive/v3/files/${this.file}?uploadType=media&fields=modifiedTime`,
             {
                 method: "PATCH",
-                body: new Blob([buffer]),
-                // Should probably include mimeType?
-                // body: new Blob([buffer], { type: mimeType }),
-                // headers: { "Content-Type": mimeType },
+                body: new Blob([buffer], { type: this.file.mime }),
+                headers: { "Content-Type": this.file.mime },
             }
         ).map((file) => new Date(file.modifiedTime));
 
@@ -64,26 +121,15 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
     });
 
     // Other requests
-    fetch = async (input: RequestInfo | URL, init?: RequestInit) =>
-        fetch(input, {
-            ...init,
-            headers: { ...init?.headers, authorization: "Bearer " + this.connection.accessToken },
-        });
-
-    private fetchJSONRequest = <T = unknown>(input: RequestInfo | URL, init?: RequestInit): Result<T> =>
-        new Result<T>(async (resolve) => {
-            const result = await this.fetch(input, init);
-
-            if (result.status === 401) {
-                this.onRefreshNeeded();
-                return Result.error<T>();
-            }
-
-            const json = await result.json();
-            resolve(json);
-        });
+    fetch = (input: RequestInfo | URL, init?: RequestInit) => runGDriveQuery(this.connection, input, init);
+    fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit): Result<T> =>
+        runGDriveJSONQuery(this.onRefreshNeeded, this.connection, input, init);
 }
 
 interface FileDetails {
     modifiedTime: string;
 }
+
+type FileInitDescription =
+    | { type: "id"; id: string; mime: string }
+    | { type: "name"; name: string; mime?: string; parent?: string };

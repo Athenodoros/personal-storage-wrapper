@@ -45,7 +45,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
 
     // Data handlers
     write = (buffer: ArrayBuffer): Result<Date> =>
-        this.fetchJSONRequest<{ server_modified?: string }>("https://content.dropboxapi.com/2/files/upload", {
+        this.fetchJSON<{ server_modified?: string }>("https://content.dropboxapi.com/2/files/upload", {
             method: "POST",
             headers: {
                 "Content-Type": "application/octet-stream",
@@ -88,18 +88,15 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     // Other requests
     // This should probably track when the connection is changed and run callbacks
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runDropboxQuery(this.connection, input, init);
-    private fetchJSONRequest = <T = unknown>(input: RequestInfo | URL, init?: RequestInit) =>
+    fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit) =>
         runDropboxQueryForJSON<T>(this.connection, input, init);
 
     private getFileMetadata = (): Result<FileMetadata | null> =>
-        this.fetchJSONRequest<{ server_modified?: string; rev?: string }>(
-            "https://api.dropboxapi.com/2/files/get_metadata",
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ path: this.path }),
-            }
-        ).map((result) =>
+        this.fetchJSON<{ server_modified?: string; rev?: string }>("https://api.dropboxapi.com/2/files/get_metadata", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: this.path }),
+        }).map((result) =>
             result.server_modified && result.rev
                 ? { server_modified: new Date(result.server_modified), rev: result.rev }
                 : null

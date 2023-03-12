@@ -30,12 +30,8 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         return new DropboxTarget(result, user.value, path);
     };
 
-    static catchRedirectForAuth = async (
-        clientId: string,
-        redirectURI?: string,
-        path: string = "/data.bak"
-    ): Promise<DropboxTarget | null> =>
-        this.createFromMaybeConnection(catchRedirectForAuth(clientId, redirectURI), path);
+    static catchRedirectForAuth = async (path: string = "/data.bak"): Promise<DropboxTarget | null> =>
+        this.createFromMaybeConnection(catchRedirectForAuth(), path);
 
     static setupInPopup = async (
         clientId: string,

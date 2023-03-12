@@ -1,3 +1,4 @@
+import { noop } from "../../utilities/data";
 import { Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
 import { catchRedirectForAuth, redirectForAuth, runAuthInPopup } from "./auth";
@@ -13,21 +14,17 @@ import {
 
 export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerialisationConfig> {
     type: GDriveTargetType = GDriveTargetType;
-    private onRefreshNeeded: () => void;
+
+    static onRefreshNeeded: (target: GDriveTarget) => void;
+
     private connection: GDriveConnection;
     private user: GDriveUserDetails;
     private file: GDriveFileReference;
 
-    private constructor(
-        connection: GDriveConnection,
-        user: GDriveUserDetails,
-        file: GDriveFileReference,
-        onRefreshNeeded: () => void
-    ) {
+    private constructor(connection: GDriveConnection, user: GDriveUserDetails, file: GDriveFileReference) {
         this.connection = connection;
         this.user = user;
         this.file = file;
-        this.onRefreshNeeded = onRefreshNeeded;
     }
 
     // Constructors for new targets
@@ -35,7 +32,6 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     private static createFromMaybeConnection = async (
         connection: Promise<GDriveConnection | null>,
-        onRefreshNeeded: () => void,
         file: FileInitDescription
     ): Promise<GDriveTarget | null> => {
         const result = await connection;
@@ -44,41 +40,27 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         const user = await getUserMetadata(result);
         if (user.type === "error") return null;
 
-        if (file.type === "id")
-            return new GDriveTarget(result, user.value, { id: file.id, mime: file.mime }, onRefreshNeeded);
-        const files = await queryForFile(onRefreshNeeded, result, file.name, file.mime, file.parent);
+        if (file.type === "id") return new GDriveTarget(result, user.value, { id: file.id, mime: file.mime });
+        const files = await queryForFile(noop, result, file.name, file.mime, file.parent);
         if (files.type === "error" || files.value.files.length === 0) return null;
 
-        return new GDriveTarget(
-            result,
-            user.value,
-            { id: files.value.files[0].id, mime: files.value.files[0].mimeType },
-            onRefreshNeeded
-        );
+        return new GDriveTarget(result, user.value, {
+            id: files.value.files[0].id,
+            mime: files.value.files[0].mimeType,
+        });
     };
 
-    static catchRedirectForAuth = async (
-        clientId: string,
-        onRefreshNeeded: () => void,
-        file: FileInitDescription,
-        useAppData: boolean = true,
-        redirectURI?: string
-    ): Promise<GDriveTarget | null> =>
-        this.createFromMaybeConnection(catchRedirectForAuth(clientId, useAppData, redirectURI), onRefreshNeeded, file);
+    static catchRedirectForAuth = async (file: FileInitDescription): Promise<GDriveTarget | null> =>
+        this.createFromMaybeConnection(catchRedirectForAuth(), file);
 
     static setupInPopup = async (
         clientId: string,
-        onRefreshNeeded: () => void,
         file: FileInitDescription,
         useAppData: boolean = true,
         redirectURI?: string,
         scopes?: string[]
     ): Promise<GDriveTarget | null> =>
-        this.createFromMaybeConnection(
-            runAuthInPopup(clientId, useAppData, redirectURI, scopes),
-            onRefreshNeeded,
-            file
-        );
+        this.createFromMaybeConnection(runAuthInPopup(clientId, useAppData, redirectURI, scopes), file);
 
     // Data handlers
     timestamp = (): Result<Date | null> =>
@@ -109,10 +91,11 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         ).map((file) => new Date(file.modifiedTime));
 
     // Serialisation
-    static createDeserialiseHandler =
-        (onRefreshNeeded: () => void): Deserialiser<GDriveTargetType, GDriveTargetSerialisationConfig> =>
-        ({ connection, user, file }) =>
-            Promise.resolve(new GDriveTarget(connection, user, file, onRefreshNeeded));
+    static deserialise: Deserialiser<GDriveTargetType, GDriveTargetSerialisationConfig> = ({
+        connection,
+        user,
+        file,
+    }) => Promise.resolve(new GDriveTarget(connection, user, file));
 
     serialise = (): GDriveTargetSerialisationConfig => ({
         connection: this.connection,
@@ -123,7 +106,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
     // Other requests
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runGDriveQuery(this.connection, input, init);
     fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit): Result<T> =>
-        runGDriveJSONQuery(this.onRefreshNeeded, this.connection, input, init);
+        runGDriveJSONQuery(() => GDriveTarget.onRefreshNeeded(this), this.connection, input, init);
 }
 
 interface FileDetails {

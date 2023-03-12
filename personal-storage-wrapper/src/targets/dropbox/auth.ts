@@ -1,5 +1,5 @@
 import { Result } from "../result";
-import { constructURLWithQueryParams } from "../utils";
+import { constructURLWithQueryParams, getFromPopup, loadFromSessionStorage, saveToSessionStorage } from "../utils";
 import { runDropboxQueryForJSON } from "./requests";
 import { DropboxConnection, DropboxUserDetails } from "./types";
 
@@ -27,22 +27,27 @@ const sha256Hash = async (challenge: string): Promise<string> => {
 };
 
 const SESSION_STORAGE_KEY = "PERSONAL_STORAGE_WRAPPER_DROPBOX_CHALLENGE";
+interface SessionStorageStruct {
+    verifier: string;
+    clientId: string;
+    redirectURI: string;
+}
 
-const getAuthRedirectURLAndSetChallengeState = async (clientId: string, redirectURI: string) => {
+const getAuthRedirectDetails = async (clientId: string, redirectURI: string) => {
     const verifier = getCodeVerifier();
     const challenge = await sha256Hash(verifier);
 
-    window.sessionStorage.clear();
-    window.sessionStorage.setItem(SESSION_STORAGE_KEY, verifier);
-
-    return constructURLWithQueryParams("https://dropbox.com/oauth2/authorize", {
-        response_type: "code",
-        client_id: clientId,
-        redirect_uri: redirectURI,
-        token_access_type: "offline",
-        code_challenge_method: "S256",
-        code_challenge: challenge,
-    });
+    return {
+        verifier,
+        url: constructURLWithQueryParams("https://dropbox.com/oauth2/authorize", {
+            response_type: "code",
+            client_id: clientId,
+            redirect_uri: redirectURI,
+            token_access_type: "offline",
+            code_challenge_method: "S256",
+            code_challenge: challenge,
+        }),
+    };
 };
 
 const getAccessTokenForAuthCode = (client_id: string, redirect_uri: string, code_verifier: string, code: string) =>
@@ -55,25 +60,32 @@ const getAccessTokenForAuthCode = (client_id: string, redirect_uri: string, code
             code,
         }),
         { method: "POST" }
-    ).then((response) => response.json());
+    ).then(
+        (response) => response.json() as Promise<{ expires_in: number; refresh_token: string; access_token: string }>
+    );
 
 export const redirectForAuth = async (clientId: string, redirectURI?: string): Promise<void> => {
     const definiteRedirectURI = redirectURI || window.location.href.split("?")[0];
-    window.location.href = await getAuthRedirectURLAndSetChallengeState(clientId, definiteRedirectURI);
+    const { url, verifier } = await getAuthRedirectDetails(clientId, definiteRedirectURI);
+    saveToSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY, {
+        verifier,
+        clientId,
+        redirectURI: definiteRedirectURI,
+    });
+    window.location.href = url;
 };
 
-export const catchRedirectForAuth = async (
-    clientId: string,
-    redirectURI?: string
-): Promise<DropboxConnection | null> => {
-    if (redirectURI && window.location.href.split("?")[0] !== redirectURI) return Promise.resolve(null);
+export const catchRedirectForAuth = async (): Promise<DropboxConnection | null> => {
+    const session = loadFromSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY);
+    if (session === null) return null;
+
+    const { verifier, redirectURI, clientId } = session;
+    if (window.location.href.split("?")[0] !== redirectURI) return null;
 
     const code = new URLSearchParams(window.location.search).get("code");
-    if (!code) return Promise.resolve(null);
-    window.history.replaceState(null, "", redirectURI);
+    if (!code) return null;
 
-    const verifier = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (!verifier) return Promise.resolve(null);
+    window.history.replaceState(null, "", redirectURI);
 
     const expiry = new Date();
     const access = await getAccessTokenForAuthCode(
@@ -82,7 +94,7 @@ export const catchRedirectForAuth = async (
         verifier,
         code
     );
-    expiry.setSeconds((expiry.getSeconds() + access.expires_in) as number);
+    expiry.setSeconds(expiry.getSeconds() + access.expires_in);
 
     return { clientId, refreshToken: access.refresh_token, accessToken: access.access_token, expiry };
 };
@@ -91,27 +103,17 @@ export const runAuthInPopup = async (clientId: string, redirectURI?: string): Pr
     const definiteRedirectURI = redirectURI || window.location.href.split("?")[0];
 
     // Open separate window for auth
-    const url = await getAuthRedirectURLAndSetChallengeState(clientId, definiteRedirectURI);
-    const context = window.open(url, "_blank", "toolbar=false,menubar=false,height=600,width=480");
-    if (context === null) return Promise.resolve(null);
-
-    // Wait for redirect after authing in to Dropbox
-    const code = await new Promise<string | null>((resolve) => {
-        context.onload = () => {
-            if (context.location.href.split("?")[0] !== redirectURI) return resolve(null);
-            resolve(new URLSearchParams(context.location.search).get("code"));
-            context.close();
-        };
+    const { url, verifier } = await getAuthRedirectDetails(clientId, definiteRedirectURI);
+    const code = await getFromPopup({ url }, (context) => {
+        if (context.location.href.split("?")[0] !== redirectURI) return null;
+        return new URLSearchParams(context.location.search).get("code");
     });
     if (!code) return null;
 
     // Get access token
-    const verifier = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
-    if (!verifier) return Promise.resolve(null);
-
     const expiry = new Date();
     const access = await getAccessTokenForAuthCode(clientId, definiteRedirectURI, verifier, code);
-    expiry.setSeconds((expiry.getSeconds() + access.expires_in) as number);
+    expiry.setSeconds(expiry.getSeconds() + access.expires_in);
 
     // Return final result
     return {

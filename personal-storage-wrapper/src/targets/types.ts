@@ -14,4 +14,4 @@ export interface Target<Type extends string, SerialisationConfig> {
     serialise: () => SerialisationConfig;
 }
 
-export type Deserialiser<Type extends string, Config> = (config: Config) => Promise<Target<Type, Config> | null>;
+export type Deserialiser<Type extends string, Config> = (config: Config) => Promise<Target<Type, Config>>;

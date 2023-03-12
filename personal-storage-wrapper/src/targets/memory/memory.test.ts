@@ -10,6 +10,11 @@ test("Correctly handles empty states", async () => {
     expect(result.value).toEqual(null);
 });
 
+test("Correctly fails", async () => {
+    const result = await new MemoryTarget([0], false, true).read();
+    expect(result.type).toEqual("error");
+});
+
 test("Correctly handles basic storage and retrieval", async () => {
     const DELAY_MILLIS = 50;
 

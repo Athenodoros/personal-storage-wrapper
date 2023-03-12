@@ -1,49 +1,62 @@
 import { TypedBroadcastChannel } from "../utilities/channel";
 import { ListBuffer } from "../utilities/listbuffer";
-import { createPSM } from "./constructor";
-import {
-    DefaultTargetsType
-} from "./defaults";
-import { ConflictingSyncBehaviour, Deserialisers, InitialValue, ManagerState, PSMConfig, SyncOperationLog, SyncType, Targets, Value } from "./types";
+import { DefaultTargetsType } from "./defaults";
+import { createPSM, StartValue } from "./initialiser";
+import { Deserialisers, ManagerState, PSMConfig, SyncFromTargets, Targets, Value } from "./types";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
     private deserialisers: Deserialisers<T>;
     private state: ManagerState<V>;
-    private syncs: SyncType<T>[];
+    private syncs: SyncFromTargets<T>[];
     private channel: TypedBroadcastChannel<"VALUE" | "SYNCS">;
     private recents: ListBuffer<V>;
+    public config: PSMConfig<V, T>;
 
-    // Updates
-    pollPeriodInSeconds: number | null;
-    onValueUpdate: (value: V) => void;
-    handleSyncOperationLog: (log: SyncOperationLog<SyncType<T>>) => void;
-
-    // Syncs Config
-    getSyncData: () => string | null;
-    saveSyncData: (data: string) => void;
-    onSyncStatesUpdate: (sync: SyncType<T>[]) => void;
-
-    // Conflict Handlers
-    resolveConflictingSyncUpdate: ConflictingSyncBehaviour<T, V>;
-    
     /**
      * Manager Initialisation
      */
     static create = createPSM;
-    constructor(initialValue: InitialValue<V>, config: PSMConfig<V, T>, deserialisers: Deserialisers<T>) {
+    public constructor(
+        start: StartValue<V, T>,
+        deserialisers: Deserialisers<T>,
+        recents: ListBuffer<V>,
+        config: PSMConfig<V, T>
+    ) {
+        this.deserialisers = deserialisers;
+        this.recents = recents;
+        this.config = config;
+        this.channel = new TypedBroadcastChannel<"VALUE" | "SYNCS">("psm-channel", () => {
+            // TODO
+        });
 
+        if (start.type === "final") {
+            this.state = { type: "WAITING", value: start.value };
+            this.syncs = start.syncs;
+            return;
+        }
+
+        this.state = { type: "INITIALISING", value: start.value, writes: [] };
+        this.syncs = start.syncs.map(({ sync }) => sync);
+        // TODO: Listen to updates
     }
 
     /**
      * Sync Management
      */
-    getSyncsState = (): SyncType<T>[]    => [...this.syncs];
-    removeSync = (sync: SyncType<T>): Promise<void>;
-    addSync = (sync: SyncType<T>): Promise<void>;
+    public getSyncsState = (): SyncFromTargets<T>[] => [...this.syncs];
+    public removeSync = async (sync: SyncFromTargets<T>): Promise<void> => {
+        // TODO
+    };
+    public addSync = async (sync: SyncFromTargets<T>): Promise<void> => {
+        // TODO
+    };
 
     /**
      * Value Interactions
      */
-    getValue = (): V | null => (this.state.type === "STARTING" ? null : this.state.value);
-    setValueAndSync(value: T): void; // Update local quickly and write async
+    public getValue = (): V => this.state.value;
+    public setValueAndSync = (value: T): void => {
+        // TODO
+        // Update local quickly and then write out async
+    };
 }

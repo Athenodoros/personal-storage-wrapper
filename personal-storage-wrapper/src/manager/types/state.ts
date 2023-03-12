@@ -1,36 +1,30 @@
 import { Value } from "./values";
 
-export interface ManagerStartingState<V extends Value> {
-    type: "STARTING";
-    writes: {
-        value: V;
-        callback: () => void;
-    }[];
-}
 export interface ManagerInitialisingState<V extends Value> {
+    value: V;
     type: "INITIALISING";
+
     writes: {
         value: V;
         callback: () => void;
     }[];
-    value: V;
 }
-export interface ManagerBlockedState<V extends Value> {
+export interface ManagerRunningState<V extends Value> {
+    value: V;
     type: "UPLOADING" | "POLLING" | "DOWNLOADING";
+
     writes: {
         value: V;
         callback: () => void;
     }[];
     poll: boolean;
-    value: V;
 }
-export interface ManagerUnblockedState<V extends Value> {
-    type: "WAITING";
+export interface ManagerWaitingState<V extends Value> {
     value: V;
+    type: "WAITING";
 }
 
 export type ManagerState<V extends Value> =
-    | ManagerStartingState<V>
     | ManagerInitialisingState<V>
-    | ManagerBlockedState<V>
-    | ManagerUnblockedState<V>;
+    | ManagerRunningState<V>
+    | ManagerWaitingState<V>;

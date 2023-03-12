@@ -22,33 +22,98 @@ test("Correctly handles flatmaps", async () => {
 });
 
 test("Result.rall waits for all results", async () => {
-    const start1 = new Date();
+    const start = new Date();
     expect(await Result.rall([slowValue(7, DELAY), Result.value(8)])).toEqual({ type: "value", value: [7, 8] });
-    expect(new Date().valueOf() - start1.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+    expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
 });
 
 test("Result.rall fails quickly given an error", async () => {
-    const start2 = new Date();
+    const start = new Date();
     expect(await Result.rall([slowValue(7, DELAY), Result.error()])).toEqual({ type: "error" });
-    expect(new Date().valueOf() - start2.valueOf()).toBeLessThan(DELAY - 1);
+    expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
 });
 
 test("Result.rany gives the first result without waiting ", async () => {
-    const start1 = new Date();
+    const start = new Date();
     expect(await Result.rany([slowValue(7, DELAY), Result.value(8)])).toEqual({ type: "value", value: 8 });
-    expect(new Date().valueOf() - start1.valueOf()).toBeLessThan(DELAY - 1);
+    expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
 });
 
 test("Result.rall waits for first success", async () => {
-    const start2 = new Date();
+    const start = new Date();
     expect(await Result.rany([slowValue(7, DELAY), Result.error()])).toEqual({ type: "value", value: 7 });
-    expect(new Date().valueOf() - start2.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+    expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
 });
 
 test("Result.rall returns failures correctly", async () => {
-    const start3 = new Date();
+    const start = new Date();
     expect(await Result.rany([Result.error(), slowError(DELAY)])).toEqual({ type: "error" });
-    expect(new Date().valueOf() - start3.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+    expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+});
+
+test("Result.flatten correctly returns", async () => {
+    const test = {
+        a: 1,
+        b: Result.value(2),
+        c: [3],
+        d: [Result.value(4)],
+        e: {
+            f: 6,
+            g: Result.value(7),
+            h: [8],
+            i: [Result.value(9)],
+        },
+        j: Result.value([10]),
+        k: Result.value({
+            l: Result.value(12),
+        }),
+        m: Result.value([Result.value(13)]),
+    };
+    const result: Result<{
+        a: number;
+        b: number;
+        c: number[];
+        d: number[];
+        e: {
+            f: number;
+            g: number;
+            h: number[];
+            i: number[];
+        };
+        j: number[];
+        k: {
+            l: number;
+        };
+        m: number[];
+    }> = Result.flatten(test);
+
+    expect(await result).toEqual({
+        type: "value",
+        value: {
+            a: 1,
+            b: 2,
+            c: [3],
+            d: [4],
+            e: {
+                f: 6,
+                g: 7,
+                h: [8],
+                i: [9],
+            },
+            j: [10],
+            k: {
+                l: 12,
+            },
+            m: [13],
+        },
+    });
+});
+
+test("Result.flatten errors quickly", async () => {
+    const start = new Date();
+    const test = { a: 1, b: slowValue(1, DELAY), c: { d: Result.error() } };
+    expect(await Result.flatten(test)).toEqual({ type: "error" });
+    expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
 });
 
 /**

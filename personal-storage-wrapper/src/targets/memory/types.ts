@@ -13,4 +13,5 @@ interface MemoryTargetSerialisationConfigPreservedTemporary {
 
 export type MemoryTargetSerialisationConfig = {
     delaysInMillis: number[];
+    fails: boolean;
 } & (MemoryTargetSerialisationConfigPreserved | MemoryTargetSerialisationConfigPreservedTemporary);

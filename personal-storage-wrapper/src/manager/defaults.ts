@@ -4,7 +4,6 @@ import { GDriveTarget, GDriveTargetType } from "../targets/gdrive";
 import { IndexedDBTarget, IndexedDBTargetType } from "../targets/indexeddb";
 import { IndexedDBTargetSerialisationConfig } from "../targets/indexeddb/types";
 import { MemoryTarget, MemoryTargetType } from "../targets/memory";
-import { MemoryTargetSerialisationConfig } from "../targets/memory/types";
 import { Deserialiser } from "../targets/types";
 import { maxBy } from "../utilities/data";
 import { OfflineSyncStartupBehaviour, Sync, SyncTypeWithValue, Targets, Value } from "./types";
@@ -31,22 +30,12 @@ const LOCAL_STORAGE_KEY = "personal-storage-manager-state";
 export const getSyncDataFromLocalStorage = () => localStorage.getItem(LOCAL_STORAGE_KEY);
 export const saveSyncDataToLocalStorage = (data: string) => localStorage.setItem(LOCAL_STORAGE_KEY, data);
 
-export const getDefaultSyncStates = () =>
-    new Promise<
-        [
-            | Sync<IndexedDBTargetType, IndexedDBTargetSerialisationConfig>
-            | Sync<MemoryTargetType, MemoryTargetSerialisationConfig>
-        ]
-    >(async (resolve) => {
-        const target = (await IndexedDBTarget.create()) ?? new MemoryTarget();
-        resolve([
-            {
-                target,
-                compressed: true,
-                state: "SYNCED",
-            },
-        ] as [Sync<IndexedDBTargetType, IndexedDBTargetSerialisationConfig> | Sync<MemoryTargetType, MemoryTargetSerialisationConfig>]);
-    });
+export const getDefaultSyncStates = async (): Promise<
+    [Sync<IndexedDBTargetType, IndexedDBTargetSerialisationConfig>]
+> => {
+    const target = await IndexedDBTarget.create();
+    return [{ target, compressed: true, state: "SYNCED" }];
+};
 
 /**
  * Error handlers

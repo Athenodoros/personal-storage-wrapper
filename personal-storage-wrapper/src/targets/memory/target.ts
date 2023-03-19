@@ -6,33 +6,31 @@ import { MemoryTargetSerialisationConfig, MemoryTargetType } from "./types";
 export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerialisationConfig> {
     type = MemoryTargetType;
 
-    private value: TargetValue;
-    private delaysInMillis: number[];
-    private fails: boolean;
-    private delayIndex: number;
-    private preserveStateOnSave: boolean;
+    public value: TargetValue;
+    public delay: number;
+    public fails: boolean;
+    public preserveValueOnSave: boolean;
 
     constructor(
-        delaysInMillis: number[] = [0],
-        preserveStateOnSave: boolean = false,
-        fails: boolean = false,
-        value: TargetValue = null,
-        delayIndex: number = 0
+        config?: Partial<{
+            value: TargetValue;
+            delay: number;
+            fails: boolean;
+            preserveValueOnSave: boolean;
+        }>
     ) {
+        const { value = null, delay = 0, fails = false, preserveValueOnSave = true } = config ?? {};
+
         this.value = value;
-        this.delayIndex = delayIndex % delaysInMillis.length;
+        this.delay = delay;
         this.fails = fails;
-        this.delaysInMillis = delaysInMillis;
-        this.preserveStateOnSave = preserveStateOnSave;
+        this.preserveValueOnSave = preserveValueOnSave;
     }
 
     // Delay simulation
     private delayed = <T>(thunk: () => T) => {
         if (this.fails) return Result.error<T>();
-
-        const delay = this.delaysInMillis[this.delayIndex];
-        this.delayIndex = (this.delayIndex + 1) % this.delaysInMillis.length;
-        return new Result<T>((resolve) => setTimeout(() => resolve({ type: "value", value: thunk() }), delay));
+        return new Result<T>((resolve) => setTimeout(() => resolve({ type: "value", value: thunk() }), this.delay));
     };
 
     // Data handlers
@@ -48,31 +46,20 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
     // Serialisation
     static deserialise: Deserialiser<MemoryTargetType, MemoryTargetSerialisationConfig> = (config) =>
         Promise.resolve(
-            config.type === "preserve"
-                ? new MemoryTarget(
-                      config.delaysInMillis,
-                      true,
-                      config.fails,
-                      config.value && {
-                          timestamp: config.value.timestamp,
-                          buffer: encodeToArrayBuffer(config.value.encoded),
-                      },
-                      config.delayIndex
-                  )
-                : new MemoryTarget(config.delaysInMillis, false, config.fails)
+            new MemoryTarget({
+                value: config.value
+                    ? { timestamp: config.value.timestamp, buffer: encodeToArrayBuffer(config.value.encoded) }
+                    : null,
+            })
         );
 
     serialise = () =>
-        this.preserveStateOnSave
+        this.preserveValueOnSave
             ? {
-                  delaysInMillis: this.delaysInMillis,
-                  type: "preserve" as const,
                   value: this.value && {
                       timestamp: this.value.timestamp,
                       encoded: decodeFromArrayBuffer(this.value.buffer),
                   },
-                  delayIndex: this.delayIndex,
-                  fails: this.fails,
               }
-            : { delaysInMillis: this.delaysInMillis, type: "reset" as const, fails: this.fails };
+            : {};
 }

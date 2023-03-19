@@ -11,14 +11,14 @@ test("Correctly handles empty states", async () => {
 });
 
 test("Correctly fails", async () => {
-    const result = await new MemoryTarget([0], false, true).read();
+    const result = await new MemoryTarget({ fails: true }).read();
     expect(result.type).toEqual("error");
 });
 
 test("Correctly handles basic storage and retrieval", async () => {
     const DELAY_MILLIS = 50;
 
-    const target = new MemoryTarget([DELAY_MILLIS]);
+    const target = new MemoryTarget({ delay: DELAY_MILLIS });
     const start = new Date().valueOf();
 
     const result = await target.write(TEST_BUFFER);
@@ -47,7 +47,7 @@ test("Can store multiple values without overrides", async () => {
 });
 
 test("Correctly serialises for resetting targets", async () => {
-    const target = new MemoryTarget();
+    const target = new MemoryTarget({ preserveValueOnSave: false });
     await target.write(TEST_BUFFER);
 
     const config = JSON.stringify(target.serialise());
@@ -59,7 +59,7 @@ test("Correctly serialises for resetting targets", async () => {
 });
 
 test("Correctly serialises for preserving targets", async () => {
-    const target = new MemoryTarget([0], true);
+    const target = new MemoryTarget();
     await target.write(TEST_BUFFER);
 
     const config = JSON.stringify(target.serialise());

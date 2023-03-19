@@ -17,17 +17,5 @@ test("Correctly serialises and deserialises the same syncs", async () => {
     const result = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
     // Don't compare with `syncs` directly because instance members will fail equality check
-    expect(result).toMatchObject([
-        {
-            compressed: true,
-            state: "SYNCED",
-            target: {
-                type: "memory",
-                value: null,
-                delaysInMillis: [0],
-                delayIndex: 0,
-                preserveStateOnSave: false,
-            },
-        },
-    ]);
+    expect(result).toMatchObject([{ compressed: true, state: "SYNCED", target: { type: "memory" } }]);
 });

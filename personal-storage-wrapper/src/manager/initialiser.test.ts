@@ -13,9 +13,9 @@ import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandle
 const DELAY = 20;
 
 test("Returns first valid value quickly if there is one", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY, "B");
-    const storeC = await getQuickStore(DELAY * 2, "C");
+    const storeA = getQuickStore(0, "A", true);
+    const storeB = getQuickStore(DELAY, "B");
+    const storeC = getQuickStore(DELAY * 2, "C");
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB, storeC]);
@@ -25,8 +25,8 @@ test("Returns first valid value quickly if there is one", async () => {
 });
 
 test("Returns last value provisionally if relevant", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY, "B");
+    const storeA = getQuickStore(0, "A", true);
+    const storeB = getQuickStore(DELAY, "B");
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB]);
@@ -36,8 +36,8 @@ test("Returns last value provisionally if relevant", async () => {
 });
 
 test("Uses callback in case of offline sources", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY);
+    const storeA = getQuickStore(0, "A", true);
+    const storeB = getQuickStore(DELAY);
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB], undefined, () =>
@@ -49,8 +49,8 @@ test("Uses callback in case of offline sources", async () => {
 });
 
 test("Respects callback deferral to default in case of offline sources", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY);
+    const storeA = getQuickStore(0, "A", true);
+    const storeB = getQuickStore(DELAY);
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB], undefined, () => Promise.resolve({ behaviour: "DEFAULT" }));
@@ -60,7 +60,7 @@ test("Respects callback deferral to default in case of offline sources", async (
 });
 
 test("Uses default value if required", async () => {
-    const storeA = await getQuickStore();
+    const storeA = getQuickStore();
     const value = await getPSMValue([storeA], () => Promise.resolve("PROMISE"));
     expect(value).toMatchObject({ type: "final", value: "PROMISE" });
 });
@@ -87,12 +87,15 @@ const getPSMValue = (
         resolveConflictingSyncValuesOnStartup
     );
 
-const getQuickStore = async <V extends Value>(
+const getQuickStore = <V extends Value>(
     delay: number = 0,
     value: V | null = null,
     fails: boolean = false
-): Promise<Sync<MemoryTargetType, MemoryTargetSerialisationConfig>> => {
-    const target = new MemoryTarget([delay], false, fails);
-    if (value !== null) await target.write(getBufferFromValue(value));
+): Sync<MemoryTargetType, MemoryTargetSerialisationConfig> => {
+    const target = new MemoryTarget({
+        delay,
+        fails,
+        value: value && { timestamp: new Date(), buffer: getBufferFromValue(value) },
+    });
     return { target, compressed: false, state: "SYNCED" };
 };

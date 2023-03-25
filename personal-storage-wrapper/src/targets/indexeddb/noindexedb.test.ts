@@ -7,6 +7,8 @@ import { encodeTextToBuffer } from "../../utilities/buffers";
 
 test("Check IndexedDB correctly unavailable", async () => {
     const target = await IndexedDBTarget.create();
+    expect(target.online()).toBe(false);
+
     const write = await target.write(await encodeTextToBuffer("TEST_VALUE"));
     expect(write).toEqual({ type: "error" });
 });

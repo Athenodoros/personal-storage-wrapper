@@ -62,4 +62,7 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
                   },
               }
             : {};
+
+    // Error Handling
+    online = () => !this.fails;
 }

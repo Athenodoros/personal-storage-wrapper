@@ -21,6 +21,7 @@ await new Promise<void>((resolve) => setTimeout(() => resolve(), 5));
  */
 test("Correctly handles empty states", async () => {
     const target = (await IndexedDBTarget.create())!;
+    expect(target.online()).toBe(true);
 
     const result = await target.read();
     expect(result.value).toBeNull();

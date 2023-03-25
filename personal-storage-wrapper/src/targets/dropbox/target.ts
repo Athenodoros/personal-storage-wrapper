@@ -81,6 +81,9 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         path: this.path,
     });
 
+    // Error Handling
+    online = () => navigator.onLine;
+
     // Other requests
     // This should probably track when the connection is changed and run callbacks
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runDropboxQuery(this.connection, input, init);

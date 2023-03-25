@@ -6,12 +6,18 @@ const TEST_BUFFER = await encodeTextToBuffer("Hello, World!");
 const TEST_TIME_TOLERANCE_MILLIS = 2;
 
 test("Correctly handles empty states", async () => {
-    const result = await new MemoryTarget().read();
+    const target = new MemoryTarget();
+    expect(target.online()).toBe(true);
+
+    const result = await target.read();
     expect(result.value).toEqual(null);
 });
 
 test("Correctly fails", async () => {
-    const result = await new MemoryTarget({ fails: true }).read();
+    const target = new MemoryTarget({ fails: true });
+    expect(target.online()).toBe(false);
+
+    const result = await target.read();
     expect(result.type).toEqual("error");
 });
 

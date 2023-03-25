@@ -103,6 +103,9 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         file: this.file,
     });
 
+    // Error Handling
+    online = () => navigator.onLine;
+
     // Other requests
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runGDriveQuery(this.connection, input, init);
     fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit): Result<T> =>

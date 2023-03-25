@@ -76,4 +76,7 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
         IndexedDBTarget.create(id);
 
     serialise = (): IndexedDBTargetSerialisationConfig => ({ id: this.id });
+
+    // Error Handling
+    online = () => this.db !== null;
 }

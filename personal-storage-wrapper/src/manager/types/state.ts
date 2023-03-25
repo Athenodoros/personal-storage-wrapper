@@ -1,49 +1,40 @@
 import { SyncFromTargets } from "./config";
 import { Targets, Value } from "./values";
 
-export interface ManagerInitialisingState<V extends Value, T extends Targets> {
+export interface WriteOperation<V extends Value> {
     value: V;
-    type: "INITIALISING";
-
-    writes: {
-        value: V;
-        callback: () => void;
-    }[];
-    newSyncs: {
-        sync: SyncFromTargets<T>;
-        background: boolean; // Add in background because initial sync happened in other tab
-        callback: () => void;
-    }[];
-    removeSyncs: {
-        sync: SyncFromTargets<T>;
-        callback: () => void;
-    }[];
+    callback: () => void;
 }
-export interface ManagerRunningState<V extends Value, T extends Targets> {
-    value: V;
-    type: "UPLOADING" | "POLLING" | "DOWNLOADING" | "ADDING_SYNC";
+
+export interface AdditionOperation<T extends Targets> {
+    sync: SyncFromTargets<T>;
+    background?: boolean; // Add in background because initial sync happened in other tab
+    callback: () => void;
+}
+
+export interface RemovalOperation<T extends Targets> {
+    sync: SyncFromTargets<T>;
+    callback: () => void;
+}
+
+export interface ManagerOperatingState<V extends Value, T extends Targets> {
+    type: "INITIALISING" | "UPLOADING" | "POLLING" | "DOWNLOADING" | "ADDING_SYNC" | "REMOVING_SYNC";
 
     poll: boolean;
-    writes: {
-        value: V;
-        callback: () => void;
-    }[];
-    newSyncs: {
-        sync: SyncFromTargets<T>;
-        background: boolean; // Add in background because initial sync happened in other tab
-        callback: () => void;
-    }[];
-    removeSyncs: {
-        sync: SyncFromTargets<T>;
-        callback: () => void;
-    }[];
+    writes: WriteOperation<V>[];
+    newSyncs: AdditionOperation<T>[];
+    removeSyncs: RemovalOperation<T>[];
 }
-export interface ManagerWaitingState<V extends Value> {
-    value: V;
+
+export interface ManagerWaitingState {
     type: "WAITING";
 }
 
-export type ManagerState<V extends Value, T extends Targets> =
-    | ManagerInitialisingState<V, T>
-    | ManagerRunningState<V, T>
-    | ManagerWaitingState<V>;
+export type ManagerState<V extends Value, T extends Targets> = ManagerOperatingState<V, T> | ManagerWaitingState;
+
+export const DEFAULT_MANAGER_STATE = {
+    poll: false,
+    writes: [],
+    newSyncs: [],
+    removeSyncs: [],
+};

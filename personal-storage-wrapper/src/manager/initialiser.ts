@@ -1,5 +1,4 @@
 import { Result } from "../targets/result";
-import { TargetValue } from "../targets/types";
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import {
@@ -13,17 +12,20 @@ import {
     saveSyncDataToLocalStorage,
 } from "./defaults";
 import { PersonalStorageManager } from "./manager";
-import { getSyncsFromConfig, getValueFromBuffer } from "./serialisation";
+import { getSyncsFromConfig } from "./serialisation";
 import {
     ConflictingSyncStartupBehaviour,
     Deserialisers,
     InitialValue,
+    MaybeValue,
     OfflineSyncStartupHandler,
     PSMCreationConfig,
     SyncFromTargets,
+    SyncOperationLogger,
     Targets,
     Value,
 } from "./types";
+import { readFromSync } from "./utilities";
 
 export interface PSMFinalValue<V extends Value, T extends Targets> {
     type: "final";
@@ -33,7 +35,7 @@ export interface PSMFinalValue<V extends Value, T extends Targets> {
 
 export interface PSMProvisionalValue<V extends Value, T extends Targets> {
     type: "provisional";
-    syncs: { sync: SyncFromTargets<T>; value: Result<TargetValue> }[];
+    syncs: { sync: SyncFromTargets<T>; value: Result<MaybeValue<V>> }[];
     value: V;
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>;
 }
@@ -45,11 +47,12 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
     syncs: SyncFromTargets<T>[],
     initialValue: InitialValue<V>,
     handleFullyOfflineSyncsOnStartup: OfflineSyncStartupHandler<T, V>,
-    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>
+    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>,
+    logger: () => SyncOperationLogger<SyncFromTargets<T>>
 ) =>
     new Promise<StartValue<V, T>>(async (resolve) => {
         // Pull values from all syncs
-        const values = syncs.map((sync) => ({ sync, value: sync.target.read() }));
+        const values = syncs.map((sync) => ({ sync, value: readFromSync<V, T>(logger)(sync) }));
 
         let resolved = false;
 
@@ -57,25 +60,19 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
         values.forEach(async ({ value }) => {
             const result = await value;
             if (result.type === "value" && result.value !== null && !resolved) {
-                const data = getValueFromBuffer<V>(result.value.buffer);
                 resolved = true;
-                resolve({ type: "provisional", value: data, syncs: values, resolveConflictingSyncValuesOnStartup });
+                resolve({
+                    type: "provisional",
+                    value: result.value.value,
+                    syncs: values,
+                    resolveConflictingSyncValuesOnStartup,
+                });
             }
         });
 
         // Otherwise, fallback to error handlers or defaults
         const results = await Promise.all(
-            values.map(({ sync, value: result }) =>
-                result
-                    .map(
-                        (value) =>
-                            value && {
-                                timestamp: value.timestamp,
-                                value: getValueFromBuffer<V>(value.buffer),
-                            }
-                    )
-                    .then((value) => ({ sync, value }))
-            )
+            values.map(({ sync, value: result }) => result.then((value) => ({ sync, value })))
         );
 
         if (results.some(({ value }) => value.type === "error")) {
@@ -154,11 +151,17 @@ export async function createPSM<V extends Value, T extends Targets>(
         resolveConflictingSyncUpdate,
     };
 
+    // Get initial values, including updating logger after PSM creation, and return manager
+    let getHandleSyncOperationLog = () => handleSyncOperationLog;
     const start = await getPSMStartValue<V, T>(
         syncs,
         initialValue,
         handleFullyOfflineSyncsOnStartup,
-        resolveConflictingSyncValuesOnStartup
+        resolveConflictingSyncValuesOnStartup,
+        () => getHandleSyncOperationLog()
     );
-    return new PersonalStorageManager<V, T>(start, deserialisers, buffer, config);
+
+    const manager = new PersonalStorageManager<V, T>(start, deserialisers, buffer, config);
+    getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
+    return manager;
 }

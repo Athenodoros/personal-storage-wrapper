@@ -27,6 +27,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.config = config;
         this.channel = new TypedBroadcastChannel<"VALUE" | "SYNCS">("psm-channel", () => {
             // TODO
+            // If value, update value and don't write to syncs
+            // For value: include some kind of hash on syncs to check for duplicates
+            // If syncs, pass details for new/removed sync and add it (without syncing)
         });
 
         if (start.type === "final") {
@@ -37,7 +40,17 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
         this.state = { type: "INITIALISING", value: start.value, writes: [] };
         this.syncs = start.syncs.map(({ sync }) => sync);
-        // TODO: Listen to updates
+
+        // Wait for all results to return, handle results, and start polling
+        Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result }))))
+            .then((results) => {
+                // If all consistent, great
+                // If conflict, resolve conflict using callback
+                // If some missing, write back
+            })
+            .then(() => {
+                // Start Polling
+            });
     }
 
     /**
@@ -46,16 +59,18 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     public getSyncsState = (): SyncFromTargets<T>[] => [...this.syncs];
     public removeSync = async (sync: SyncFromTargets<T>): Promise<void> => {
         // TODO
+        // Wait until end of next operation, then update list
     };
     public addSync = async (sync: SyncFromTargets<T>): Promise<void> => {
         // TODO
+        // Wait until end of next operation, then update list
     };
 
     /**
      * Value Interactions
      */
     public getValue = (): V => this.state.value;
-    public setValueAndSync = (value: T): void => {
+    public setValueAndPushToSyncs = (value: T): void => {
         // TODO
         // Update local quickly and then write out async
     };

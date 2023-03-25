@@ -1,6 +1,6 @@
 import { Result } from "../../targets/result";
 import { Deserialiser } from "../../targets/types";
-import { SyncOperationLog } from "./logs";
+import { SyncOperationLogger } from "./logs";
 import { Sync } from "./syncs";
 import { MaybeValue, Targets, Value } from "./values";
 
@@ -8,7 +8,7 @@ export interface PSMConfig<V extends Value, T extends Targets> {
     // Updates
     pollPeriodInSeconds: number | null;
     onValueUpdate: (value: V) => void;
-    handleSyncOperationLog: (log: SyncOperationLog<SyncFromTargets<T>>) => void;
+    handleSyncOperationLog: SyncOperationLogger<SyncFromTargets<T>>;
 
     // Syncs Config
     getSyncData: () => string | null;

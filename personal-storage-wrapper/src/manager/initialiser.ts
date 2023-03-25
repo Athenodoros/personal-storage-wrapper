@@ -40,6 +40,7 @@ export interface PSMProvisionalValue<V extends Value, T extends Targets> {
 
 export type StartValue<V extends Value, T extends Targets> = PSMFinalValue<V, T> | PSMProvisionalValue<V, T>;
 
+// Only exported for testing
 export const getPSMStartValue = <V extends Value, T extends Targets>(
     syncs: SyncFromTargets<T>[],
     initialValue: InitialValue<V>,
@@ -53,7 +54,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
         let resolved = false;
 
         // Ideally return from first returned value
-        values.forEach(async ({ sync, value }) => {
+        values.forEach(async ({ value }) => {
             const result = await value;
             if (result.type === "value" && result.value !== null && !resolved) {
                 const data = getValueFromBuffer<V>(result.value.buffer);

@@ -1,5 +1,5 @@
 import { TypedBroadcastChannel } from "../utilities/channel";
-import { deepEquals } from "../utilities/data";
+import { deepEquals, last } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
@@ -17,6 +17,7 @@ import {
     WriteOperation,
 } from "./types";
 import { DefaultTargetsType } from "./utilities/defaults";
+import { writeToSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
@@ -119,7 +120,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Internal processing rules
      */
-    private resolveQueuedOperations = (): void => {
+    private resolveQueuedOperations = (): void | Promise<void> => {
         if (this.state.type === "WAITING") return;
 
         if (this.state.removeSyncs.length) return this.resolveQueuedRemovals();
@@ -130,16 +131,11 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.state = { type: "WAITING" };
     };
 
-    private resolveQueuedRemovals = (syncs: RemovalOperation<T>[] = []): void => {
-        const removals = syncs.concat(this.state.type === "WAITING" ? [] : this.state.removeSyncs);
+    private resolveQueuedRemovals = (operations: RemovalOperation<T>[] = []) => {
+        const removals = operations.concat(this.state.type === "WAITING" ? [] : this.state.removeSyncs);
         if (removals.length === 0) return this.resolveQueuedOperations();
 
-        this.state = {
-            ...DEFAULT_MANAGER_STATE,
-            ...this.state,
-            removeSyncs: [],
-            type: "REMOVING_SYNC",
-        };
+        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, removeSyncs: [], type: "REMOVING_SYNC" };
 
         const previous = this.syncs.length;
         this.syncs = this.syncs.filter((sync) => removals.every(({ sync: removal }) => sync !== removal));
@@ -150,12 +146,28 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.resolveQueuedOperations();
     };
 
-    private resolveQueuedAdditions = (syncs: AdditionOperation<T>[] = []) => {
+    private resolveQueuedAdditions = (operations: AdditionOperation<T>[] = []) => {
         TODO;
     };
 
-    private resolveQueuedWrites = (writes: WriteOperation<V>[] = []) => {
-        TODO;
+    private resolveQueuedWrites = async (operations: WriteOperation<V>[] = []) => {
+        const writes = (this.state.type === "WAITING" ? [] : this.state.writes).concat(operations);
+        if (writes.length === 0) return this.resolveQueuedOperations();
+
+        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, writes: [], type: "UPLOADING" };
+
+        const value = last(writes)!.value;
+        const results = await Promise.all(
+            this.syncs
+                .filter(({ desynced }) => desynced === false)
+                // All syncs update due to writes - either desync or new timestamp - so always call onSyncsUpdate
+                .map((sync) => writeToSync(() => this.config.handleSyncOperationLog)(sync, value))
+        );
+        writes.forEach(({ callback }) => callback());
+
+        if (results.length !== 0) this.onSyncsUpdate();
+
+        this.resolveQueuedOperations();
     };
 
     private poll = () => {

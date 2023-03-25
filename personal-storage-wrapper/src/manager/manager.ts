@@ -1,5 +1,5 @@
 import { TypedBroadcastChannel } from "../utilities/channel";
-import { deepEquals, last } from "../utilities/data";
+import { deepEquals, last, noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
@@ -70,7 +70,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 );
 
                 if (didUpdateSyncs) this.onSyncsUpdate();
-                if (!deepEquals(value, start.value)) this.config.onValueUpdate(value);
+                if (!deepEquals(value, start.value)) this.setNewValue(value, "REMOTE");
 
                 this.schedulePoll();
                 this.resolveQueuedOperations();
@@ -97,8 +97,11 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      * Value Interactions
      */
     public getValue = (): V => this.value;
-    public setValueAndPushToSyncs = (value: T): void => {
-        TODO; // Update local quickly and then write out async
+    public setValueAndPushToSyncs = (value: V): void => {
+        this.setNewValue(value, "LOCAL");
+
+        if (this.state.type !== "WAITING") this.state.writes.push({ value, callback: noop });
+        else this.resolveQueuedWrites([{ value, callback: noop }]);
     };
 
     /**
@@ -107,6 +110,11 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     private onSyncsUpdate = () => {
         this.config.onSyncStatesUpdate(this.syncs);
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
+    };
+
+    private setNewValue = (value: V, origin: "REMOTE" | "BROADCAST" | "LOCAL") => {
+        this.value = value;
+        this.config.onValueUpdate(value, origin);
     };
 
     private schedulePoll = () =>

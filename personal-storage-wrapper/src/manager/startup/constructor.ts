@@ -1,7 +1,7 @@
+import { ResultValueType } from "../../targets/result";
 import { noop } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
 import { PersonalStorageManager } from "../manager";
-import { getSyncsFromConfig } from "../serialisation";
 import {
     ConflictingSyncStartupBehaviour,
     Deserialisers,
@@ -24,13 +24,14 @@ import {
     saveSyncDataToLocalStorage,
 } from "../utilities/defaults";
 import { readFromSync } from "../utilities/requests";
+import { getSyncsFromConfig } from "../utilities/serialisation";
 import { StartValue } from "./types";
 
 // Only exported for testing
 export const getPSMStartValue = <V extends Value, T extends Targets>(
     syncs: SyncFromTargets<T>[],
     initialValue: InitialValue<V>,
-    handleFullyOfflineSyncsOnStartup: OfflineSyncStartupHandler<T, V>,
+    handleAllEmptyAndFailedSyncsOnStartup: OfflineSyncStartupHandler<T, V>,
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>,
     logger: () => SyncOperationLogger<SyncFromTargets<T>>
 ) =>
@@ -59,8 +60,10 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
             values.map(({ sync, value: result }) => result.then((value) => ({ sync, value })))
         );
 
-        if (results.some(({ value }) => value.type === "error")) {
-            const behaviour = await handleFullyOfflineSyncsOnStartup(results);
+        if (results.some(({ value }) => value.type === "error") && results.every(({ value }) => !value.value)) {
+            const behaviour = await handleAllEmptyAndFailedSyncsOnStartup(
+                results as { sync: SyncFromTargets<T>; value: ResultValueType<null> }[]
+            );
             if (behaviour.behaviour === "VALUE" && !resolved) {
                 resolved = true;
                 resolve({ type: "final", value: behaviour.value, syncs });
@@ -68,7 +71,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
             }
         }
 
-        if (!resolved) {
+        if (results.every(({ value }) => value.type === "value" && value.value === null) && !resolved) {
             resolved = true;
             const value = typeof initialValue !== "function" ? initialValue : await Promise.resolve(initialValue());
             resolve({ type: "final", value, syncs });
@@ -114,7 +117,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         valueCacheCount = undefined,
 
         // Conflict Handlers
-        handleFullyOfflineSyncsOnStartup = resetToDefaultsOnOfflineTargets,
+        handleAllEmptyAndFailedSyncsOnStartup = resetToDefaultsOnOfflineTargets,
         resolveConflictingSyncValuesOnStartup = resolveStartupConflictsWithRemoteStateAndLatestEdit,
         resolveConflictingSyncUpdate = resolveUpdateConflictsWithRemoteStateAndLatestEdit,
     } = initialisationConfig;
@@ -140,7 +143,7 @@ export async function createPSM<V extends Value, T extends Targets>(
     const start = await getPSMStartValue<V, T>(
         syncs,
         initialValue,
-        handleFullyOfflineSyncsOnStartup,
+        handleAllEmptyAndFailedSyncsOnStartup,
         resolveConflictingSyncValuesOnStartup,
         () => getHandleSyncOperationLog()
     );

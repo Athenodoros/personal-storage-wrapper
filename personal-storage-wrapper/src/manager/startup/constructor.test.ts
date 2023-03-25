@@ -2,13 +2,13 @@ import { expect, test } from "vitest";
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
 import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
 import { noop } from "../../utilities/data";
+import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync, Value } from "../types";
 import {
     DefaultTargetsType,
     resetToDefaultsOnOfflineTargets,
     resolveStartupConflictsWithRemoteStateAndLatestEdit,
-} from "../defaults";
-import { getBufferFromValue } from "../serialisation";
-import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync, Value } from "../types";
+} from "../utilities/defaults";
+import { getBufferFromValue } from "../utilities/serialisation";
 import { getPSMStartValue } from "./constructor";
 
 const DELAY = 20;

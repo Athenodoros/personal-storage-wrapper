@@ -6,7 +6,7 @@ import { IndexedDBTargetSerialisationConfig } from "../../targets/indexeddb/type
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
 import { Deserialiser } from "../../targets/types";
 import { maxBy } from "../../utilities/data";
-import { OfflineSyncStartupBehaviour, Sync, SyncTypeWithValue, Targets, Value } from "../types";
+import { OfflineSyncStartupBehaviour, Sync, SyncFromTargets, Targets, TimestampedValue, Value } from "../types";
 
 /**
  * Deserialiser definitions
@@ -44,21 +44,22 @@ export const resetToDefaultsOnOfflineTargets = <V extends Value>(): Promise<Offl
     Promise.resolve({ behaviour: "DEFAULT" });
 
 export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Targets, V extends Value>(
-    syncs: SyncTypeWithValue<T, V>[]
+    syncs: {
+        sync: SyncFromTargets<T>;
+        value: TimestampedValue<V>;
+    }[]
 ): Promise<V> => {
     const priority = maxBy(
         syncs,
-        ({ value }) => value.type === "value" && value.value !== null,
+        ({ value }) => value.value !== null,
         ({ sync }) => sync.target.type !== IndexedDBTargetType && sync.target.type !== MemoryTargetType,
-        ({ value }) => value.value?.timestamp
+        ({ value }) => value.timestamp
     );
 
     if (!priority.value.value) throw Error("Invalid state: no available target values");
 
-    return Promise.resolve(priority.value.value.value);
+    return Promise.resolve(priority.value.value);
 };
 
-export const resolveUpdateConflictsWithRemoteStateAndLatestEdit = <T extends Targets, V extends Value>(
-    localState: V,
-    _conflicts: SyncTypeWithValue<T, V>
-) => Promise.resolve(localState);
+export const resolveUpdateConflictsWithRemoteStateAndLatestEdit = <V extends Value>(localState: V) =>
+    Promise.resolve(localState);

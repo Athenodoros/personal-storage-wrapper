@@ -1,6 +1,7 @@
-import { Value } from "./values";
+import { SyncFromTargets } from "./config";
+import { Targets, Value } from "./values";
 
-export interface ManagerInitialisingState<V extends Value> {
+export interface ManagerInitialisingState<V extends Value, T extends Targets> {
     value: V;
     type: "INITIALISING";
 
@@ -8,23 +9,39 @@ export interface ManagerInitialisingState<V extends Value> {
         value: V;
         callback: () => void;
     }[];
+    newSyncs: {
+        sync: SyncFromTargets<T>;
+        callback: () => void;
+    }[];
+    removeSyncs: {
+        sync: SyncFromTargets<T>;
+        callback: () => void;
+    }[];
 }
-export interface ManagerRunningState<V extends Value> {
+export interface ManagerRunningState<V extends Value, T extends Targets> {
     value: V;
-    type: "UPLOADING" | "POLLING" | "DOWNLOADING";
+    type: "UPLOADING" | "POLLING" | "DOWNLOADING" | "ADDING_SYNC";
 
+    poll: boolean;
     writes: {
         value: V;
         callback: () => void;
     }[];
-    poll: boolean;
+    newSyncs: {
+        sync: SyncFromTargets<T>;
+        callback: () => void;
+    }[];
+    removeSyncs: {
+        sync: SyncFromTargets<T>;
+        callback: () => void;
+    }[];
 }
 export interface ManagerWaitingState<V extends Value> {
     value: V;
     type: "WAITING";
 }
 
-export type ManagerState<V extends Value> =
-    | ManagerInitialisingState<V>
-    | ManagerRunningState<V>
+export type ManagerState<V extends Value, T extends Targets> =
+    | ManagerInitialisingState<V, T>
+    | ManagerRunningState<V, T>
     | ManagerWaitingState<V>;

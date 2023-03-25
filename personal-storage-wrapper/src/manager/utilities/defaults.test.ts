@@ -1,23 +1,7 @@
 import { expect, test } from "vitest";
-import { DropboxTarget } from "../targets/dropbox";
-import { MemoryTarget } from "../targets/memory";
+import { DropboxTarget } from "../../targets/dropbox";
+import { MemoryTarget } from "../../targets/memory";
 import { resolveStartupConflictsWithRemoteStateAndLatestEdit } from "./defaults";
-
-test("Prioritises valid results", async () => {
-    expect(
-        await resolveStartupConflictsWithRemoteStateAndLatestEdit([
-            { sync: getMemorySync(), value: getValue(0, "A") },
-            { sync: getMemorySync(), value: { type: "value" as const, value: null } },
-        ])
-    ).toBe("A");
-
-    expect(
-        await resolveStartupConflictsWithRemoteStateAndLatestEdit([
-            { sync: getMemorySync(), value: getValue(0, "A") },
-            { sync: getMemorySync(), value: { type: "value" as const, value: null } },
-        ])
-    ).toBe("A");
-});
 
 test("Prioritises recent results", async () => {
     expect(
@@ -52,10 +36,7 @@ test("Prioritises remote results", async () => {
 });
 
 // Utilities
-const getValue = (timestamp: number, value: string) => ({
-    type: "value" as const,
-    value: { timestamp: new Date(timestamp), value },
-});
+const getValue = (timestamp: number, value: string) => ({ timestamp: new Date(timestamp), value });
 const getMemorySync = () => ({ target: new MemoryTarget(), compressed: false });
 const getDropBoxSync = async () => ({
     target: await DropboxTarget.deserialise({

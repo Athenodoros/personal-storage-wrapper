@@ -1,8 +1,8 @@
-import { Result } from "../../targets/result";
+import { ResultValueType } from "../../targets/result";
 import { Deserialiser } from "../../targets/types";
 import { SyncOperationLogger } from "./logs";
 import { Sync } from "./syncs";
-import { MaybeValue, Targets, Value } from "./values";
+import { Targets, TimestampedValue, Value } from "./values";
 
 export interface PSMConfig<V extends Value, T extends Targets> {
     // Updates
@@ -16,7 +16,7 @@ export interface PSMConfig<V extends Value, T extends Targets> {
     onSyncStatesUpdate: (sync: SyncFromTargets<T>[]) => void;
 
     // Conflict Handlers
-    resolveConflictingSyncUpdate: ConflictingSyncBehaviour<T, V>;
+    resolveConflictingSyncsUpdate: ConflictingRemoteBehaviour<T, V>;
 }
 
 export interface PSMCreationConfig<V extends Value, T extends Targets> extends PSMConfig<V, T> {
@@ -28,7 +28,7 @@ export interface PSMCreationConfig<V extends Value, T extends Targets> extends P
     valueCacheCount: number | undefined;
 
     // Conflict Handlers
-    handleFullyOfflineSyncsOnStartup: OfflineSyncStartupHandler<T, V>;
+    handleAllEmptyAndFailedSyncsOnStartup: OfflineSyncStartupHandler<T, V>;
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>;
 }
 
@@ -40,21 +40,26 @@ export type SyncFromTargets<T extends Targets> = {
     [K in keyof T]: K extends string ? Sync<K, T[K]> : never;
 }[keyof T];
 
-export type SyncTypeWithValue<T extends Targets, V extends Value> = {
-    sync: SyncFromTargets<T>;
-    value: Awaited<Result<MaybeValue<V>>>;
-};
-
 export type OfflineSyncStartupBehaviour<V extends Value> = { behaviour: "DEFAULT" } | { behaviour: "VALUE"; value: V };
 export type OfflineSyncStartupHandler<T extends Targets, V extends Value> = (
-    syncs: SyncTypeWithValue<T, V>[]
+    syncs: {
+        sync: SyncFromTargets<T>;
+        value: ResultValueType<null>;
+    }[]
 ) => Promise<OfflineSyncStartupBehaviour<V>>;
 
 export type ConflictingSyncStartupBehaviour<T extends Targets, V extends Value> = (
-    syncs: SyncTypeWithValue<T, V>[]
+    syncs: {
+        sync: SyncFromTargets<T>;
+        value: TimestampedValue<V>;
+    }[]
 ) => Promise<V>;
 
-export type ConflictingSyncBehaviour<T extends Targets, V extends Value> = (
+export type ConflictingRemoteBehaviour<T extends Targets, V extends Value> = (
     localState: V,
-    conflicts: SyncTypeWithValue<T, V>
+    syncs: SyncFromTargets<T>[],
+    conflicts: {
+        sync: SyncFromTargets<T>;
+        value: TimestampedValue<V>;
+    }[]
 ) => Promise<V>;

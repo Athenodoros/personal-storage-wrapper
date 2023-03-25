@@ -1,14 +1,16 @@
 import { TypedBroadcastChannel } from "../utilities/channel";
+import { deepEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
 import { StartValue } from "./startup/types";
 import { Deserialisers, ManagerState, PSMConfig, SyncFromTargets, Targets, Value } from "./types";
 import { DefaultTargetsType } from "./utilities/defaults";
+import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
     private deserialisers: Deserialisers<T>;
-    private state: ManagerState<V>;
+    private state: ManagerState<V, T>;
     private syncs: SyncFromTargets<T>[];
     private channel: TypedBroadcastChannel<"VALUE" | "SYNCS">;
     private recents: ListBuffer<V>;
@@ -28,7 +30,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.recents = recents;
         this.config = config;
         this.channel = new TypedBroadcastChannel<"VALUE" | "SYNCS">("psm-channel", () => {
-            // TODO
+            TODO;
             // If value, update value and don't write to syncs
             // For value: include some kind of hash on syncs to check for duplicates
             // If syncs, pass details for new/removed sync and add it (without syncing)
@@ -40,21 +42,24 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             return;
         }
 
-        this.state = { type: "INITIALISING", value: start.value, writes: [] };
+        this.state = { type: "INITIALISING", value: start.value, writes: [], newSyncs: [], removeSyncs: [] };
         this.syncs = start.syncs.map(({ sync }) => sync);
 
         // Wait for all results to return, handle results, and start polling
         Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result })))).then(
-            (results) => {
-                const value = handleInitialSyncValuesAndGetResult(
+            async (results) => {
+                const { value, didUpdateSyncs } = await handleInitialSyncValuesAndGetResult(
                     start.value,
                     results,
                     start.resolveConflictingSyncValuesOnStartup,
                     () => this.config.handleSyncOperationLog
                 );
 
-                // Use new value - set state and manage writes/sync updates, write out, and start polling
-                TODO;
+                if (didUpdateSyncs) this.onSyncsUpdate();
+                if (!deepEquals(value, start.value)) this.config.onValueUpdate(value);
+
+                // Handle state update
+                TODO; // Deal with writes & sync updates, and start polling
             }
         );
     }
@@ -63,21 +68,36 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      * Sync Management
      */
     public getSyncsState = (): SyncFromTargets<T>[] => [...this.syncs];
-    public removeSync = async (sync: SyncFromTargets<T>): Promise<void> => {
-        // TODO
-        // Wait until end of next operation, then update list
-    };
-    public addSync = async (sync: SyncFromTargets<T>): Promise<void> => {
-        // TODO
-        // Wait until end of next operation, then update list
-    };
+    public addSync = (sync: SyncFromTargets<T>): Promise<void> =>
+        new Promise((resolve) => {
+            if (this.state.type !== "WAITING") return this.state.newSyncs.push({ sync, callback: resolve });
+            if (this.syncs.includes(sync)) return resolve();
+
+            TODO; // Deal with added sync;
+        });
+    public removeSync = (sync: SyncFromTargets<T>): Promise<void> =>
+        new Promise((resolve) => {
+            if (this.state.type !== "WAITING") return this.state.removeSyncs.push({ sync, callback: resolve });
+            if (!this.syncs.includes(sync)) return resolve();
+
+            this.syncs = this.syncs.filter((candidate) => candidate !== sync);
+            this.onSyncsUpdate();
+            resolve();
+        });
 
     /**
      * Value Interactions
      */
     public getValue = (): V => this.state.value;
     public setValueAndPushToSyncs = (value: T): void => {
-        // TODO
-        // Update local quickly and then write out async
+        TODO; // Update local quickly and then write out async
+    };
+
+    /**
+     * Internal Wrappers
+     */
+    private onSyncsUpdate = () => {
+        this.config.onSyncStatesUpdate(this.syncs);
+        this.config.saveSyncData(getConfigFromSyncs(this.syncs));
     };
 }

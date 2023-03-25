@@ -1,8 +1,10 @@
 import { TypedBroadcastChannel } from "../utilities/channel";
 import { ListBuffer } from "../utilities/listbuffer";
-import { DefaultTargetsType } from "./defaults";
-import { createPSM, StartValue } from "./initialiser";
+import { createPSM } from "./startup/constructor";
+import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
+import { StartValue } from "./startup/types";
 import { Deserialisers, ManagerState, PSMConfig, SyncFromTargets, Targets, Value } from "./types";
+import { DefaultTargetsType } from "./utilities/defaults";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
     private deserialisers: Deserialisers<T>;
@@ -42,15 +44,19 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.syncs = start.syncs.map(({ sync }) => sync);
 
         // Wait for all results to return, handle results, and start polling
-        Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result }))))
-            .then((results) => {
-                // If all consistent, great
-                // If conflict, resolve conflict using callback
-                // If some missing, write back
-            })
-            .then(() => {
-                // Start Polling
-            });
+        Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result })))).then(
+            (results) => {
+                const value = handleInitialSyncValuesAndGetResult(
+                    start.value,
+                    results,
+                    start.resolveConflictingSyncValuesOnStartup,
+                    () => this.config.handleSyncOperationLog
+                );
+
+                // Use new value - set state and manage writes/sync updates, write out, and start polling
+                TODO;
+            }
+        );
     }
 
     /**

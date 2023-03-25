@@ -1,14 +1,15 @@
 import { expect, test } from "vitest";
-import { MemoryTarget, MemoryTargetType } from "../targets/memory";
-import { MemoryTargetSerialisationConfig } from "../targets/memory/types";
+import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
+import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
+import { noop } from "../../utilities/data";
 import {
     DefaultTargetsType,
     resetToDefaultsOnOfflineTargets,
     resolveStartupConflictsWithRemoteStateAndLatestEdit,
-} from "./defaults";
-import { getPSMStartValue } from "./initialiser";
-import { getBufferFromValue } from "./serialisation";
-import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync, Value } from "./types";
+} from "../defaults";
+import { getBufferFromValue } from "../serialisation";
+import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync, Value } from "../types";
+import { getPSMStartValue } from "./constructor";
 
 const DELAY = 20;
 
@@ -84,7 +85,8 @@ const getPSMValue = (
         stores,
         initialValue,
         handleFullyOfflineSyncsOnStartup,
-        resolveConflictingSyncValuesOnStartup
+        resolveConflictingSyncValuesOnStartup,
+        () => noop
     );
 
 const getQuickStore = <V extends Value>(
@@ -97,5 +99,5 @@ const getQuickStore = <V extends Value>(
         fails,
         value: value && { timestamp: new Date(), buffer: getBufferFromValue(value) },
     });
-    return { target, compressed: false, state: "SYNCED" };
+    return { target, compressed: false };
 };

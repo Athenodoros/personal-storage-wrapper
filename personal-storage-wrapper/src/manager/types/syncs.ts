@@ -1,4 +1,3 @@
-export type SyncState = "SYNCED" | "DOWNLOAD" | "UPLOAD" | "POLL" | "OFFLINE" | "ERROR";
 import { Target } from "../../targets/types";
 
 export interface Sync<Type extends string, Config> {
@@ -7,9 +6,6 @@ export interface Sync<Type extends string, Config> {
     compressed: boolean;
 
     // Sync Status
-    desynced?: boolean;
-    lastSeenWriteTime?: Date;
-
-    // Observability for Applications
-    state: SyncState;
+    desynced?: boolean; // Flag for failed writes
+    lastSeenWriteTime?: Date; // Last remote timestamp, to detect remote updates
 }

@@ -1,5 +1,5 @@
-import { Deserialisers, SyncFromTargets, Targets, Value } from "../manager/types";
-import { decodeFromArrayBuffer, encodeToArrayBuffer } from "../utilities/buffers/encoding";
+import { Deserialisers, SyncFromTargets, Targets, Value } from "../../manager/types";
+import { decodeFromArrayBuffer, encodeToArrayBuffer } from "../../utilities/buffers/encoding";
 
 /**
  * Value Serialisation

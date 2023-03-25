@@ -1,12 +1,12 @@
-import { DropboxTarget } from "../targets/dropbox";
-import { DropboxTargetType } from "../targets/dropbox/types";
-import { GDriveTarget, GDriveTargetType } from "../targets/gdrive";
-import { IndexedDBTarget, IndexedDBTargetType } from "../targets/indexeddb";
-import { IndexedDBTargetSerialisationConfig } from "../targets/indexeddb/types";
-import { MemoryTarget, MemoryTargetType } from "../targets/memory";
-import { Deserialiser } from "../targets/types";
-import { maxBy } from "../utilities/data";
-import { OfflineSyncStartupBehaviour, Sync, SyncTypeWithValue, Targets, Value } from "./types";
+import { DropboxTarget } from "../../targets/dropbox";
+import { DropboxTargetType } from "../../targets/dropbox/types";
+import { GDriveTarget, GDriveTargetType } from "../../targets/gdrive";
+import { IndexedDBTarget, IndexedDBTargetType } from "../../targets/indexeddb";
+import { IndexedDBTargetSerialisationConfig } from "../../targets/indexeddb/types";
+import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
+import { Deserialiser } from "../../targets/types";
+import { maxBy } from "../../utilities/data";
+import { OfflineSyncStartupBehaviour, Sync, SyncTypeWithValue, Targets, Value } from "../types";
 
 /**
  * Deserialiser definitions
@@ -34,7 +34,7 @@ export const getDefaultSyncStates = async (): Promise<
     [Sync<IndexedDBTargetType, IndexedDBTargetSerialisationConfig>]
 > => {
     const target = await IndexedDBTarget.create();
-    return [{ target, compressed: true, state: "SYNCED" }];
+    return [{ target, compressed: true }];
 };
 
 /**

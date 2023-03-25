@@ -1,6 +1,6 @@
-import { Result } from "../targets/result";
-import { getBufferFromValue, getValueFromBuffer } from "./serialisation";
-import { MaybeValue, SyncFromTargets, SyncOperation, SyncOperationLogger, Targets, Value } from "./types";
+import { Result } from "../../targets/result";
+import { getBufferFromValue, getValueFromBuffer } from "../serialisation";
+import { MaybeValue, SyncFromTargets, SyncOperation, SyncOperationLogger, Targets, Value } from "../types";
 
 const runWithLogger = <S, T extends Targets>(
     logger: () => SyncOperationLogger<SyncFromTargets<T>>,

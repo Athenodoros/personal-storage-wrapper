@@ -56,13 +56,12 @@ const getValue = (timestamp: number, value: string) => ({
     type: "value" as const,
     value: { timestamp: new Date(timestamp), value },
 });
-const common = { compressed: false, state: "SYNCED" as const };
-const getMemorySync = () => ({ target: new MemoryTarget(), ...common });
+const getMemorySync = () => ({ target: new MemoryTarget(), compressed: false });
 const getDropBoxSync = async () => ({
     target: await DropboxTarget.deserialise({
         connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date() },
         user: { id: "", email: "", name: "" },
         path: "/data.bak",
     }),
-    ...common,
+    compressed: false,
 });

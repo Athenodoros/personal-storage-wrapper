@@ -1,6 +1,18 @@
-import { Result } from "../targets/result";
-import { noop } from "../utilities/data";
-import { ListBuffer } from "../utilities/listbuffer";
+import { noop } from "../../utilities/data";
+import { ListBuffer } from "../../utilities/listbuffer";
+import { PersonalStorageManager } from "../manager";
+import { getSyncsFromConfig } from "../serialisation";
+import {
+    ConflictingSyncStartupBehaviour,
+    Deserialisers,
+    InitialValue,
+    OfflineSyncStartupHandler,
+    PSMCreationConfig,
+    SyncFromTargets,
+    SyncOperationLogger,
+    Targets,
+    Value,
+} from "../types";
 import {
     DefaultDeserialisers,
     DefaultTargetsType,
@@ -10,37 +22,9 @@ import {
     resolveStartupConflictsWithRemoteStateAndLatestEdit,
     resolveUpdateConflictsWithRemoteStateAndLatestEdit,
     saveSyncDataToLocalStorage,
-} from "./defaults";
-import { PersonalStorageManager } from "./manager";
-import { getSyncsFromConfig } from "./serialisation";
-import {
-    ConflictingSyncStartupBehaviour,
-    Deserialisers,
-    InitialValue,
-    MaybeValue,
-    OfflineSyncStartupHandler,
-    PSMCreationConfig,
-    SyncFromTargets,
-    SyncOperationLogger,
-    Targets,
-    Value,
-} from "./types";
-import { readFromSync } from "./utilities";
-
-export interface PSMFinalValue<V extends Value, T extends Targets> {
-    type: "final";
-    syncs: SyncFromTargets<T>[];
-    value: V;
-}
-
-export interface PSMProvisionalValue<V extends Value, T extends Targets> {
-    type: "provisional";
-    syncs: { sync: SyncFromTargets<T>; value: Result<MaybeValue<V>> }[];
-    value: V;
-    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>;
-}
-
-export type StartValue<V extends Value, T extends Targets> = PSMFinalValue<V, T> | PSMProvisionalValue<V, T>;
+} from "../utilities/defaults";
+import { readFromSync } from "../utilities/requests";
+import { StartValue } from "./types";
 
 // Only exported for testing
 export const getPSMStartValue = <V extends Value, T extends Targets>(

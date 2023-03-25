@@ -70,7 +70,8 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     public getSyncsState = (): SyncFromTargets<T>[] => [...this.syncs];
     public addSync = (sync: SyncFromTargets<T>): Promise<void> =>
         new Promise((resolve) => {
-            if (this.state.type !== "WAITING") return this.state.newSyncs.push({ sync, callback: resolve });
+            if (this.state.type !== "WAITING")
+                return this.state.newSyncs.push({ sync, background: false, callback: resolve });
             if (this.syncs.includes(sync)) return resolve();
 
             TODO; // Deal with added sync;

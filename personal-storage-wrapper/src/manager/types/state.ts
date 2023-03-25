@@ -11,6 +11,7 @@ export interface ManagerInitialisingState<V extends Value, T extends Targets> {
     }[];
     newSyncs: {
         sync: SyncFromTargets<T>;
+        background: boolean; // Add in background because initial sync happened in other tab
         callback: () => void;
     }[];
     removeSyncs: {
@@ -29,6 +30,7 @@ export interface ManagerRunningState<V extends Value, T extends Targets> {
     }[];
     newSyncs: {
         sync: SyncFromTargets<T>;
+        background: boolean; // Add in background because initial sync happened in other tab
         callback: () => void;
     }[];
     removeSyncs: {

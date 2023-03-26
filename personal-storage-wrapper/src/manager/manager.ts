@@ -8,8 +8,10 @@ import {
     ConflictingRemoteBehaviour,
     DEFAULT_MANAGER_STATE,
     Deserialisers,
+    InitialValue,
     ManagerState,
     PSMConfig,
+    PSMCreationConfig,
     RemovalOperation,
     SyncFromTargets,
     Targets,
@@ -32,8 +34,36 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Manager Initialisation
      */
-    static create = createPSM;
-    public constructor(
+    static create<V extends Value>(
+        initialValue: InitialValue<V>,
+        config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
+    ): Promise<PersonalStorageManager<V, DefaultTargetsType>>;
+
+    static create<V extends Value, T extends Targets>(
+        initialValue: InitialValue<V>,
+        config: Partial<PSMCreationConfig<V, T>>,
+        deserialisers: Deserialisers<T>
+    ): Promise<PersonalStorageManager<V, T>>;
+
+    static create<V extends Value, T extends Targets>(
+        initialValue: InitialValue<V>,
+        initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
+        maybeDeserialisers?: Deserialisers<T>
+    ): Promise<PersonalStorageManager<V, T>> {
+        return createPSM(
+            (
+                start: StartValue<V, T>,
+                deserialisers: Deserialisers<T>,
+                recents: ListBuffer<V>,
+                config: PSMConfig<V, T>
+            ) => new PersonalStorageManager(start, deserialisers, recents, config),
+            initialValue,
+            initialisationConfig,
+            maybeDeserialisers
+        );
+    }
+
+    private constructor(
         start: StartValue<V, T>,
         deserialisers: Deserialisers<T>,
         recents: ListBuffer<V>,

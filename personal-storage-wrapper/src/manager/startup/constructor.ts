@@ -7,6 +7,7 @@ import {
     Deserialisers,
     InitialValue,
     OfflineSyncStartupHandler,
+    PSMConfig,
     PSMCreationConfig,
     SyncFromTargets,
     SyncOperationLogger,
@@ -15,7 +16,6 @@ import {
 } from "../types";
 import {
     DefaultDeserialisers,
-    DefaultTargetsType,
     getDefaultSyncStates,
     getSyncDataFromLocalStorage,
     resetToDefaultsOnOfflineTargets,
@@ -78,18 +78,13 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
         }
     });
 
-export function createPSM<V extends Value>(
-    initialValue: InitialValue<V>,
-    config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
-): Promise<PersonalStorageManager<V, DefaultTargetsType>>;
-
-export function createPSM<V extends Value, T extends Targets>(
-    initialValue: InitialValue<V>,
-    config: Partial<PSMCreationConfig<V, T>>,
-    deserialisers: Deserialisers<T>
-): Promise<PersonalStorageManager<V, T>>;
-
 export async function createPSM<V extends Value, T extends Targets>(
+    createPSMObject: (
+        start: StartValue<V, T>,
+        deserialisers: Deserialisers<T>,
+        recents: ListBuffer<V>,
+        config: PSMConfig<V, T>
+    ) => PersonalStorageManager<V, T>,
     initialValue: InitialValue<V>,
     initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
     maybeDeserialisers?: Deserialisers<T>
@@ -148,7 +143,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         () => getHandleSyncOperationLog()
     );
 
-    const manager = new PersonalStorageManager<V, T>(start, deserialisers, buffer, config);
+    const manager = createPSMObject(start, deserialisers, buffer, config);
     getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
     return manager;
 }

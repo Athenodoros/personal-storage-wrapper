@@ -10,7 +10,7 @@ import {
     Value,
 } from "../types";
 import { DefaultTargetsType } from "../utilities/defaults";
-import { writeToSync } from "../utilities/requests";
+import { writeToSyncAndReturnIsDirty } from "../utilities/requests";
 
 type InitialSyncProcessingResult<V extends Value> = {
     value: V;
@@ -41,17 +41,8 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
     await Promise.all(
         results.map(async ({ sync, result }) => {
             if (result.type === "value" && !deepEquals(result.value?.value, value)) {
-                const result = await writeToSync(logger)(sync, value);
-                if (result.type === "error") {
-                    if (sync.desynced === false) didUpdateSyncs = true;
-
-                    sync.desynced = true;
-                } else {
-                    didUpdateSyncs = true;
-
-                    sync.desynced = false;
-                    sync.lastSeenWriteTime = result.value;
-                }
+                const dirty = await writeToSyncAndReturnIsDirty(logger, sync, value);
+                if (dirty) didUpdateSyncs = true;
             }
         })
     );

@@ -18,7 +18,7 @@ import {
     WriteOperation,
 } from "./types";
 import { DefaultTargetsType } from "./utilities/defaults";
-import { readFromSync, writeToSync } from "./utilities/requests";
+import { readFromSync, writeToSyncAndReturnIsDirty } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
@@ -129,6 +129,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             else this.poll();
         }, (this.config.pollPeriodInSeconds ?? 10) * 1000);
 
+    private writeToSyncAndReturnIsDirty = (sync: SyncFromTargets<T>, value: V) =>
+        writeToSyncAndReturnIsDirty(() => this.config.handleSyncOperationLog, sync, value);
+
     /**
      * Internal processing rules
      */
@@ -169,11 +172,11 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
         await Promise.all(
             additions.map(({ sync }) =>
-                readFromSync<V, T>(() => this.config.handleSyncOperationLog)(sync).then(async (result) => {
+                readFromSync<V, T>(() => this.config.handleSyncOperationLog, sync).then(async (result) => {
                     if (result.type === "error") {
                         sync.desynced = true;
                     } else if (result.value === null) {
-                        await writeToSync(() => this.config.handleSyncOperationLog)(sync, this.value);
+                        await this.writeToSyncAndReturnIsDirty(sync, this.value);
                     } else if (!deepEquals(result.value.value, this.value)) {
                         conflicts.push({ sync, value: result.value });
                     }
@@ -188,8 +191,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             else
                 await Promise.all(
                     conflicts.map(async (conflict) => {
-                        if (!deepEquals(conflict.value.value, value))
-                            await writeToSync(() => this.config.handleSyncOperationLog)(conflict.sync, value);
+                        if (!deepEquals(conflict.value.value, value)) {
+                            await this.writeToSyncAndReturnIsDirty(conflict.sync, value);
+                        }
                     })
                 );
         }
@@ -214,7 +218,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             this.syncs
                 .filter(({ desynced }) => desynced === false)
                 // All syncs update due to writes - either desync or new timestamp - so always call onSyncsUpdate
-                .map((sync) => writeToSync(() => this.config.handleSyncOperationLog)(sync, value))
+                .map((sync) => this.writeToSyncAndReturnIsDirty(sync, value))
         );
         writes.forEach(({ callback }) => callback());
 
@@ -226,15 +230,17 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     private poll = async () => {
         this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, poll: false, type: "POLLING" };
 
+        let didUpdateSyncs = false;
         const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
         await Promise.all(
             this.syncs.map((sync) =>
-                readFromSync<V, T>(() => this.config.handleSyncOperationLog)(sync).then(async (result) => {
+                readFromSync<V, T>(() => this.config.handleSyncOperationLog, sync).then(async (result) => {
                     if (result.type === "error" || deepEquals(result.value?.value, this.value)) return;
 
-                    if (result.value === null)
-                        await writeToSync(() => this.config.handleSyncOperationLog)(sync, this.value);
-                    else conflicts.push({ sync, value: result.value });
+                    if (result.value === null || sync.desynced === false) {
+                        const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
+                        if (dirty) didUpdateSyncs = true;
+                    } else conflicts.push({ sync, value: result.value });
                 })
             )
         );
@@ -246,13 +252,15 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             else
                 await Promise.all(
                     conflicts.map(async (conflict) => {
-                        if (!deepEquals(conflict.value.value, value))
-                            await writeToSync(() => this.config.handleSyncOperationLog)(conflict.sync, value);
+                        if (!deepEquals(conflict.value.value, value)) {
+                            const dirty = await this.writeToSyncAndReturnIsDirty(conflict.sync, value);
+                            if (dirty) didUpdateSyncs = true;
+                        }
                     })
                 );
         }
 
-        TODO; // Handle writeToSync, updates, and this.onSyncsUpdate
+        if (didUpdateSyncs) this.onSyncsUpdate();
         this.schedulePoll();
         this.resolveQueuedOperations();
     };

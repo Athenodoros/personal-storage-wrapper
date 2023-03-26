@@ -22,21 +22,36 @@ export const runWithLogger = <S, T extends Targets>(
     return promise;
 };
 
-export const readFromSync =
-    <V extends Value, T extends Targets>(logger: () => SyncOperationLogger<SyncFromTargets<T>>) =>
-    (sync: SyncFromTargets<T>): Result<MaybeValue<V>> =>
-        runWithLogger(logger, sync, "DOWNLOAD", () =>
-            sync.target
-                .read()
-                .map((value) => value && { timestamp: value.timestamp, value: getValueFromBuffer<V>(value.buffer) })
-        );
+export const timestampFromSync = <T extends Targets>(
+    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
+    sync: SyncFromTargets<T>
+): Result<Date | null> => runWithLogger(logger, sync, "POLL", () => sync.target.timestamp());
 
-export const writeToSync =
-    <V extends Value, T extends Targets>(logger: () => SyncOperationLogger<SyncFromTargets<T>>) =>
-    (sync: SyncFromTargets<T>, value: V): Result<Date> =>
-        runWithLogger(logger, sync, "UPLOAD", () => sync.target.write(getBufferFromValue(value)));
+export const readFromSync = <V extends Value, T extends Targets>(
+    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
+    sync: SyncFromTargets<T>
+): Result<MaybeValue<V>> =>
+    runWithLogger(logger, sync, "DOWNLOAD", () =>
+        sync.target
+            .read()
+            .map((value) => value && { timestamp: value.timestamp, value: getValueFromBuffer<V>(value.buffer) })
+    );
 
-export const timestampFromSync =
-    <T extends Targets>(logger: () => SyncOperationLogger<SyncFromTargets<T>>) =>
-    (sync: SyncFromTargets<T>): Result<Date | null> =>
-        runWithLogger(logger, sync, "POLL", () => sync.target.timestamp());
+export const writeToSyncAndReturnIsDirty = async <V extends Value, T extends Targets>(
+    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
+    sync: SyncFromTargets<T>,
+    value: V
+): Promise<boolean> => {
+    const result = await runWithLogger(logger, sync, "UPLOAD", () => sync.target.write(getBufferFromValue(value)));
+
+    if (result.type === "value") {
+        sync.desynced = false;
+        sync.lastSeenWriteTime = result.value;
+        return true;
+    }
+
+    if (sync.desynced === true) return false;
+
+    sync.desynced = true;
+    return true;
+};

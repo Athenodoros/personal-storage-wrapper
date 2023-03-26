@@ -37,7 +37,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
 ) =>
     new Promise<StartValue<V, T>>(async (resolve) => {
         // Pull values from all syncs
-        const values = syncs.map((sync) => ({ sync, value: readFromSync<V, T>(logger)(sync) }));
+        const values = syncs.map((sync) => ({ sync, value: readFromSync<V, T>(logger, sync) }));
 
         let resolved = false;
 

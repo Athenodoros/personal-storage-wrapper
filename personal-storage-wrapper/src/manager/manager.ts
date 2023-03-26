@@ -18,7 +18,7 @@ import {
 } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { DefaultTargetsType } from "./utilities/defaults";
-import { readFromSync, writeToSyncAndReturnIsDirty } from "./utilities/requests";
+import { readFromSync, timestampFromSync, writeToSyncAndReturnIsDirty } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
@@ -67,7 +67,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                     start.value,
                     results,
                     start.resolveConflictingSyncValuesOnStartup,
-                    () => this.config.handleSyncOperationLog
+                    this.logger
                 );
 
                 if (didUpdateSyncs) this.onSyncsUpdate();
@@ -135,7 +135,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         }, (this.config.pollPeriodInSeconds ?? 10) * 1000);
 
     private writeToSyncAndReturnIsDirty = (sync: SyncFromTargets<T>, value: V) =>
-        writeToSyncAndReturnIsDirty(() => this.config.handleSyncOperationLog, sync, value);
+        writeToSyncAndReturnIsDirty(this.logger, sync, value);
+
+    private logger = () => this.config.handleSyncOperationLog;
 
     /**
      * Internal processing rules
@@ -191,7 +193,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             additions
                 .filter(({ background }) => !background)
                 .map(({ sync }) =>
-                    readFromSync<V, T>(() => this.config.handleSyncOperationLog, sync).then(async (result) => {
+                    readFromSync<V, T>(this.logger, sync).then(async (result) => {
                         if (result.type === "error") {
                             sync.desynced = true;
                         } else if (result.value === null) {
@@ -236,7 +238,6 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         const results = await Promise.all(
             this.syncs
                 .filter(({ desynced }) => desynced === false)
-                // All syncs update due to writes - either desync or new timestamp - so always call onSyncsUpdate
                 .map((sync) => this.writeToSyncAndReturnIsDirty(sync, value))
         );
         writes.forEach(({ callback }) => callback());
@@ -252,16 +253,26 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         let didUpdateSyncs = false;
         const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
         await Promise.all(
-            this.syncs.map((sync) =>
-                readFromSync<V, T>(() => this.config.handleSyncOperationLog, sync).then(async (result) => {
-                    if (result.type === "error" || deepEquals(result.value?.value, this.value)) return;
+            this.syncs.map(async (sync) => {
+                const timestamp = await timestampFromSync(this.logger, sync);
+                if (timestamp.type === "error" || timestamp.value === sync.lastSeenWriteTime) return;
 
-                    if (result.value === null || sync.desynced === false) {
-                        const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
-                        if (dirty) didUpdateSyncs = true;
-                    } else conflicts.push({ sync, value: result.value });
-                })
-            )
+                if (timestamp.value === null) {
+                    const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
+                    if (dirty) didUpdateSyncs = true;
+                    return;
+                }
+
+                const result = await readFromSync<V, T>(this.logger, sync);
+                if (result.type === "error" || deepEquals(result.value?.value, this.value)) return;
+
+                if (result.value === null) {
+                    const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
+                    if (dirty) didUpdateSyncs = true;
+                } else {
+                    conflicts.push({ sync, value: result.value });
+                }
+            })
         );
 
         if (conflicts.length) {

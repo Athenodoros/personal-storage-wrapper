@@ -175,32 +175,35 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Internal processing rules
      */
-    private resolveQueuedOperations = (): void | Promise<void> => {
+    private resolveQueuedOperations = async (): Promise<void> => {
         if (this.state.type === "WAITING") return;
 
-        if (this.state.updateSyncs) return this.resolveQueuedUpdate();
-        if (this.state.removeSyncs.length) return this.resolveQueuedRemovals();
-        if (this.state.newSyncs.length) return this.resolveQueuedAdditions();
-        if (this.state.writes.length) return this.resolveQueuedWrites();
-        if (this.state.poll) return this.poll();
+        if (this.state.updateSyncs) await this.resolveQueuedUpdate();
+        else if (this.state.removeSyncs.length) await this.resolveQueuedRemovals();
+        else if (this.state.newSyncs.length) await this.resolveQueuedAdditions();
+        else if (this.state.writes.length) await this.resolveQueuedWrites();
+        else if (this.state.poll) await this.poll();
+        else {
+            this.state = { type: "WAITING" };
+            return;
+        }
 
-        this.state = { type: "WAITING" };
+        this.resolveQueuedOperations();
     };
 
-    private resolveQueuedUpdate = (syncs?: SyncFromTargets<T>[]) => {
+    private resolveQueuedUpdate = async (syncs?: SyncFromTargets<T>[]): Promise<void> => {
         if (!syncs && this.state.type !== "WAITING") syncs = this.state.updateSyncs;
-        if (!syncs) return this.resolveQueuedOperations();
+        if (!syncs) return;
 
         this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, updateSyncs: [], type: "UPDATING_SYNCS" };
 
         this.syncs = syncs;
         this.onSyncsUpdate(false);
-        this.resolveQueuedOperations();
     };
 
-    private resolveQueuedRemovals = (operations: RemovalOperation<T>[] = []) => {
+    private resolveQueuedRemovals = async (operations: RemovalOperation<T>[] = []): Promise<void> => {
         const removals = operations.concat(this.state.type === "WAITING" ? [] : this.state.removeSyncs);
-        if (removals.length === 0) return this.resolveQueuedOperations();
+        if (removals.length === 0) return;
 
         this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, removeSyncs: [], type: "REMOVING_SYNC" };
 
@@ -209,15 +212,13 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         removals.forEach(({ callback }) => callback());
 
         if (this.syncs.length !== previous) this.onSyncsUpdate();
-
-        this.resolveQueuedOperations();
     };
 
     private resolveQueuedAdditions = async (operations: AdditionOperation<T>[] = []) => {
         const additions = operations
             .concat(this.state.type === "WAITING" ? [] : this.state.newSyncs)
             .filter(({ sync }) => !this.syncs.includes(sync));
-        if (additions.length === 0) return this.resolveQueuedOperations();
+        if (additions.length === 0) return;
 
         this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, newSyncs: [], type: "ADDING_SYNC" };
 
@@ -257,13 +258,11 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             callback();
         });
         this.onSyncsUpdate();
-
-        this.resolveQueuedOperations();
     };
 
     private resolveQueuedWrites = async (operations: WriteOperation<V>[] = []) => {
         const writes = (this.state.type === "WAITING" ? [] : this.state.writes).concat(operations);
-        if (writes.length === 0) return this.resolveQueuedOperations();
+        if (writes.length === 0) return;
 
         this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, writes: [], type: "UPLOADING" };
 
@@ -276,8 +275,6 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         writes.forEach(({ callback }) => callback());
 
         if (results.length !== 0) this.onSyncsUpdate();
-
-        this.resolveQueuedOperations();
     };
 
     private poll = async () => {
@@ -325,6 +322,5 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
         if (didUpdateSyncs) this.onSyncsUpdate();
         this.schedulePoll();
-        this.resolveQueuedOperations();
     };
 }

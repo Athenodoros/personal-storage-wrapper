@@ -18,11 +18,12 @@ export class PSMBroadcastChannel<V extends Value, T extends Targets> {
     private channel: TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>;
 
     constructor(
+        id: string,
         deserialisers: Deserialisers<T>,
         handleNewValue: (value: V) => void,
         handleUpdateSyncs: (syncs: SyncFromTargets<T>[]) => void
     ) {
-        this.channel = new TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>("psm-channel", async (message) => {
+        this.channel = new TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>(id, async (message) => {
             if (message.type === "VALUE") {
                 handleNewValue(message.value);
             } else {

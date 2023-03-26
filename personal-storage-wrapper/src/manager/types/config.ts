@@ -20,6 +20,8 @@ export interface PSMConfig<V extends Value, T extends Targets> {
 }
 
 export interface PSMCreationConfig<V extends Value, T extends Targets> extends PSMConfig<V, T> {
+    id: string;
+
     // Syncs Config
     defaultSyncStates: Promise<SyncFromTargets<T>[]>;
 

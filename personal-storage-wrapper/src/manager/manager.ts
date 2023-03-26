@@ -52,11 +52,12 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     ): Promise<PersonalStorageManager<V, T>> {
         return createPSM(
             (
+                id: string,
                 start: StartValue<V, T>,
                 deserialisers: Deserialisers<T>,
                 recents: ListBuffer<V>,
                 config: PSMConfig<V, T>
-            ) => new PersonalStorageManager(start, deserialisers, recents, config),
+            ) => new PersonalStorageManager(id, start, deserialisers, recents, config),
             initialValue,
             initialisationConfig,
             maybeDeserialisers
@@ -64,12 +65,14 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     }
 
     private constructor(
+        id: string,
         start: StartValue<V, T>,
         deserialisers: Deserialisers<T>,
         recents: ListBuffer<V>,
         config: PSMConfig<V, T>
     ) {
         this.channel = new PSMBroadcastChannel(
+            id + "-channel",
             deserialisers,
             (value: V) => this.setValueAndPushToSyncs(value, "BROADCAST"),
             (syncs: SyncFromTargets<T>[]) => {

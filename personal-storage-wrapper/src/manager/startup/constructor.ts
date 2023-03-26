@@ -78,8 +78,11 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
         }
     });
 
+const managers = new Set<string>();
+
 export async function createPSM<V extends Value, T extends Targets>(
     createPSMObject: (
+        id: string,
         start: StartValue<V, T>,
         deserialisers: Deserialisers<T>,
         recents: ListBuffer<V>,
@@ -94,6 +97,8 @@ export async function createPSM<V extends Value, T extends Targets>(
      */
     const deserialisers = maybeDeserialisers ?? (DefaultDeserialisers as Deserialisers<T>);
     const {
+        id = "psm-default-id",
+
         // Updates
         pollPeriodInSeconds = 10,
         onValueUpdate = noop,
@@ -116,6 +121,12 @@ export async function createPSM<V extends Value, T extends Targets>(
         resolveConflictingSyncValuesOnStartup = resolveStartupConflictsWithRemoteStateAndLatestEdit,
         resolveConflictingSyncsUpdate = resolveUpdateConflictsWithRemoteStateAndLatestEdit,
     } = initialisationConfig;
+
+    /**
+     * Dedupe so that managers don't clobber each other over broadcast channels
+     */
+    if (managers.has(id)) throw new Error("Multiple PSMs cannot exist within one browser context!");
+    managers.add(id);
 
     /**
      * Get initialisation values
@@ -143,7 +154,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         () => getHandleSyncOperationLog()
     );
 
-    const manager = createPSMObject(start, deserialisers, buffer, config);
+    const manager = createPSMObject(id, start, deserialisers, buffer, config);
     getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
     return manager;
 }

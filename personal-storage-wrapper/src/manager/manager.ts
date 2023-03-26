@@ -1,4 +1,4 @@
-import { deepEquals, last, noop } from "../utilities/data";
+import { deepEquals, deepEqualsList, last, noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
@@ -305,7 +305,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             })
         );
 
-        if (conflicts.length) {
+        if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.desynced)) {
+            this.setValueAndPushToSyncs(conflicts[0].value.value, "REMOTE");
+        } else if (conflicts.length) {
             const value = await this.config.resolveConflictingSyncsUpdate(this.value, this.syncs, conflicts);
 
             if (!deepEquals(value, this.value)) this.setValueAndPushToSyncs(value, "CONFLICT");

@@ -171,18 +171,20 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
         const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
         await Promise.all(
-            additions.map(({ sync }) =>
-                readFromSync<V, T>(() => this.config.handleSyncOperationLog, sync).then(async (result) => {
-                    if (result.type === "error") {
-                        sync.desynced = true;
-                    } else if (result.value === null) {
-                        await this.writeToSyncAndReturnIsDirty(sync, this.value);
-                    } else if (!deepEquals(result.value.value, this.value)) {
-                        conflicts.push({ sync, value: result.value });
-                    }
-                    // else - sync already has correct value
-                })
-            )
+            additions
+                .filter(({ background }) => !background)
+                .map(({ sync }) =>
+                    readFromSync<V, T>(() => this.config.handleSyncOperationLog, sync).then(async (result) => {
+                        if (result.type === "error") {
+                            sync.desynced = true;
+                        } else if (result.value === null) {
+                            await this.writeToSyncAndReturnIsDirty(sync, this.value);
+                        } else if (!deepEquals(result.value.value, this.value)) {
+                            conflicts.push({ sync, value: result.value });
+                        }
+                        // else - sync already has correct value
+                    })
+                )
         );
         if (conflicts.length) {
             const value = await this.config.resolveConflictingSyncsUpdate(this.value, this.syncs, conflicts);

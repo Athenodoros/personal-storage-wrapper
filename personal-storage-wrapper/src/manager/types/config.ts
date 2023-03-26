@@ -7,7 +7,7 @@ import { Targets, TimestampedValue, Value } from "./values";
 export interface PSMConfig<V extends Value, T extends Targets> {
     // Updates
     pollPeriodInSeconds: number | null;
-    onValueUpdate: (value: V, origin: "REMOTE" | "BROADCAST" | "LOCAL") => void;
+    onValueUpdate: (value: V, origin: "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT") => void;
     handleSyncOperationLog: SyncOperationLogger<SyncFromTargets<T>>;
 
     // Syncs Config

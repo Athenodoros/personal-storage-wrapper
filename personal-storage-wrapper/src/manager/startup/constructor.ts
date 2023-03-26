@@ -119,7 +119,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         // Conflict Handlers
         handleAllEmptyAndFailedSyncsOnStartup = resetToDefaultsOnOfflineTargets,
         resolveConflictingSyncValuesOnStartup = resolveStartupConflictsWithRemoteStateAndLatestEdit,
-        resolveConflictingSyncUpdate = resolveUpdateConflictsWithRemoteStateAndLatestEdit,
+        resolveConflictingSyncsUpdate = resolveUpdateConflictsWithRemoteStateAndLatestEdit,
     } = initialisationConfig;
 
     /**
@@ -135,7 +135,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         getSyncData,
         saveSyncData,
         onSyncStatesUpdate,
-        resolveConflictingSyncUpdate,
+        resolveConflictingSyncsUpdate,
     };
 
     // Get initial values, including updating logger after PSM creation, and return manager

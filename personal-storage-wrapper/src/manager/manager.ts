@@ -6,6 +6,7 @@ import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
 import { StartValue } from "./startup/types";
 import {
     AdditionOperation,
+    ConflictingRemoteBehaviour,
     DEFAULT_MANAGER_STATE,
     Deserialisers,
     ManagerState,
@@ -17,7 +18,7 @@ import {
     WriteOperation,
 } from "./types";
 import { DefaultTargetsType } from "./utilities/defaults";
-import { writeToSync } from "./utilities/requests";
+import { readFromSync, writeToSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
@@ -70,7 +71,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 );
 
                 if (didUpdateSyncs) this.onSyncsUpdate();
-                if (!deepEquals(value, start.value)) this.setNewValue(value, "REMOTE");
+                if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
 
                 this.schedulePoll();
                 this.resolveQueuedOperations();
@@ -97,8 +98,11 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      * Value Interactions
      */
     public getValue = (): V => this.value;
-    public setValueAndPushToSyncs = (value: V): void => {
-        this.setNewValue(value, "LOCAL");
+    public setValueAndPushToSyncs = (
+        value: V,
+        origin: "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT" = "LOCAL"
+    ): void => {
+        this.setNewValue(value, origin);
 
         if (this.state.type !== "WAITING") this.state.writes.push({ value, callback: noop });
         else this.resolveQueuedWrites([{ value, callback: noop }]);
@@ -112,7 +116,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
     };
 
-    private setNewValue = (value: V, origin: "REMOTE" | "BROADCAST" | "LOCAL") => {
+    private setNewValue = (value: V, origin: "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT") => {
         this.value = value;
         this.config.onValueUpdate(value, origin);
     };
@@ -154,8 +158,49 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.resolveQueuedOperations();
     };
 
-    private resolveQueuedAdditions = (operations: AdditionOperation<T>[] = []) => {
-        TODO;
+    private resolveQueuedAdditions = async (operations: AdditionOperation<T>[] = []) => {
+        const additions = operations
+            .concat(this.state.type === "WAITING" ? [] : this.state.newSyncs)
+            .filter(({ sync }) => !this.syncs.includes(sync));
+        if (additions.length === 0) return this.resolveQueuedOperations();
+
+        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, newSyncs: [], type: "ADDING_SYNC" };
+
+        const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
+        await Promise.all(
+            additions.map(({ sync }) =>
+                readFromSync<V, T>(() => this.config.handleSyncOperationLog)(sync).then(async (result) => {
+                    if (result.type === "error") {
+                        sync.desynced = true;
+                    } else if (result.value === null) {
+                        await writeToSync(() => this.config.handleSyncOperationLog)(sync, this.value);
+                    } else if (!deepEquals(result.value.value, this.value)) {
+                        conflicts.push({ sync, value: result.value });
+                    }
+                    // else - sync already has correct value
+                })
+            )
+        );
+        if (conflicts.length) {
+            const value = await this.config.resolveConflictingSyncsUpdate(this.value, this.syncs, conflicts);
+
+            if (!deepEquals(value, this.value)) this.setValueAndPushToSyncs(value, "CONFLICT");
+            else
+                await Promise.all(
+                    conflicts.map(async (conflict) => {
+                        if (!deepEquals(conflict.value.value, value))
+                            await writeToSync(() => this.config.handleSyncOperationLog)(conflict.sync, value);
+                    })
+                );
+        }
+
+        additions.forEach(({ sync, callback }) => {
+            this.syncs.push(sync);
+            callback();
+        });
+        this.onSyncsUpdate();
+
+        this.resolveQueuedOperations();
     };
 
     private resolveQueuedWrites = async (operations: WriteOperation<V>[] = []) => {
@@ -178,7 +223,37 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.resolveQueuedOperations();
     };
 
-    private poll = () => {
-        TODO;
+    private poll = async () => {
+        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, poll: false, type: "POLLING" };
+
+        const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
+        await Promise.all(
+            this.syncs.map((sync) =>
+                readFromSync<V, T>(() => this.config.handleSyncOperationLog)(sync).then(async (result) => {
+                    if (result.type === "error" || deepEquals(result.value?.value, this.value)) return;
+
+                    if (result.value === null)
+                        await writeToSync(() => this.config.handleSyncOperationLog)(sync, this.value);
+                    else conflicts.push({ sync, value: result.value });
+                })
+            )
+        );
+
+        if (conflicts.length) {
+            const value = await this.config.resolveConflictingSyncsUpdate(this.value, this.syncs, conflicts);
+
+            if (!deepEquals(value, this.value)) this.setValueAndPushToSyncs(value, "CONFLICT");
+            else
+                await Promise.all(
+                    conflicts.map(async (conflict) => {
+                        if (!deepEquals(conflict.value.value, value))
+                            await writeToSync(() => this.config.handleSyncOperationLog)(conflict.sync, value);
+                    })
+                );
+        }
+
+        TODO; // Handle writeToSync, updates, and this.onSyncsUpdate
+        this.schedulePoll();
+        this.resolveQueuedOperations();
     };
 }

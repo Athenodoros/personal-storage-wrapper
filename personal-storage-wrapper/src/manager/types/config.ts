@@ -11,7 +11,6 @@ export interface PSMConfig<V extends Value, T extends Targets> {
     handleSyncOperationLog: SyncOperationLogger<SyncFromTargets<T>>;
 
     // Syncs Config
-    getSyncData: () => string | null;
     saveSyncData: (data: string) => void;
     onSyncStatesUpdate: (sync: SyncFromTargets<T>[]) => void;
 
@@ -23,6 +22,7 @@ export interface PSMCreationConfig<V extends Value, T extends Targets> extends P
     id: string;
 
     // Syncs Config
+    getSyncData: () => string | null;
     defaultSyncStates: Promise<SyncFromTargets<T>[]>;
 
     // Value Cache

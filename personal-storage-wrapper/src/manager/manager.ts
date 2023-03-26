@@ -86,11 +86,13 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         if (start.type === "final") {
             this.state = { type: "WAITING" };
             this.syncs = start.syncs;
+            this.onSyncsUpdate();
             return;
         }
 
         this.state = { type: "INITIALISING", poll: false, writes: [], newSyncs: [], removeSyncs: [] };
         this.syncs = start.syncs.map(({ sync }) => sync);
+        this.onSyncsUpdate();
 
         // Wait for all results to return, handle results, and start polling
         Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result })))).then(

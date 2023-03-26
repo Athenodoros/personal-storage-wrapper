@@ -71,7 +71,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
             }
         }
 
-        if (results.every(({ value }) => value.type === "value" && value.value === null) && !resolved) {
+        if (results.every(({ value }) => !value.value) && !resolved) {
             resolved = true;
             const value = typeof initialValue !== "function" ? initialValue : await Promise.resolve(initialValue());
             resolve({ type: "final", value, syncs });

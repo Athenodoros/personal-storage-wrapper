@@ -49,13 +49,15 @@ test("Uses callback in case of offline sources", async () => {
     expect(new Date().valueOf() - start.valueOf()).toBeLessThanOrEqual(DELAY * 1.5);
 });
 
-test("Respects callback deferral to default in case of offline sources", async () => {
+test("Respects callback deferral to value in case of offline sources", async () => {
     const storeA = getQuickStore(0, "A", true);
     const storeB = getQuickStore(DELAY);
 
     const start = new Date();
-    const value = await getPSMValue([storeA, storeB], undefined, () => Promise.resolve({ behaviour: "DEFAULT" }));
-    expect(value).toMatchObject({ type: "final", value: "DEFAULT" });
+    const value = await getPSMValue([storeA, storeB], undefined, () =>
+        Promise.resolve({ behaviour: "VALUE", value: "FALLBACK" })
+    );
+    expect(value).toMatchObject({ type: "final", value: "FALLBACK" });
     expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY * 0.5);
     expect(new Date().valueOf() - start.valueOf()).toBeLessThanOrEqual(DELAY * 1.5);
 });

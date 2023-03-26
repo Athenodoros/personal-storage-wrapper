@@ -1,4 +1,5 @@
 import { TypedBroadcastChannel } from "../../utilities/channel";
+import { ListBuffer } from "../../utilities/listbuffer";
 import { Deserialisers, SyncFromTargets, Targets, Value } from "../types";
 import { getConfigFromSyncs, getSyncsFromConfig } from "./serialisation";
 
@@ -16,15 +17,19 @@ type PSMBroadcastChannelMessage<V extends Value> = PSMBroadcastChannelValueMessa
 
 export class PSMBroadcastChannel<V extends Value, T extends Targets> {
     private channel: TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>;
+    public recents: ListBuffer<V>;
 
     constructor(
         id: string,
+        recents: ListBuffer<V>,
         deserialisers: Deserialisers<T>,
         handleNewValue: (value: V) => void,
         handleUpdateSyncs: (syncs: SyncFromTargets<T>[]) => void
     ) {
+        this.recents = recents;
         this.channel = new TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>(id, async (message) => {
             if (message.type === "VALUE") {
+                recents.push(message.value);
                 handleNewValue(message.value);
             } else {
                 const sync = await getSyncsFromConfig(message.syncs, deserialisers);

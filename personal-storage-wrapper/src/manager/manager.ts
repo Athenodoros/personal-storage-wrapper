@@ -28,7 +28,6 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     private state: ManagerState<V, T>;
     private syncs: SyncFromTargets<T>[];
     private channel: PSMBroadcastChannel<V, T>;
-    private recents: ListBuffer<V>;
     public config: PSMConfig<V, T>;
 
     /**
@@ -73,6 +72,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     ) {
         this.channel = new PSMBroadcastChannel(
             id + "-channel",
+            recents,
             deserialisers,
             (value: V) => this.setValueAndPushToSyncs(value, "BROADCAST"),
             (syncs: SyncFromTargets<T>[]) => {
@@ -81,7 +81,6 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             }
         );
         this.value = start.value;
-        this.recents = recents;
         this.config = config;
 
         if (start.type === "final") {
@@ -296,7 +295,10 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 const result = await readFromSync<V, T>(this.logger, sync);
                 if (result.type === "error" || deepEquals(result.value?.value, this.value)) return;
 
-                if (result.value === null) {
+                if (
+                    result.value === null ||
+                    this.channel.recents.values().some((value) => deepEquals(value, result.value?.value))
+                ) {
                     const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
                     if (dirty) didUpdateSyncs = true;
                 } else {

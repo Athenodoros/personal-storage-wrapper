@@ -18,12 +18,13 @@ export interface RemovalOperation<T extends Targets> {
 }
 
 export interface ManagerOperatingState<V extends Value, T extends Targets> {
-    type: "INITIALISING" | "UPLOADING" | "POLLING" | "DOWNLOADING" | "ADDING_SYNC" | "REMOVING_SYNC";
+    type: "INITIALISING" | "UPLOADING" | "POLLING" | "DOWNLOADING" | "ADDING_SYNC" | "REMOVING_SYNC" | "UPDATING_SYNCS";
 
     poll: boolean;
     writes: WriteOperation<V>[];
     newSyncs: AdditionOperation<T>[];
     removeSyncs: RemovalOperation<T>[];
+    updateSyncs?: SyncFromTargets<T>[];
 }
 
 export interface ManagerWaitingState {

@@ -1,4 +1,3 @@
-import { TypedBroadcastChannel } from "../utilities/channel";
 import { deepEquals, last, noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { createPSM } from "./startup/constructor";
@@ -17,16 +16,16 @@ import {
     Value,
     WriteOperation,
 } from "./types";
+import { PSMBroadcastChannel } from "./utilities/channel";
 import { DefaultTargetsType } from "./utilities/defaults";
 import { readFromSync, writeToSyncAndReturnIsDirty } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
     private value: V;
-    private deserialisers: Deserialisers<T>;
     private state: ManagerState<V, T>;
     private syncs: SyncFromTargets<T>[];
-    private channel: TypedBroadcastChannel<"VALUE" | "SYNCS">;
+    private channel: PSMBroadcastChannel<V, T>;
     private recents: ListBuffer<V>;
     public config: PSMConfig<V, T>;
 
@@ -40,16 +39,17 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         recents: ListBuffer<V>,
         config: PSMConfig<V, T>
     ) {
+        this.channel = new PSMBroadcastChannel(
+            deserialisers,
+            (value: V) => this.setValueAndPushToSyncs(value, "BROADCAST"),
+            (syncs: SyncFromTargets<T>[]) => {
+                if (this.state.type === "WAITING") this.resolveQueuedUpdate(syncs);
+                else this.state.updateSyncs = syncs;
+            }
+        );
         this.value = start.value;
-        this.deserialisers = deserialisers;
         this.recents = recents;
         this.config = config;
-        this.channel = new TypedBroadcastChannel<"VALUE" | "SYNCS">("psm-channel", () => {
-            TODO;
-            // If value, update value and don't write to syncs
-            // For value: include some kind of hash on syncs to check for duplicates
-            // If syncs, pass details for new/removed sync and add it (without syncing)
-        });
 
         if (start.type === "final") {
             this.state = { type: "WAITING" };
@@ -104,6 +104,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     ): void => {
         this.setNewValue(value, origin);
 
+        if (origin === "BROADCAST") return;
+        else this.channel.sendNewValue(value);
+
         if (this.state.type !== "WAITING") this.state.writes.push({ value, callback: noop });
         else this.resolveQueuedWrites([{ value, callback: noop }]);
     };
@@ -111,7 +114,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Internal Wrappers
      */
-    private onSyncsUpdate = () => {
+    private onSyncsUpdate = (sendToChannel: boolean = true) => {
+        if (sendToChannel) this.channel.sendUpdatedSyncs(this.syncs);
+
         this.config.onSyncStatesUpdate(this.syncs);
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
     };
@@ -138,12 +143,24 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     private resolveQueuedOperations = (): void | Promise<void> => {
         if (this.state.type === "WAITING") return;
 
+        if (this.state.updateSyncs) return this.resolveQueuedUpdate();
         if (this.state.removeSyncs.length) return this.resolveQueuedRemovals();
         if (this.state.newSyncs.length) return this.resolveQueuedAdditions();
         if (this.state.writes.length) return this.resolveQueuedWrites();
         if (this.state.poll) return this.poll();
 
         this.state = { type: "WAITING" };
+    };
+
+    private resolveQueuedUpdate = (syncs?: SyncFromTargets<T>[]) => {
+        if (!syncs && this.state.type !== "WAITING") syncs = this.state.updateSyncs;
+        if (!syncs) return this.resolveQueuedOperations();
+
+        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, updateSyncs: [], type: "UPDATING_SYNCS" };
+
+        this.syncs = syncs;
+        this.onSyncsUpdate(false);
+        this.resolveQueuedOperations();
     };
 
     private resolveQueuedRemovals = (operations: RemovalOperation<T>[] = []) => {

@@ -3,7 +3,7 @@ import { MemoryTarget } from "../../targets/memory";
 import { DefaultDeserialisers } from "./defaults";
 import { getBufferFromValue, getConfigFromSyncs, getSyncsFromConfig, getValueFromBuffer } from "./serialisation";
 
-test("Correctly serialises and deserialises the same syncs", async () => {
+test("Correctly serialises and deserialises buffers", async () => {
     const test = { a: 1, b: [2, 3, 4, "asdfgh"] };
     const buffer = getBufferFromValue(test);
     const result = getValueFromBuffer(buffer);

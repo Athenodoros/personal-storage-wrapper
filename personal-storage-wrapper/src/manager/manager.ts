@@ -47,13 +47,8 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         maybeDeserialisers?: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>> {
         return createPSM(
-            (
-                id: string,
-                start: StartValue<V, T>,
-                deserialisers: Deserialisers<T>,
-                recents: ListBuffer<V>,
-                config: PSMConfig<V, T>
-            ) => new PersonalStorageManager(id, start, deserialisers, recents, config),
+            (id, start, deserialisers, recents, config) =>
+                new PersonalStorageManager(id, start, deserialisers, recents, config),
             initialValue,
             initialisationConfig,
             maybeDeserialisers
@@ -105,6 +100,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Sync Management
      */
+
     private getSyncsCopy = (): SyncFromTargets<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
     public getSyncsState = this.getSyncsCopy;
     public addSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("addition", sync);
@@ -113,12 +109,14 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Value Interactions
      */
+
     public getValue = (): V => this.value;
     public setValueAndPushToSyncs = (value: V): void => this.setNewValue(value, "LOCAL");
 
     /**
      * Internal Wrappers
      */
+
     private onSyncsUpdate = (sendToChannel: boolean = true) => {
         if (sendToChannel) this.channel.sendUpdatedSyncs(this.syncs);
 
@@ -143,6 +141,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Internal processing rules
      */
+
     private enqueueOperation = <O extends Operation>(operation: O, argument: OperationArgument<O>) =>
         new Promise<void>((callback) => {
             this.operations[operation].push({ argument, callback } as any);
@@ -151,19 +150,19 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
     private OPERATION_RUN_ORDER = ["update", "removal", "addition", "write", "poll"] as Operation[];
     private resolveQueuedOperations = async (): Promise<void> => {
+        // Handle "running state"
         if (this.operations.running) return;
         this.operations.running = true;
 
+        // Find operation to perform, in order of precedence
         const operation = this.OPERATION_RUN_ORDER.find((name) => this.operations[name].length);
         if (operation === undefined) return;
-
-        const args = this.operations[operation] as any;
         this.operations[operation] = [];
 
+        // Perform operations
         const originalSyncs = this.getSyncsCopy();
-
         const output = (await OperationRunners[operation]({
-            args,
+            args: this.operations[operation] as any,
             logger: this.logger,
             value: this.value,
             recents: this.channel.recents.values(),
@@ -171,24 +170,20 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             syncs: this.syncs,
         })) satisfies OperationRunOutput<V, T>;
 
-        // Update syncs, maybe with callback
-        if (output.syncs && !deepEquals(this.syncs, output.syncs)) {
-            this.syncs = output.syncs;
-        }
+        // Update syncs
+        if (output.syncs && !deepEquals(this.syncs, output.syncs)) this.syncs = output.syncs;
 
         // Update value
-        if (output.update && !deepEquals(output.update.value, this.value)) {
+        if (output.update && !deepEquals(output.update.value, this.value))
             this.setNewValue(output.update.value, output.update.origin);
-        }
 
         // Run writes
-        if (output.writes && output.writes.length) {
+        if (output.writes && output.writes.length)
             await Promise.all(
                 uniqBy(output.writes, (sync) => sync.target).map((sync) =>
                     writeToAndUpdateSync(this.logger, sync, this.value)
                 )
             );
-        }
 
         // Callback if dirty syncs
         if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);

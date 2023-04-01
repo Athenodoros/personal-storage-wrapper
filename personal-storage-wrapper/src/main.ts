@@ -1,1 +1,2 @@
-export class PersonalStorageManager {}
+export * from "./manager";
+export * from "./targets";

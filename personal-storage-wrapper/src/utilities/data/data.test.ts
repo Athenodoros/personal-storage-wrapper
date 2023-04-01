@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { deepEquals, deepEqualsList, maxBy, maxByAsync, orderByAsc, orderByDesc, uniq, uniqBy } from ".";
+import { deepEquals, deepEqualsList, fromKeys, maxBy, maxByAsync, orderByAsc, orderByDesc, uniq, uniqBy } from ".";
 
 const array = [
     { id: 0, val: 5 },
@@ -129,4 +129,8 @@ test("Check uniq and uniqBy", () => {
     expect(uniqByResult[1]).toBe(b);
     expect(uniqByResult[2]).toBe(d);
     expect(uniqByResult[0]).not.toBe(c);
+});
+
+test("Check fromKeys", () => {
+    expect(fromKeys(["a", "b", "c"], 1)).toEqual({ a: 1, b: 1, c: 1 });
 });

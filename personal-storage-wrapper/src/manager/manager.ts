@@ -1,31 +1,28 @@
-import { deepEquals, deepEqualsList, last, noop } from "../utilities/data";
+import { deepEquals, fromKeys, uniqBy } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
+import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
+import { OperationRunOutput } from "./operations/types";
 import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
 import { StartValue } from "./startup/types";
 import {
-    AdditionOperation,
-    ConflictingRemoteBehaviour,
-    DEFAULT_MANAGER_STATE,
     Deserialisers,
     InitialValue,
-    ManagerState,
     PSMConfig,
     PSMCreationConfig,
-    RemovalOperation,
     SyncFromTargets,
     Targets,
     Value,
-    WriteOperation,
+    ValueUpdateOrigin,
 } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { DefaultTargetsType } from "./utilities/defaults";
-import { readFromSync, timestampFromSync, writeToSyncAndReturnIsDirty } from "./utilities/requests";
+import { writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
     private value: V;
-    private state: ManagerState<V, T>;
+    private operations: OperationState;
     private syncs: SyncFromTargets<T>[];
     private channel: PSMBroadcastChannel<V, T>;
     public config: PSMConfig<V, T>;
@@ -70,80 +67,54 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         recents: ListBuffer<V>,
         config: PSMConfig<V, T>
     ) {
+        this.operations = { running: false, ...fromKeys(this.OPERATION_RUN_ORDER, []) };
         this.channel = new PSMBroadcastChannel(
             id + "-channel",
             recents,
             deserialisers,
-            (value: V) => this.setValueAndPushToSyncs(value, "BROADCAST"),
-            (syncs: SyncFromTargets<T>[]) => {
-                if (this.state.type === "WAITING") this.resolveQueuedUpdate(syncs);
-                else this.state.updateSyncs = syncs;
-            }
+            (value: V) => this.setNewValue(value, "BROADCAST"),
+            (syncs: SyncFromTargets<T>[]) => this.enqueueOperation("update", syncs)
         );
         this.value = start.value;
         this.config = config;
 
         if (start.type === "final") {
-            this.state = { type: "WAITING" };
             this.syncs = start.syncs;
-            this.onSyncsUpdate();
+            this.config.onSyncStatesUpdate(this.syncs);
             return;
         }
 
-        this.state = { type: "INITIALISING", poll: false, writes: [], newSyncs: [], removeSyncs: [] };
+        this.operations.running = true;
         this.syncs = start.syncs.map(({ sync }) => sync);
-        this.onSyncsUpdate();
+        this.config.onSyncStatesUpdate(this.syncs);
 
         // Wait for all results to return, handle results, and start polling
-        Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result })))).then(
-            async (results) => {
-                const { value, didUpdateSyncs } = await handleInitialSyncValuesAndGetResult(
-                    start.value,
-                    results,
-                    start.resolveConflictingSyncValuesOnStartup,
-                    this.logger
-                );
-
-                if (didUpdateSyncs) this.onSyncsUpdate();
+        const originalSyncs = this.getSyncsCopy();
+        Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result }))))
+            .then((results) => handleInitialSyncValuesAndGetResult(start.value, results, start.resolve, this.logger))
+            .then((value) => {
+                if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate();
                 if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
 
                 this.schedulePoll();
+                this.operations.running = false;
                 this.resolveQueuedOperations();
-            }
-        );
+            });
     }
 
     /**
      * Sync Management
      */
-    public getSyncsState = (): SyncFromTargets<T>[] => [...this.syncs];
-    public addSync = (sync: SyncFromTargets<T>): Promise<void> =>
-        new Promise((resolve) => {
-            if (this.state.type !== "WAITING") this.state.newSyncs.push({ sync, callback: resolve });
-            else this.resolveQueuedAdditions([{ sync, callback: resolve }]);
-        });
-    public removeSync = (sync: SyncFromTargets<T>): Promise<void> =>
-        new Promise((resolve) => {
-            if (this.state.type !== "WAITING") this.state.removeSyncs.push({ sync, callback: resolve });
-            else this.resolveQueuedRemovals([{ sync, callback: resolve }]);
-        });
+    private getSyncsCopy = (): SyncFromTargets<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
+    public getSyncsState = this.getSyncsCopy;
+    public addSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("addition", sync);
+    public removeSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("removal", sync);
 
     /**
      * Value Interactions
      */
     public getValue = (): V => this.value;
-    public setValueAndPushToSyncs = (
-        value: V,
-        origin: "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT" = "LOCAL"
-    ): void => {
-        this.setNewValue(value, origin);
-
-        if (origin === "BROADCAST") return;
-        else this.channel.sendNewValue(value);
-
-        if (this.state.type !== "WAITING") this.state.writes.push({ value, callback: noop });
-        else this.resolveQueuedWrites([{ value, callback: noop }]);
-    };
+    public setValueAndPushToSyncs = (value: V): void => this.setNewValue(value, "LOCAL");
 
     /**
      * Internal Wrappers
@@ -155,7 +126,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
     };
 
-    private setNewValue = (value: V, origin: "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT") => {
+    private setNewValue = (value: V, origin: ValueUpdateOrigin) => {
         this.value = value;
         this.config.onValueUpdate(value, origin);
     };
@@ -164,169 +135,66 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         setTimeout(() => {
             // Schedule polls regardless of missing poll period, in case it's updated to a value
             if (this.config.pollPeriodInSeconds === null) this.schedulePoll();
-            else if (this.state.type !== "WAITING") this.state.poll = true;
-            else this.poll();
+            else this.enqueueOperation("poll", null);
         }, (this.config.pollPeriodInSeconds ?? 10) * 1000);
-
-    private writeToSyncAndReturnIsDirty = (sync: SyncFromTargets<T>, value: V) =>
-        writeToSyncAndReturnIsDirty(this.logger, sync, value);
 
     private logger = () => this.config.handleSyncOperationLog;
 
     /**
      * Internal processing rules
      */
-    private resolveQueuedOperations = async (): Promise<void> => {
-        if (this.state.type === "WAITING") return;
-
-        if (this.state.updateSyncs) await this.resolveQueuedUpdate();
-        else if (this.state.removeSyncs.length) await this.resolveQueuedRemovals();
-        else if (this.state.newSyncs.length) await this.resolveQueuedAdditions();
-        else if (this.state.writes.length) await this.resolveQueuedWrites();
-        else if (this.state.poll) await this.poll();
-        else {
-            this.state = { type: "WAITING" };
-            return;
-        }
-
-        this.resolveQueuedOperations();
-    };
-
-    private resolveQueuedUpdate = async (syncs?: SyncFromTargets<T>[]): Promise<void> => {
-        if (!syncs && this.state.type !== "WAITING") syncs = this.state.updateSyncs;
-        if (!syncs) return;
-
-        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, updateSyncs: [], type: "UPDATING_SYNCS" };
-
-        this.syncs = syncs;
-        this.onSyncsUpdate(false);
-    };
-
-    private resolveQueuedRemovals = async (operations: RemovalOperation<T>[] = []): Promise<void> => {
-        const removals = operations.concat(this.state.type === "WAITING" ? [] : this.state.removeSyncs);
-        if (removals.length === 0) return;
-
-        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, removeSyncs: [], type: "REMOVING_SYNC" };
-
-        const previous = this.syncs.length;
-        this.syncs = this.syncs.filter((sync) => removals.every(({ sync: removal }) => sync !== removal));
-        removals.forEach(({ callback }) => callback());
-
-        if (this.syncs.length !== previous) this.onSyncsUpdate();
-    };
-
-    private resolveQueuedAdditions = async (operations: AdditionOperation<T>[] = []) => {
-        const additions = operations
-            .concat(this.state.type === "WAITING" ? [] : this.state.newSyncs)
-            .filter(({ sync }) => !this.syncs.includes(sync));
-        if (additions.length === 0) return;
-
-        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, newSyncs: [], type: "ADDING_SYNC" };
-
-        const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
-        await Promise.all(
-            additions
-                .filter(({ background }) => !background)
-                .map(({ sync }) =>
-                    readFromSync<V, T>(this.logger, sync).then(async (result) => {
-                        if (result.type === "error") {
-                            sync.desynced = true;
-                        } else if (result.value === null) {
-                            await this.writeToSyncAndReturnIsDirty(sync, this.value);
-                        } else if (!deepEquals(result.value.value, this.value)) {
-                            conflicts.push({ sync, value: result.value });
-                        }
-                        // else - sync already has correct value
-                    })
-                )
-        );
-        if (conflicts.length) {
-            const value = await this.config.resolveConflictingSyncsUpdate(this.value, this.syncs, conflicts);
-
-            if (!deepEquals(value, this.value)) this.setValueAndPushToSyncs(value, "CONFLICT");
-            else
-                await Promise.all(
-                    conflicts.map(async (conflict) => {
-                        if (!deepEquals(conflict.value.value, value)) {
-                            await this.writeToSyncAndReturnIsDirty(conflict.sync, value);
-                        }
-                    })
-                );
-        }
-
-        additions.forEach(({ sync, callback }) => {
-            this.syncs.push(sync);
-            callback();
+    private enqueueOperation = <O extends Operation>(operation: O, argument: OperationArgument<O>) =>
+        new Promise<void>((callback) => {
+            this.operations[operation].push({ argument, callback } as any);
+            this.resolveQueuedOperations();
         });
-        this.onSyncsUpdate();
-    };
 
-    private resolveQueuedWrites = async (operations: WriteOperation<V>[] = []) => {
-        const writes = (this.state.type === "WAITING" ? [] : this.state.writes).concat(operations);
-        if (writes.length === 0) return;
+    private OPERATION_RUN_ORDER = ["update", "removal", "addition", "write", "poll"] as Operation[];
+    private resolveQueuedOperations = async (): Promise<void> => {
+        if (this.operations.running) return;
+        this.operations.running = true;
 
-        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, writes: [], type: "UPLOADING" };
+        const operation = this.OPERATION_RUN_ORDER.find((name) => this.operations[name].length);
+        if (operation === undefined) return;
 
-        const value = last(writes)!.value;
-        const results = await Promise.all(
-            this.syncs
-                .filter(({ desynced }) => desynced === false)
-                .map((sync) => this.writeToSyncAndReturnIsDirty(sync, value))
-        );
-        writes.forEach(({ callback }) => callback());
+        const args = this.operations[operation] as any;
+        this.operations[operation] = [];
 
-        if (results.length !== 0) this.onSyncsUpdate();
-    };
+        const originalSyncs = this.getSyncsCopy();
 
-    private poll = async () => {
-        this.state = { ...DEFAULT_MANAGER_STATE, ...this.state, poll: false, type: "POLLING" };
+        const output = (await OperationRunners[operation]({
+            args,
+            logger: this.logger,
+            value: this.value,
+            recents: this.channel.recents.values(),
+            config: this.config,
+            syncs: this.syncs,
+        })) satisfies OperationRunOutput<V, T>;
 
-        let didUpdateSyncs = false;
-        const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
-        await Promise.all(
-            this.syncs.map(async (sync) => {
-                const timestamp = await timestampFromSync(this.logger, sync);
-                if (timestamp.type === "error" || timestamp.value === sync.lastSeenWriteTime) return;
-
-                if (timestamp.value === null) {
-                    const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
-                    if (dirty) didUpdateSyncs = true;
-                    return;
-                }
-
-                const result = await readFromSync<V, T>(this.logger, sync);
-                if (result.type === "error" || deepEquals(result.value?.value, this.value)) return;
-
-                if (
-                    result.value === null ||
-                    this.channel.recents.values().some((value) => deepEquals(value, result.value?.value))
-                ) {
-                    const dirty = await this.writeToSyncAndReturnIsDirty(sync, this.value);
-                    if (dirty) didUpdateSyncs = true;
-                } else {
-                    conflicts.push({ sync, value: result.value });
-                }
-            })
-        );
-
-        if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.desynced)) {
-            this.setValueAndPushToSyncs(conflicts[0].value.value, "REMOTE");
-        } else if (conflicts.length) {
-            const value = await this.config.resolveConflictingSyncsUpdate(this.value, this.syncs, conflicts);
-
-            if (!deepEquals(value, this.value)) this.setValueAndPushToSyncs(value, "CONFLICT");
-            else
-                await Promise.all(
-                    conflicts.map(async (conflict) => {
-                        if (!deepEquals(conflict.value.value, value)) {
-                            const dirty = await this.writeToSyncAndReturnIsDirty(conflict.sync, value);
-                            if (dirty) didUpdateSyncs = true;
-                        }
-                    })
-                );
+        // Update syncs, maybe with callback
+        if (output.syncs && !deepEquals(this.syncs, output.syncs)) {
+            this.syncs = output.syncs;
         }
 
-        if (didUpdateSyncs) this.onSyncsUpdate();
-        this.schedulePoll();
+        // Update value
+        if (output.update && !deepEquals(output.update.value, this.value)) {
+            this.setNewValue(output.update.value, output.update.origin);
+        }
+
+        // Run writes
+        if (output.writes && output.writes.length) {
+            await Promise.all(
+                uniqBy(output.writes, (sync) => sync.target).map((sync) =>
+                    writeToAndUpdateSync(this.logger, sync, this.value)
+                )
+            );
+        }
+
+        // Callback if dirty syncs
+        if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
+
+        // Rerun new operations
+        this.operations.running = false;
+        this.resolveQueuedOperations();
     };
 }

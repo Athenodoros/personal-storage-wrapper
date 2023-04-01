@@ -11,7 +11,7 @@ export interface PSMProvisionalValue<V extends Value, T extends Targets> {
     type: "provisional";
     syncs: { sync: SyncFromTargets<T>; value: Result<MaybeValue<V>> }[];
     value: V;
-    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>;
+    resolve: ConflictingSyncStartupBehaviour<T, V>;
 }
 
 export type StartValue<V extends Value, T extends Targets> = PSMFinalValue<V, T> | PSMProvisionalValue<V, T>;

@@ -37,21 +37,17 @@ export const readFromSync = <V extends Value, T extends Targets>(
             .map((value) => value && { timestamp: value.timestamp, value: getValueFromBuffer<V>(value.buffer) })
     );
 
-export const writeToSyncAndReturnIsDirty = async <V extends Value, T extends Targets>(
+export const writeToAndUpdateSync = async <V extends Value, T extends Targets>(
     logger: () => SyncOperationLogger<SyncFromTargets<T>>,
     sync: SyncFromTargets<T>,
     value: V
-): Promise<boolean> => {
+): Promise<void> => {
     const result = await runWithLogger(logger, sync, "UPLOAD", () => sync.target.write(getBufferFromValue(value)));
 
     if (result.type === "value") {
         sync.desynced = false;
         sync.lastSeenWriteTime = result.value;
-        return true;
+    } else {
+        sync.desynced = true;
     }
-
-    if (sync.desynced === true) return false;
-
-    sync.desynced = true;
-    return true;
 };

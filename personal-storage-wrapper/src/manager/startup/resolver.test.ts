@@ -18,7 +18,7 @@ test("Does nothing if no conflict", async () => {
 
     expect(resolver).not.toHaveBeenCalled();
     expect(logger).not.toHaveBeenCalled();
-    expect(result).toEqual({ value: { val: "DEFAULT" }, didUpdateSyncs: false });
+    expect(result).toEqual({ val: "DEFAULT" });
 });
 
 test("Writes back to empty sync", async () => {
@@ -38,7 +38,7 @@ test("Writes back to empty sync", async () => {
     expect(logger).toHaveBeenCalledTimes(2);
     expect(logger).toHaveBeenCalledWith({ sync, operation: "UPLOAD", stage: "START" });
     expect(logger).toHaveBeenCalledWith({ sync, operation: "UPLOAD", stage: "SUCCESS" });
-    expect(result).toEqual({ value: { val: "DEFAULT" }, didUpdateSyncs: true });
+    expect(result).toEqual({ val: "DEFAULT" });
 });
 
 test("Calls conflict handler if there is a conflict and writes back to available syncs", async () => {
@@ -63,7 +63,7 @@ test("Calls conflict handler if there is a conflict and writes back to available
     expect(logger).toHaveBeenCalledTimes(2);
     expect(logger).toHaveBeenCalledWith({ sync: online, operation: "UPLOAD", stage: "START" });
     expect(logger).toHaveBeenCalledWith({ sync: online, operation: "UPLOAD", stage: "SUCCESS" });
-    expect(result).toEqual({ value: { val: "UPDATE" }, didUpdateSyncs: true });
+    expect(result).toEqual({ val: "UPDATE" });
 
     expect((await online.target.read()).value?.buffer).toEqual(getBufferFromValue({ val: "UPDATE" }));
     expect((await offline.target.read()).value?.buffer).toEqual(getBufferFromValue({ val: "OFFLINE" }));

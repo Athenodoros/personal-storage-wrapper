@@ -8,7 +8,6 @@ export interface WriteOperation<V extends Value> {
 
 export interface AdditionOperation<T extends Targets> {
     sync: SyncFromTargets<T>;
-    background?: boolean; // Add in background because initial sync happened in other tab
     callback: () => void;
 }
 

@@ -10,12 +10,7 @@ import {
     Value,
 } from "../types";
 import { DefaultTargetsType } from "../utilities/defaults";
-import { writeToSyncAndReturnIsDirty } from "../utilities/requests";
-
-type InitialSyncProcessingResult<V extends Value> = {
-    value: V;
-    didUpdateSyncs: boolean;
-};
+import { writeToAndUpdateSync } from "../utilities/requests";
 
 export const handleInitialSyncValuesAndGetResult = async <V extends Value, T extends Targets = DefaultTargetsType>(
     value: V,
@@ -25,9 +20,7 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
     }[],
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>,
     logger: () => SyncOperationLogger<SyncFromTargets<T>>
-): Promise<InitialSyncProcessingResult<V>> => {
-    let didUpdateSyncs = false;
-
+): Promise<V> => {
     // If conflict or out of date sync, update value using callback
     if (results.some(({ result }) => result.value && !deepEquals(result.value?.value, value))) {
         const syncsWithValues = results
@@ -41,12 +34,11 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
     await Promise.all(
         results.map(async ({ sync, result }) => {
             if (result.type === "value" && !deepEquals(result.value?.value, value)) {
-                const dirty = await writeToSyncAndReturnIsDirty(logger, sync, value);
-                if (dirty) didUpdateSyncs = true;
+                await writeToAndUpdateSync(logger, sync, value);
             }
         })
     );
 
     // Return result
-    return { value, didUpdateSyncs };
+    return value;
 };

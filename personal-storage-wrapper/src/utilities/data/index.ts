@@ -87,3 +87,6 @@ export const partition = <T>(array: T[], predicate: (t: T) => boolean): [T[], T[
     array.filter((value) => predicate(value)),
     array.filter((value) => !predicate(value)),
 ];
+export const uniqBy = <T, S>(array: T[], getter: (t: T) => S) =>
+    array.filter((t1, idx) => array.findIndex((t2) => getter(t1) === getter(t2)) === idx);
+export const uniq = <T>(array: T[]): T[] => array.filter((t1, idx) => array.findIndex((t2) => t1 === t2) === idx);

@@ -1,20 +1,19 @@
 import { expect, test } from "vitest";
-import { DropboxTarget } from "../../targets/dropbox";
-import { MemoryTarget } from "../../targets/memory";
 import { resolveStartupConflictsWithRemoteStateAndLatestEdit } from "./defaults";
+import { getTestDropBoxSync, getTestSync } from "./test";
 
 test("Prioritises recent results", async () => {
     expect(
         await resolveStartupConflictsWithRemoteStateAndLatestEdit([
-            { sync: getMemorySync(), value: getValue(0, "A") },
-            { sync: getMemorySync(), value: getValue(10, "B") },
+            await getSyncAndValue(0, "A"),
+            await getSyncAndValue(10, "B"),
         ])
     ).toBe("B");
 
     expect(
         await resolveStartupConflictsWithRemoteStateAndLatestEdit([
-            { sync: getMemorySync(), value: getValue(10, "B") },
-            { sync: getMemorySync(), value: getValue(0, "A") },
+            await getSyncAndValue(10, "B"),
+            await getSyncAndValue(0, "A"),
         ])
     ).toBe("B");
 });
@@ -22,27 +21,22 @@ test("Prioritises recent results", async () => {
 test("Prioritises remote results", async () => {
     expect(
         await resolveStartupConflictsWithRemoteStateAndLatestEdit([
-            { sync: await getDropBoxSync(), value: getValue(0, "A") },
-            { sync: getMemorySync(), value: getValue(10, "B") },
+            await getSyncAndValue(0, "A", true),
+            await getSyncAndValue(10, "B"),
         ])
     ).toBe("A");
 
     expect(
         await resolveStartupConflictsWithRemoteStateAndLatestEdit([
-            { sync: getMemorySync(), value: getValue(10, "B") },
-            { sync: await getDropBoxSync(), value: getValue(0, "A") },
+            await getSyncAndValue(10, "B"),
+            await getSyncAndValue(0, "A", true),
         ])
     ).toBe("A");
 });
 
 // Utilities
-const getValue = (timestamp: number, value: string) => ({ timestamp: new Date(timestamp), value });
-const getMemorySync = () => ({ target: new MemoryTarget(), compressed: false });
-const getDropBoxSync = async () => ({
-    target: await DropboxTarget.deserialise({
-        connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date() },
-        user: { id: "", email: "", name: "" },
-        path: "/data.bak",
-    }),
-    compressed: false,
-});
+const getSyncAndValue = async (timestamp: number, rawValue: string, remote: boolean = false) => {
+    const sync = await (remote ? getTestDropBoxSync : getTestSync)();
+    const value = { timestamp: new Date(timestamp), value: rawValue };
+    return { sync, value };
+};

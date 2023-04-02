@@ -11,6 +11,7 @@ import { encodeToArrayBuffer } from "../../utilities/buffers/encoding";
 import { noop } from "../../utilities/data";
 import { Sync } from "../types";
 import { readFromSync, runWithLogger, timestampFromSync, writeToAndUpdateSync } from "./requests";
+import { getTestSync } from "./test";
 
 test("Respects offline behaviour correctly", async () => {
     const { logger, sync } = await runRequestTest(true, () => Result.value("RESULT"));
@@ -76,8 +77,7 @@ const runRequestTest = async (
     runner: (sync: Sync<MemoryTargetType, MemoryTargetSerialisationConfig>) => Result<any>
 ) => {
     const logger = vi.fn();
-    const target = new MemoryTarget({ fails });
-    const sync = { target, compressed: false };
+    const sync = await getTestSync({ fails });
 
     await runWithLogger(
         () => logger,

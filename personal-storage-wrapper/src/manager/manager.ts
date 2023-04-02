@@ -180,9 +180,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         // Run writes
         if (output.writes && output.writes.length)
             await Promise.all(
-                uniqBy(output.writes, (sync) => sync.target).map((sync) =>
-                    writeToAndUpdateSync(this.logger, sync, this.value)
-                )
+                uniqBy(output.writes, (sync) => sync.target).map((sync) => {
+                    if (this.syncs.includes(sync)) writeToAndUpdateSync(this.logger, sync, this.value);
+                })
             );
 
         // Callback if dirty syncs

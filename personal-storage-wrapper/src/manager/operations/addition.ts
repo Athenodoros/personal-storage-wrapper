@@ -1,4 +1,4 @@
-import { deepEquals } from "../../utilities/data";
+import { deepEquals, uniqBy } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, SyncFromTargets, Targets, Value } from "../types";
 import { readFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
@@ -10,7 +10,9 @@ export const AdditionOperationRunner = async <V extends Value, T extends Targets
     value,
     config,
 }: OperationRunConfig<V, T, SyncFromTargets<T>>): Promise<OperationRunOutput<V, T>> => {
-    let additions = args.filter((addition) => syncs.every((sync) => sync.target !== addition.target));
+    let additions = uniqBy(args, (sync) => sync.target).filter((addition) =>
+        syncs.every((sync) => sync.target !== addition.target)
+    );
     if (additions.length === 0) return {};
 
     let writes: SyncFromTargets<T>[] = [];
@@ -36,14 +38,14 @@ export const AdditionOperationRunner = async <V extends Value, T extends Targets
 
         if (!deepEquals(newValue, value)) {
             update = { value: newValue, origin: "CONFLICT" };
-        } else
-            await Promise.all(
-                conflicts.map(async (conflict) => {
-                    if (!deepEquals(conflict.value.value, newValue)) {
-                        writes.push(conflict.sync);
-                    }
-                })
-            );
+            writes.push(...syncs);
+        }
+
+        conflicts.forEach((conflict) => {
+            if (!deepEquals(conflict.value.value, newValue)) {
+                writes.push(conflict.sync);
+            }
+        });
     }
 
     return {

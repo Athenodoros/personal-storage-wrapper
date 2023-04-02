@@ -14,10 +14,15 @@ export const PollOperationRunner = async <V extends Value, T extends Targets>({
     let update: OperationRunOutput<V, T>["update"];
 
     const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
+    const failures: SyncFromTargets<T>[] = [];
     await Promise.all(
         syncs.map(async (sync) => {
             const timestamp = await timestampFromSync(logger, sync);
-            if (timestamp.type === "error" || timestamp.value === sync.lastSeenWriteTime) return;
+            if (timestamp.type === "error") {
+                failures.push(sync);
+                return;
+            }
+            if (timestamp.value === sync.lastSeenWriteTime) return;
 
             if (timestamp.value === null) {
                 writes.push(sync);
@@ -37,19 +42,22 @@ export const PollOperationRunner = async <V extends Value, T extends Targets>({
 
     if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.desynced)) {
         update = { value: conflicts[0].value.value, origin: "REMOTE" };
+        writes = syncs.filter(
+            (sync) => !conflicts.some((conflict) => conflict.sync.target === sync.target) && !failures.includes(sync)
+        );
     } else if (conflicts.length) {
         const newValue = await config.resolveConflictingSyncsUpdate(value, syncs, conflicts);
 
         if (!deepEquals(newValue, value)) {
             update = { value: newValue, origin: "CONFLICT" };
-        } else
-            await Promise.all(
-                conflicts.map(async (conflict) => {
-                    if (!deepEquals(conflict.value.value, newValue)) {
-                        writes.push(conflict.sync);
-                    }
-                })
-            );
+        }
+
+        syncs.forEach((sync) => {
+            if (failures.includes(sync)) return;
+
+            const conflict = conflicts.find((conflict) => conflict.sync.target === sync.target);
+            if (conflict === undefined || !deepEquals(conflict.value.value, newValue)) writes.push(sync);
+        });
     }
 
     return { writes, update };

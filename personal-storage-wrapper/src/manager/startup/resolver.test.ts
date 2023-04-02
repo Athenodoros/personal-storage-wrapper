@@ -1,8 +1,7 @@
 import { expect, test, vi } from "vitest";
-import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
-import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
-import { Sync, Value } from "../types";
+import { Value } from "../types";
 import { getBufferFromValue } from "../utilities/serialisation";
+import { getTestSync } from "../utilities/test";
 import { handleInitialSyncValuesAndGetResult } from "./resolver";
 
 test("Does nothing if no conflict", async () => {
@@ -25,7 +24,7 @@ test("Writes back to empty sync", async () => {
     const resolver = vi.fn();
     const logger = vi.fn();
 
-    const sync = await getQuickStore(null);
+    const sync = await getTestSync();
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
@@ -45,8 +44,8 @@ test("Calls conflict handler if there is a conflict and writes back to available
     const resolver = vi.fn().mockImplementation(() => ({ val: "UPDATE" }));
     const logger = vi.fn();
 
-    const online = await getQuickStore({ val: "DEFAULT" });
-    const offline = await getQuickStore({ val: "OFFLINE" });
+    const online = await getTestSync({ value: "DEFAULT" });
+    const offline = await getTestSync({ value: "OFFLINE" });
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
@@ -78,20 +77,6 @@ test("Calls conflict handler if there is a conflict and writes back to available
  */
 
 const getQuickStoreWithValue = async <V extends Value>(value: V) => ({
-    sync: await getQuickStore(value),
+    sync: await getTestSync({ value }),
     result: { type: "value" as const, value: { timestamp: new Date(), value } },
 });
-
-const getQuickStore = async <V extends Value>(
-    value: V | null = null,
-    delay: number = 0,
-    fails: boolean = false
-): Promise<Sync<MemoryTargetType, MemoryTargetSerialisationConfig>> => {
-    const compressed = false;
-    const target = new MemoryTarget({
-        delay,
-        fails,
-        value: value && { timestamp: new Date(), buffer: await getBufferFromValue(value, compressed) },
-    });
-    return { target, compressed };
-};

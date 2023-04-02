@@ -1,22 +1,22 @@
 import { expect, test } from "vitest";
-import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
+import { MemoryTargetType } from "../../targets/memory";
 import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
 import { noop } from "../../utilities/data";
-import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync, Value } from "../types";
+import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync } from "../types";
 import {
     DefaultTargetsType,
     resetToDefaultsOnOfflineTargets,
     resolveStartupConflictsWithRemoteStateAndLatestEdit,
 } from "../utilities/defaults";
-import { getBufferFromValue } from "../utilities/serialisation";
+import { getTestSync } from "../utilities/test";
 import { getPSMStartValue } from "./constructor";
 
 const DELAY = 20;
 
 test("Returns first valid value quickly if there is one", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY, "B");
-    const storeC = await getQuickStore(DELAY * 2, "C");
+    const storeA = await getTestSync({ timestamp: 0, value: "A", fails: true });
+    const storeB = await getTestSync({ delay: DELAY, value: "B" });
+    const storeC = await getTestSync({ delay: DELAY * 2, value: "C" });
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB, storeC]);
@@ -26,8 +26,8 @@ test("Returns first valid value quickly if there is one", async () => {
 });
 
 test("Returns last value provisionally if relevant", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY, "B");
+    const storeA = await getTestSync({ delay: 0, value: "A", fails: true });
+    const storeB = await getTestSync({ delay: DELAY, value: "B" });
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB]);
@@ -37,8 +37,8 @@ test("Returns last value provisionally if relevant", async () => {
 });
 
 test("Uses callback in case of offline sources", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY);
+    const storeA = await getTestSync({ delay: 0, value: "A", fails: true });
+    const storeB = await getTestSync({ delay: DELAY });
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB], undefined, () =>
@@ -50,8 +50,8 @@ test("Uses callback in case of offline sources", async () => {
 });
 
 test("Respects callback deferral to value in case of offline sources", async () => {
-    const storeA = await getQuickStore(0, "A", true);
-    const storeB = await getQuickStore(DELAY);
+    const storeA = await getTestSync({ delay: 0, value: "A", fails: true });
+    const storeB = await getTestSync({ delay: DELAY });
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB], undefined, () =>
@@ -63,7 +63,7 @@ test("Respects callback deferral to value in case of offline sources", async () 
 });
 
 test("Uses default value if required", async () => {
-    const storeA = await getQuickStore();
+    const storeA = await getTestSync();
     const value = await getPSMValue([storeA], () => Promise.resolve("PROMISE"));
     expect(value).toMatchObject({ type: "final", value: "PROMISE" });
 });
@@ -90,17 +90,3 @@ const getPSMValue = (
         resolveConflictingSyncValuesOnStartup,
         () => noop
     );
-
-const getQuickStore = async <V extends Value>(
-    delay: number = 0,
-    value: V | null = null,
-    fails: boolean = false
-): Promise<Sync<MemoryTargetType, MemoryTargetSerialisationConfig>> => {
-    const compressed = false;
-    const target = new MemoryTarget({
-        delay,
-        fails,
-        value: value && { timestamp: new Date(), buffer: await getBufferFromValue(value, compressed) },
-    });
-    return { target, compressed };
-};

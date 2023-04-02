@@ -31,25 +31,25 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      * Manager Initialisation
      */
     static create<V extends Value>(
-        initialValue: InitialValue<V>,
+        defaultInitialValue: InitialValue<V>,
         config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
     ): Promise<PersonalStorageManager<V, DefaultTargetsType>>;
 
     static create<V extends Value, T extends Targets>(
-        initialValue: InitialValue<V>,
+        defaultInitialValue: InitialValue<V>,
         config: Partial<PSMCreationConfig<V, T>>,
         deserialisers: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>>;
 
     static create<V extends Value, T extends Targets>(
-        initialValue: InitialValue<V>,
+        defaultInitialValue: InitialValue<V>,
         initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
         maybeDeserialisers?: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>> {
         return createPSM(
             (id, start, deserialisers, recents, config) =>
                 new PersonalStorageManager(id, start, deserialisers, recents, config),
-            initialValue,
+            defaultInitialValue,
             initialisationConfig,
             maybeDeserialisers
         );
@@ -62,7 +62,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         recents: ListBuffer<V>,
         config: PSMConfig<V, T>
     ) {
-        this.operations = { running: false, ...fromKeys(this.OPERATION_RUN_ORDER, []) };
+        this.operations = { running: false, ...fromKeys(this.OPERATION_RUN_ORDER, () => []) };
         this.channel = new PSMBroadcastChannel(
             id + "-channel",
             recents,
@@ -161,12 +161,13 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         // Find operation to perform, in order of precedence
         const operation = this.OPERATION_RUN_ORDER.find((name) => this.operations[name].length);
         if (operation === undefined) return;
+        const operations = this.operations[operation];
         this.operations[operation] = [];
 
         // Perform operations
         const originalSyncs = this.getSyncsCopy();
         const output = (await OperationRunners[operation]({
-            args: this.operations[operation] as any,
+            args: operations.map(({ argument }) => argument as any),
             logger: this.logger,
             value: this.value,
             recents: this.channel.recents.values(),
@@ -191,6 +192,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
         // Callback if dirty syncs
         if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
+
+        // Resolve promises
+        operations.forEach(({ callback }) => callback());
 
         // Rerun new operations
         this.operations.running = false;

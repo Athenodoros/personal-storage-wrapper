@@ -4,6 +4,8 @@ import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
 import { Sync, Value } from "../types";
 import { getBufferFromValue } from "../utilities/serialisation";
 
+export const delay = (duration: number) => new Promise((resolve) => setTimeout(() => resolve(null), duration));
+
 type TestSyncConfig<V> = Partial<{
     value: V;
     delay: number;

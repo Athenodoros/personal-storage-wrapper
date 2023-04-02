@@ -6,12 +6,13 @@ import { expect, test, vi } from "vitest";
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
 import { ListBuffer } from "../../utilities/listbuffer";
 import { PSMBroadcastChannel } from "./channel";
+import { delay, getTestSync } from "./test";
 
 const DELAY = 10;
 
 test("Correctly updates values", async () => {
-    const { value: valueA, syncs: syncsA, channel: channelA } = getTestChannel();
-    const { value: valueB, syncs: syncsB, channel: channelB } = getTestChannel();
+    const { value: valueA, syncs: syncsA, channel: channelA } = getTestChannel(0);
+    const { value: valueB, syncs: syncsB, channel: channelB } = getTestChannel(0);
 
     channelA.sendNewValue("TEST");
 
@@ -24,14 +25,14 @@ test("Correctly updates values", async () => {
     expect(syncsB).not.toHaveBeenCalled();
     expect(channelB.recents.values()).toEqual(["TEST"]);
 
-    await delay(DELAY * 1.5);
+    await delay(DELAY * 2.5);
 
     expect(channelB.recents.values()).toEqual([]);
 });
 
 test("Correctly updates syncs", async () => {
-    const { value: valueA, syncs: syncsA, channel: channelA } = getTestChannel();
-    const { value: valueB, syncs: syncsB, channel: channelB } = getTestChannel();
+    const { value: valueA, syncs: syncsA, channel: channelA } = getTestChannel(1);
+    const { value: valueB, syncs: syncsB, channel: channelB } = getTestChannel(1);
 
     channelA.sendUpdatedSyncs([]);
 
@@ -45,11 +46,22 @@ test("Correctly updates syncs", async () => {
     expect(channelB.recents.values()).toEqual([]);
 });
 
-const getTestChannel = () => {
+test("Does not trigger on own updates", async () => {
+    const { syncs: syncsA, channel } = getTestChannel(2);
+    const { syncs: syncsB } = getTestChannel(2);
+    channel.sendUpdatedSyncs([await getTestSync()]);
+
+    await delay(DELAY);
+
+    expect(syncsA).not.toHaveBeenCalled();
+    expect(syncsB).toHaveBeenCalledOnce();
+});
+
+const getTestChannel = (id: any) => {
     const value = vi.fn();
     const syncs = vi.fn();
     const channel = new PSMBroadcastChannel(
-        "psm",
+        id + "-psm",
         new ListBuffer<string>([], { maxMillis: DELAY * 2 }),
         { [MemoryTargetType]: MemoryTarget.deserialise },
         value,
@@ -58,5 +70,3 @@ const getTestChannel = () => {
 
     return { value, syncs, channel };
 };
-
-const delay = (duration: number) => new Promise((resolve) => setTimeout(() => resolve(null), duration));

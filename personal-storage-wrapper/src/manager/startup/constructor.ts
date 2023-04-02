@@ -30,7 +30,7 @@ import { StartValue } from "./types";
 // Only exported for testing
 export const getPSMStartValue = <V extends Value, T extends Targets>(
     syncs: SyncFromTargets<T>[],
-    initialValue: InitialValue<V>,
+    defaultInitialValue: InitialValue<V>,
     handleAllEmptyAndFailedSyncsOnStartup: OfflineSyncStartupHandler<T, V>,
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>,
     logger: () => SyncOperationLogger<SyncFromTargets<T>>
@@ -50,7 +50,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
                     type: "provisional",
                     value: result.value.value,
                     syncs: values,
-                    resolveConflictingSyncValuesOnStartup,
+                    resolve: resolveConflictingSyncValuesOnStartup,
                 });
             }
         });
@@ -73,7 +73,10 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
 
         if (results.every(({ value }) => !value.value) && !resolved) {
             resolved = true;
-            const value = typeof initialValue !== "function" ? initialValue : await Promise.resolve(initialValue());
+            const value =
+                typeof defaultInitialValue !== "function"
+                    ? defaultInitialValue
+                    : await Promise.resolve(defaultInitialValue());
             resolve({ type: "final", value, syncs });
         }
     });
@@ -88,7 +91,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         recents: ListBuffer<V>,
         config: PSMConfig<V, T>
     ) => PersonalStorageManager<V, T>,
-    initialValue: InitialValue<V>,
+    defaultInitialValue: InitialValue<V>,
     initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
     maybeDeserialisers?: Deserialisers<T>
 ): Promise<PersonalStorageManager<V, T>> {
@@ -148,7 +151,7 @@ export async function createPSM<V extends Value, T extends Targets>(
     let getHandleSyncOperationLog = () => handleSyncOperationLog;
     const start = await getPSMStartValue<V, T>(
         syncs,
-        initialValue,
+        defaultInitialValue,
         handleAllEmptyAndFailedSyncsOnStartup,
         resolveConflictingSyncValuesOnStartup,
         () => getHandleSyncOperationLog()

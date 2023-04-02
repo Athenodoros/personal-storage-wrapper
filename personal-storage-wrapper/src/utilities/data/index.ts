@@ -94,5 +94,5 @@ export const uniq = <T>(array: T[]): T[] => array.filter((t1, idx) => array.find
 
 export const fromPairs = <K extends string | number | symbol, V>(pairs: [K, V][]) =>
     Object.fromEntries(pairs) as Record<K, V>;
-export const fromKeys = <K extends string | number | symbol, V>(keys: K[], value: V) =>
-    Object.fromEntries(keys.map((key) => [key, value])) as Record<K, V>;
+export const fromKeys = <K extends string | number | symbol, V>(keys: K[], getValue: (k: K) => V) =>
+    Object.fromEntries(keys.map((key) => [key, getValue(key)])) as Record<K, V>;

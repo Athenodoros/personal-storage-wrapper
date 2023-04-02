@@ -34,7 +34,13 @@ export const readFromSync = <V extends Value, T extends Targets>(
     runWithLogger(logger, sync, "DOWNLOAD", () =>
         sync.target
             .read()
-            .map((value) => value && { timestamp: value.timestamp, value: getValueFromBuffer<V>(value.buffer) })
+            .pmap(
+                async (value) =>
+                    value && {
+                        timestamp: value.timestamp,
+                        value: await getValueFromBuffer<V>(value.buffer, sync.compressed),
+                    }
+            )
     );
 
 export const writeToAndUpdateSync = async <V extends Value, T extends Targets>(
@@ -42,7 +48,8 @@ export const writeToAndUpdateSync = async <V extends Value, T extends Targets>(
     sync: SyncFromTargets<T>,
     value: V
 ): Promise<void> => {
-    const result = await runWithLogger(logger, sync, "UPLOAD", () => sync.target.write(getBufferFromValue(value)));
+    const buffer = await getBufferFromValue(value, sync.compressed);
+    const result = await runWithLogger(logger, sync, "UPLOAD", () => sync.target.write(buffer));
 
     if (result.type === "value") {
         sync.desynced = false;

@@ -22,11 +22,13 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
         super((resolve) => executor(resolve, () => resolve({ type: "error" })));
     }
 
-    map = <T>(fn: (value: Value) => T): Result<T> =>
+    map = <T>(fn: (value: Value) => T): Result<T> => this.pmap(async (value) => fn(value));
+
+    pmap = <T>(fn: (value: Value) => Promise<T>): Result<T> =>
         new Result<T>((resolve) => {
-            this.then((result) => {
-                if (result.type === "error") resolve({ type: "error" });
-                else resolve({ type: "value", value: fn(result.value) });
+            this.then(async (result) => {
+                if (result.type === "error") resolve(result);
+                else resolve({ type: "value", value: await fn(result.value) });
             });
         });
 

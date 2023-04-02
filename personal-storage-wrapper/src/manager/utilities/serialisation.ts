@@ -1,13 +1,15 @@
 import { Deserialisers, SyncFromTargets, Targets, Value } from "../../manager/types";
+import { compress, decompress } from "../../utilities/buffers/compression";
 import { decodeFromArrayBuffer, encodeToArrayBuffer } from "../../utilities/buffers/encoding";
 
 /**
  * Value Serialisation
  */
-export const getValueFromBuffer = <V extends Value>(buffer: ArrayBuffer) =>
-    JSON.parse(decodeFromArrayBuffer(buffer)) as V;
+export const getValueFromBuffer = async <V extends Value>(buffer: ArrayBuffer, compressed: boolean) =>
+    JSON.parse(await (compressed ? decompress : decodeFromArrayBuffer)(buffer)) as V;
 
-export const getBufferFromValue = <V extends Value>(value: V) => encodeToArrayBuffer(JSON.stringify(value));
+export const getBufferFromValue = async <V extends Value>(value: V, compressed: boolean) =>
+    (compressed ? compress : encodeToArrayBuffer)(JSON.stringify(value));
 
 /**
  * Sync Serialisation

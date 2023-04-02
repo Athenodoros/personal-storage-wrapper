@@ -14,9 +14,9 @@ import { getPSMStartValue } from "./constructor";
 const DELAY = 20;
 
 test("Returns first valid value quickly if there is one", async () => {
-    const storeA = getQuickStore(0, "A", true);
-    const storeB = getQuickStore(DELAY, "B");
-    const storeC = getQuickStore(DELAY * 2, "C");
+    const storeA = await getQuickStore(0, "A", true);
+    const storeB = await getQuickStore(DELAY, "B");
+    const storeC = await getQuickStore(DELAY * 2, "C");
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB, storeC]);
@@ -26,8 +26,8 @@ test("Returns first valid value quickly if there is one", async () => {
 });
 
 test("Returns last value provisionally if relevant", async () => {
-    const storeA = getQuickStore(0, "A", true);
-    const storeB = getQuickStore(DELAY, "B");
+    const storeA = await getQuickStore(0, "A", true);
+    const storeB = await getQuickStore(DELAY, "B");
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB]);
@@ -37,8 +37,8 @@ test("Returns last value provisionally if relevant", async () => {
 });
 
 test("Uses callback in case of offline sources", async () => {
-    const storeA = getQuickStore(0, "A", true);
-    const storeB = getQuickStore(DELAY);
+    const storeA = await getQuickStore(0, "A", true);
+    const storeB = await getQuickStore(DELAY);
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB], undefined, () =>
@@ -50,8 +50,8 @@ test("Uses callback in case of offline sources", async () => {
 });
 
 test("Respects callback deferral to value in case of offline sources", async () => {
-    const storeA = getQuickStore(0, "A", true);
-    const storeB = getQuickStore(DELAY);
+    const storeA = await getQuickStore(0, "A", true);
+    const storeB = await getQuickStore(DELAY);
 
     const start = new Date();
     const value = await getPSMValue([storeA, storeB], undefined, () =>
@@ -63,7 +63,7 @@ test("Respects callback deferral to value in case of offline sources", async () 
 });
 
 test("Uses default value if required", async () => {
-    const storeA = getQuickStore();
+    const storeA = await getQuickStore();
     const value = await getPSMValue([storeA], () => Promise.resolve("PROMISE"));
     expect(value).toMatchObject({ type: "final", value: "PROMISE" });
 });
@@ -91,15 +91,16 @@ const getPSMValue = (
         () => noop
     );
 
-const getQuickStore = <V extends Value>(
+const getQuickStore = async <V extends Value>(
     delay: number = 0,
     value: V | null = null,
     fails: boolean = false
-): Sync<MemoryTargetType, MemoryTargetSerialisationConfig> => {
+): Promise<Sync<MemoryTargetType, MemoryTargetSerialisationConfig>> => {
+    const compressed = false;
     const target = new MemoryTarget({
         delay,
         fails,
-        value: value && { timestamp: new Date(), buffer: getBufferFromValue(value) },
+        value: value && { timestamp: new Date(), buffer: await getBufferFromValue(value, compressed) },
     });
-    return { target, compressed: false };
+    return { target, compressed };
 };

@@ -11,7 +11,7 @@ test("Does nothing if no conflict", async () => {
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
-        [getQuickStoreWithValue({ val: "DEFAULT" }), getQuickStoreWithValue({ val: "DEFAULT" })],
+        [await getQuickStoreWithValue({ val: "DEFAULT" }), await getQuickStoreWithValue({ val: "DEFAULT" })],
         resolver,
         () => logger
     );
@@ -25,11 +25,11 @@ test("Writes back to empty sync", async () => {
     const resolver = vi.fn();
     const logger = vi.fn();
 
-    const sync = getQuickStore(null);
+    const sync = await getQuickStore(null);
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
-        [getQuickStoreWithValue({ val: "DEFAULT" }), { sync, result: { type: "value", value: null } }],
+        [await getQuickStoreWithValue({ val: "DEFAULT" }), { sync, result: { type: "value", value: null } }],
         resolver,
         () => logger
     );
@@ -45,14 +45,14 @@ test("Calls conflict handler if there is a conflict and writes back to available
     const resolver = vi.fn().mockImplementation(() => ({ val: "UPDATE" }));
     const logger = vi.fn();
 
-    const online = getQuickStore({ val: "DEFAULT" });
-    const offline = getQuickStore({ val: "OFFLINE" });
+    const online = await getQuickStore({ val: "DEFAULT" });
+    const offline = await getQuickStore({ val: "OFFLINE" });
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
         [
             { sync: online, result: { type: "value", value: { timestamp: new Date(), value: { val: "DEFAULT" } } } },
-            getQuickStoreWithValue({ val: "UPDATE" }),
+            await getQuickStoreWithValue({ val: "UPDATE" }),
             { sync: offline, result: { type: "error" } },
         ],
         resolver,
@@ -65,28 +65,33 @@ test("Calls conflict handler if there is a conflict and writes back to available
     expect(logger).toHaveBeenCalledWith({ sync: online, operation: "UPLOAD", stage: "SUCCESS" });
     expect(result).toEqual({ val: "UPDATE" });
 
-    expect((await online.target.read()).value?.buffer).toEqual(getBufferFromValue({ val: "UPDATE" }));
-    expect((await offline.target.read()).value?.buffer).toEqual(getBufferFromValue({ val: "OFFLINE" }));
+    expect((await online.target.read()).value?.buffer).toEqual(
+        await getBufferFromValue({ val: "UPDATE" }, online.compressed)
+    );
+    expect((await offline.target.read()).value?.buffer).toEqual(
+        await getBufferFromValue({ val: "OFFLINE" }, offline.compressed)
+    );
 });
 
 /**
  * Utilities
  */
 
-const getQuickStoreWithValue = <V extends Value>(value: V) => ({
-    sync: getQuickStore(value),
+const getQuickStoreWithValue = async <V extends Value>(value: V) => ({
+    sync: await getQuickStore(value),
     result: { type: "value" as const, value: { timestamp: new Date(), value } },
 });
 
-const getQuickStore = <V extends Value>(
+const getQuickStore = async <V extends Value>(
     value: V | null = null,
     delay: number = 0,
     fails: boolean = false
-): Sync<MemoryTargetType, MemoryTargetSerialisationConfig> => {
+): Promise<Sync<MemoryTargetType, MemoryTargetSerialisationConfig>> => {
+    const compressed = false;
     const target = new MemoryTarget({
         delay,
         fails,
-        value: value && { timestamp: new Date(), buffer: getBufferFromValue(value) },
+        value: value && { timestamp: new Date(), buffer: await getBufferFromValue(value, compressed) },
     });
-    return { target, compressed: false };
+    return { target, compressed };
 };

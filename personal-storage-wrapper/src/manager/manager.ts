@@ -105,13 +105,17 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     public getSyncsState = this.getSyncsCopy;
     public addSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("addition", sync);
     public removeSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("removal", sync);
+    public poll = (): Promise<void> => this.enqueueOperation("poll", null);
 
     /**
      * Value Interactions
      */
 
     public getValue = (): V => this.value;
-    public setValueAndPushToSyncs = (value: V): void => this.setNewValue(value, "LOCAL");
+    public setValueAndPushToSyncs = (value: V): void => {
+        this.setNewValue(value, "LOCAL");
+        this.enqueueOperation("write", null);
+    };
 
     /**
      * Internal Wrappers

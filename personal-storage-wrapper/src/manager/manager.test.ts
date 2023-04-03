@@ -212,6 +212,14 @@ test("Successfully polls on schedule and writes to remotes", async () => {
 // Correctly handles new value during operation, then queued addition/removal operations
 
 /**
+ * Multiple Manager Tests
+ */
+
+// Handles competing writes to same source (with and without broadcast)
+// Handles broadcast => write => sync
+// ...More?
+
+/**
  * Utilities
  */
 

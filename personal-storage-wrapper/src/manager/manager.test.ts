@@ -199,25 +199,28 @@ test("Successfully polls on schedule and writes to remotes", async () => {
     expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("UPDATE");
 });
 
-// Successfully writes to synced syncs
+test.todo("Successfully writes only to synced syncs");
 
 /**
  * Compound Tests
  */
 
-// Calls onSyncsUpdate once with multiple changes (eg. add sync and desync another one)
-// Correctly recovers from desyncs by calling handler
-// Correctly recovers from descyncs without calling handler
-// Correctly logs during read/write cycle
-// Correctly handles new value during operation, then queued addition/removal operations
+test.todo("Calls onSyncsUpdate once with multiple changes (eg. add sync and desync another one)");
+test.todo("Correctly recovers from desyncs by calling conflict handler");
+test.todo("Correctly recovers from descyncs without needing conflict handler");
+test.todo("Correctly logs during read/write cycle");
+test.todo("Correctly handles new value during operation, then queued addition/removal operations");
 
 /**
  * Multiple Manager Tests
  */
 
-// Handles competing writes to same source (with and without broadcast)
-// Handles broadcast => write => sync
+test.todo("Handles competing writes to same source with broadcast");
+test.todo("Handles competing writes to same source without broadcast");
+test.todo("Handles poll soon after new value from broadcast");
+test.todo("Handles broadcast => write => sync");
 // ...More?
+// Broadcast with each operation?
 
 /**
  * Utilities

@@ -62,7 +62,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         recents: ListBuffer<V>,
         config: PSMConfig<V, T>
     ) {
-        this.operations = { running: false, ...fromKeys(this.OPERATION_RUN_ORDER, () => []) };
+        this.operations = fromKeys(this.OPERATION_RUN_ORDER, () => []);
         this.channel = new PSMBroadcastChannel(
             id,
             recents,
@@ -79,7 +79,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             return;
         }
 
-        this.operations.running = true;
+        this.operations.running = "startup";
         this.syncs = start.syncs.map(({ sync }) => sync);
         this.config.onSyncStatesUpdate(this.syncs);
 
@@ -94,7 +94,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
 
                 this.schedulePoll();
-                this.operations.running = false;
+                this.operations.running = undefined;
                 this.resolveQueuedOperations();
             });
     }
@@ -160,11 +160,12 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     private resolveQueuedOperations = async (): Promise<void> => {
         // Handle "running state"
         if (this.operations.running) return;
-        this.operations.running = true;
 
         // Find operation to perform, in order of precedence
         const operation = this.OPERATION_RUN_ORDER.find((name) => this.operations[name].length);
         if (operation === undefined) return;
+
+        this.operations.running = operation;
         const operations = this.operations[operation];
         this.operations[operation] = [];
 
@@ -201,7 +202,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         operations.forEach(({ callback }) => callback());
 
         // Rerun new operations
-        this.operations.running = false;
+        this.operations.running = undefined;
         this.resolveQueuedOperations();
     };
 }

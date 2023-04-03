@@ -9,7 +9,7 @@ import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
 import { PSMCreationConfig, SyncFromTargets } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
-import { readFromSync } from "./utilities/requests";
+import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 import { delay, getTestSync } from "./utilities/test";
 
@@ -149,10 +149,56 @@ test("Successfully removes a sync and pushes to channel", async () => {
     expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA]));
 });
 
-// Successfully updates syncs from channel
-// Successfully updates values from channel
-// Successfully polls on manual trigger
-// Polls for changes on schedule and updates to remote values
+test("Successfully updates syncs from channel", async () => {
+    const id = "update-sync-broadcast-test";
+
+    const manager = await getTestManager([], { id });
+
+    const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
+    const syncA = await getTestSync({ value: "A" });
+    channel.sendUpdatedSyncs([syncA]);
+    await delay(DELAY);
+
+    expect(getConfigFromSyncs(manager.getSyncsState())).toEqual(getConfigFromSyncs([syncA]));
+});
+
+test("Successfully updates values from channel", async () => {
+    const id = "update-value-broadcast-test";
+    const manager = await getTestManager([], { id });
+
+    const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
+    channel.sendNewValue("UPDATE");
+    await delay(DELAY);
+
+    expect(manager.getValue()).toEqual("UPDATE");
+});
+
+test("Successfully polls on manual trigger and writes to remotes", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB]);
+
+    await writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE");
+    expect(manager.getValue()).toEqual("A");
+
+    await manager.poll();
+    expect(manager.getValue()).toEqual("UPDATE");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("UPDATE");
+});
+
+test("Successfully polls on schedule and writes to remotes", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB], { pollPeriodInSeconds: DELAY / 1000 });
+
+    await writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE");
+    expect(manager.getValue()).toEqual("A");
+
+    await delay(DELAY * 1.5);
+    expect(manager.getValue()).toEqual("UPDATE");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("UPDATE");
+});
+
 // Successfully writes to synced syncs
 
 /**

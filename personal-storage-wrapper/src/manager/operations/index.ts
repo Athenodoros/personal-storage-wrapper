@@ -23,4 +23,4 @@ export type OperationArgument<O extends Operation> = Parameters<
     : never;
 export type OperationState = {
     [Key in Operation]: { argument: OperationArgument<Key>; callback: () => void }[];
-} & { running: boolean };
+} & { running?: Operation | "startup" }; // values rather than boolean for debugging

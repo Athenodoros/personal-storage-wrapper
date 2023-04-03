@@ -64,7 +64,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     ) {
         this.operations = { running: false, ...fromKeys(this.OPERATION_RUN_ORDER, () => []) };
         this.channel = new PSMBroadcastChannel(
-            id + "-channel",
+            id,
             recents,
             deserialisers,
             (value: V) => this.setNewValue(value, "BROADCAST"),

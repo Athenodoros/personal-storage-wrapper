@@ -48,7 +48,7 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
         Promise.resolve(
             new MemoryTarget({
                 value: config.value
-                    ? { timestamp: config.value.timestamp, buffer: encodeToArrayBuffer(config.value.encoded) }
+                    ? { timestamp: new Date(config.value.timestamp), buffer: encodeToArrayBuffer(config.value.encoded) }
                     : null,
             })
         );
@@ -57,7 +57,7 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
         this.preserveValueOnSave
             ? {
                   value: this.value && {
-                      timestamp: this.value.timestamp,
+                      timestamp: this.value.timestamp.valueOf(),
                       encoded: decodeFromArrayBuffer(this.value.buffer),
                   },
               }

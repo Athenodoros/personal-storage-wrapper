@@ -7,17 +7,19 @@ import { DefaultDeserialisers, DefaultTargetsType } from "../main";
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
-import { PSMCreationConfig, SyncFromTargets, Value } from "./types";
+import { PSMCreationConfig, SyncFromTargets } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { readFromSync } from "./utilities/requests";
+import { getConfigFromSyncs } from "./utilities/serialisation";
 import { delay, getTestSync } from "./utilities/test";
 
 const DELAY = 10;
+const DEFAULT_VALUE = "DEFAULT_VALUE";
 
 test("Can create a PSM correctly", async () => {
     const onSyncStatesUpdate = vi.fn();
-    const manager = await getTestManager("VALUE", [], { onSyncStatesUpdate });
-    expect(manager.getValue()).toBe("VALUE");
+    const manager = await getTestManager([], { onSyncStatesUpdate });
+    expect(manager.getValue()).toBe(DEFAULT_VALUE);
     expect(onSyncStatesUpdate).toHaveBeenCalledOnce();
 });
 
@@ -30,7 +32,7 @@ test("Handles conflicting results correctly on startup", async () => {
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
-    const manager = await getTestManager("VALUE", [syncA, syncB], {
+    const manager = await getTestManager([syncA, syncB], {
         resolveConflictingSyncValuesOnStartup: async () => "B",
     });
 
@@ -45,18 +47,18 @@ test("Handles conflicting results correctly on startup", async () => {
 test("Handles operations during startup and returns promise to actioned result", async () => {
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
-    const manager = await getTestManager("C", [syncA, syncB], {
-        resolveConflictingSyncValuesOnStartup: async () => "D",
+    const manager = await getTestManager([syncA, syncB], {
+        resolveConflictingSyncValuesOnStartup: async () => "C",
     });
 
     const promise = manager.removeSync(syncB);
     expect(manager.getValue()).toBe("A");
     await promise;
-    expect(manager.getValue()).toBe("D");
+    expect(manager.getValue()).toBe("C");
     expect(manager.getSyncsState()).toEqual([syncA]);
 
-    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("D");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toBe("D");
+    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("C");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toBe("C");
 });
 
 /**
@@ -65,12 +67,12 @@ test("Handles operations during startup and returns promise to actioned result",
 test("Updates state and broadcasts to channel immediately in callback but pushes async", async () => {
     const id = "immediate-broadcast-test";
     const listener = vi.fn();
-    new PSMBroadcastChannel(id + "-channel", new ListBuffer<string>(), DefaultDeserialisers, listener, noop);
+    new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, listener, noop);
     expect(listener).not.toHaveBeenCalled();
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A", delay: DELAY });
-    const manager = await getTestManager<string>("C", [syncA, syncB], { id });
+    const manager = await getTestManager([syncA, syncB], { id });
     expect(listener).not.toHaveBeenCalled(); // Doesn't broadcast on first load
 
     manager.setValueAndPushToSyncs("B");
@@ -93,25 +95,60 @@ test("Provides newest value to startup conflict handler", async () => {
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
-    const manager = await getTestManager<string>("C", [syncA, syncB], {
+    const manager = await getTestManager([syncA, syncB], {
         resolveConflictingSyncValuesOnStartup: handler,
     });
-    manager.setValueAndPushToSyncs("D");
+    manager.setValueAndPushToSyncs("C");
 
     const valueA = (await readFromSync(() => noop, syncA)).value;
     const valueB = (await readFromSync(() => noop, syncB)).value;
     await delay(DELAY * 1.5);
 
     expect(handler).toHaveBeenCalledOnce();
-    expect(handler).toHaveBeenCalledWith("A", "D", [
+    expect(handler).toHaveBeenCalledWith("A", "C", [
         { sync: syncA, value: valueA },
         { sync: syncB, value: valueB },
     ]);
 });
 
-// Updates state immediately in callback, pushes async, and broadcasts to channel
-// Successfully adds a sync and pushes to channel
-// Successfully removes a sync and pushes to channel
+test("Successfully adds a sync and pushes to channel", async () => {
+    const id = "add-sync-broadcast-test";
+    const listener = vi.fn();
+    new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    const syncA = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA], { id });
+    expect(listener).not.toHaveBeenCalled();
+
+    const syncB = await getTestSync({ value: "A" });
+    await manager.addSync(syncB);
+    expect(manager.getSyncsState()).toEqual([syncA, syncB]);
+
+    await delay(DELAY);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA, syncB]));
+});
+
+test("Successfully removes a sync and pushes to channel", async () => {
+    const id = "remove-sync-broadcast-test";
+    const listener = vi.fn();
+    new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB], { id });
+    expect(listener).not.toHaveBeenCalled();
+
+    await manager.removeSync(syncB);
+    expect(manager.getSyncsState()).toEqual([syncA]);
+
+    await delay(DELAY);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA]));
+});
+
 // Successfully updates syncs from channel
 // Successfully updates values from channel
 // Successfully polls on manual trigger
@@ -133,12 +170,11 @@ test("Provides newest value to startup conflict handler", async () => {
  */
 
 let id = 0;
-const getTestManager = async <V extends Value>(
-    value: V,
+const getTestManager = async (
     syncs: SyncFromTargets<DefaultTargetsType>[],
-    config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
+    config?: Partial<PSMCreationConfig<string, DefaultTargetsType>>
 ) =>
-    PersonalStorageManager.create(value, {
+    PersonalStorageManager.create(DEFAULT_VALUE, {
         defaultSyncStates: Promise.resolve(syncs),
         getSyncData: () => null,
         saveSyncData: noop,

@@ -87,6 +87,28 @@ test("Updates state and broadcasts to channel immediately in callback but pushes
     expect((await readFromSync(() => noop, syncA)).value?.value).toBe("B");
 });
 
+test("Provides newest value to startup conflict handler", async () => {
+    const handler = vi.fn();
+    handler.mockImplementation(async () => "A");
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "B", delay: DELAY });
+    const manager = await getTestManager<string>("C", [syncA, syncB], {
+        resolveConflictingSyncValuesOnStartup: handler,
+    });
+    manager.setValueAndPushToSyncs("D");
+
+    const valueA = (await readFromSync(() => noop, syncA)).value;
+    const valueB = (await readFromSync(() => noop, syncB)).value;
+    await delay(DELAY * 1.5);
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler).toHaveBeenCalledWith("A", "D", [
+        { sync: syncA, value: valueA },
+        { sync: syncB, value: valueB },
+    ]);
+});
+
 // Updates state immediately in callback, pushes async, and broadcasts to channel
 // Successfully adds a sync and pushes to channel
 // Successfully removes a sync and pushes to channel

@@ -53,7 +53,8 @@ export type OfflineSyncStartupHandler<T extends Targets, V extends Value> = (
 ) => Promise<OfflineSyncStartupBehaviour<V>>;
 
 export type ConflictingSyncStartupBehaviour<T extends Targets, V extends Value> = (
-    value: V,
+    originalValue: V,
+    currentValue: V,
     syncs: {
         sync: SyncFromTargets<T>;
         value: TimestampedValue<V>;

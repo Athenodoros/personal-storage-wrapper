@@ -5,7 +5,7 @@ import { IndexedDBTarget, IndexedDBTargetType } from "../../targets/indexeddb";
 import { IndexedDBTargetSerialisationConfig } from "../../targets/indexeddb/types";
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
 import { Deserialiser } from "../../targets/types";
-import { maxBy } from "../../utilities/data";
+import { deepEquals, maxBy } from "../../utilities/data";
 import { OfflineSyncStartupBehaviour, Sync, SyncFromTargets, Targets, TimestampedValue, Value } from "../types";
 
 /**
@@ -44,7 +44,8 @@ export const resetToDefaultsOnOfflineTargets = <V extends Value>(): Promise<Offl
     Promise.resolve({ behaviour: "DEFAULT" });
 
 export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Targets, V extends Value>(
-    _value: V,
+    _originalValue: V,
+    _currentValue: V,
     syncs: {
         sync: SyncFromTargets<T>;
         value: TimestampedValue<V>;
@@ -59,6 +60,7 @@ export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Ta
 
     if (!priority.value.value) throw Error("Invalid state: no available target values");
 
+    if (deepEquals(priority.value.value, _originalValue)) return Promise.resolve(_currentValue);
     return Promise.resolve(priority.value.value);
 };
 

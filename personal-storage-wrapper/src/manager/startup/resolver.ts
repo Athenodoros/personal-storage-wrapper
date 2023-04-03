@@ -14,6 +14,7 @@ import { writeToAndUpdateSync } from "../utilities/requests";
 
 export const handleInitialSyncValuesAndGetResult = async <V extends Value, T extends Targets = DefaultTargetsType>(
     value: V,
+    getValue: () => V,
     results: {
         sync: SyncFromTargets<T>;
         result: ResultValueType<MaybeValue<V>>;
@@ -27,7 +28,7 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
             .filter(({ result }) => result.type === "value" && result.value !== null)
             .map(({ sync, result }) => ({ sync, value: result.value as TimestampedValue<V> }));
 
-        value = await resolveConflictingSyncValuesOnStartup(value, syncsWithValues);
+        value = await resolveConflictingSyncValuesOnStartup(value, getValue(), syncsWithValues);
     }
 
     // If any missing or updated, write back

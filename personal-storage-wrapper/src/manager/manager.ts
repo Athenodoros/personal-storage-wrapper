@@ -86,7 +86,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         // Wait for all results to return, handle results, and start polling
         const originalSyncs = this.getSyncsCopy();
         Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result }))))
-            .then((results) => handleInitialSyncValuesAndGetResult(start.value, results, start.resolve, this.logger))
+            .then((results) =>
+                handleInitialSyncValuesAndGetResult(start.value, () => this.value, results, start.resolve, this.logger)
+            )
             .then((value) => {
                 if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate();
                 if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
@@ -129,8 +131,6 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     };
 
     private setNewValue = (value: V, origin: ValueUpdateOrigin) => {
-        console.log(origin);
-
         if (origin !== "BROADCAST") this.channel.sendNewValue(value);
 
         this.value = value;

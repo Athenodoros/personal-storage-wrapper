@@ -129,6 +129,10 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     };
 
     private setNewValue = (value: V, origin: ValueUpdateOrigin) => {
+        console.log(origin);
+
+        if (origin !== "BROADCAST") this.channel.sendNewValue(value);
+
         this.value = value;
         this.config.onValueUpdate(value, origin);
     };

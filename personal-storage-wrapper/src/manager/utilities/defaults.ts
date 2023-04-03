@@ -44,6 +44,7 @@ export const resetToDefaultsOnOfflineTargets = <V extends Value>(): Promise<Offl
     Promise.resolve({ behaviour: "DEFAULT" });
 
 export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Targets, V extends Value>(
+    _value: V,
     syncs: {
         sync: SyncFromTargets<T>;
         value: TimestampedValue<V>;

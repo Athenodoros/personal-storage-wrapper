@@ -27,7 +27,7 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
             .filter(({ result }) => result.type === "value" && result.value !== null)
             .map(({ sync, result }) => ({ sync, value: result.value as TimestampedValue<V> }));
 
-        value = await resolveConflictingSyncValuesOnStartup(syncsWithValues);
+        value = await resolveConflictingSyncValuesOnStartup(value, syncsWithValues);
     }
 
     // If any missing or updated, write back

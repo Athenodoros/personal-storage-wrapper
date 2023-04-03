@@ -9,7 +9,7 @@ export class ListBuffer<T> {
     private maxLength?: number;
     private maxMillis?: number;
 
-    constructor(values: T[], config: ListBufferConfig = {}) {
+    constructor(values: T[] = [], config: ListBufferConfig = {}) {
         const time = new Date().valueOf();
         this.valueList = (config.maxLength !== undefined ? take(values, config.maxLength) : values).map((value) => ({
             time,

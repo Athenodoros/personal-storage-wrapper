@@ -114,9 +114,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      */
 
     public getValue = (): V => this.value;
-    public setValueAndPushToSyncs = (value: V): void => {
+    public setValueAndAsyncPushToSyncs = (value: V): Promise<void> => {
         this.setNewValue(value, "LOCAL");
-        this.enqueueOperation("write", null);
+        return this.enqueueOperation("write", null);
     };
 
     /**

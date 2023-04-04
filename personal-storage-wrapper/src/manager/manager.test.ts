@@ -75,7 +75,7 @@ test("Updates state and broadcasts to channel immediately in callback but pushes
     const manager = await getTestManager([syncA, syncB], { id });
     expect(listener).not.toHaveBeenCalled(); // Doesn't broadcast on first load
 
-    manager.setValueAndPushToSyncs("B");
+    manager.setValueAndAsyncPushToSyncs("B");
     expect(manager.getValue()).toBe("B");
     await delay(DELAY * 0.5);
 
@@ -98,7 +98,7 @@ test("Provides newest value to startup conflict handler", async () => {
     const manager = await getTestManager([syncA, syncB], {
         resolveConflictingSyncValuesOnStartup: handler,
     });
-    manager.setValueAndPushToSyncs("C");
+    manager.setValueAndAsyncPushToSyncs("C");
 
     const valueA = (await readFromSync(() => noop, syncA)).value;
     const valueB = (await readFromSync(() => noop, syncB)).value;
@@ -199,7 +199,17 @@ test("Successfully polls on schedule and writes to remotes", async () => {
     expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("UPDATE");
 });
 
-test.todo("Successfully writes only to synced syncs");
+test("Successfully writes only to synced syncs", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB]);
+    syncB.desynced = true;
+
+    await manager.setValueAndAsyncPushToSyncs("B");
+
+    expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("B");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("A");
+});
 
 /**
  * Compound Tests

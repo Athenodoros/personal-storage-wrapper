@@ -238,26 +238,40 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
-    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
+    const syncC = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB, syncC], { resolveConflictingSyncsUpdate });
 
-    await writeToAndUpdateSync(() => noop, { ...syncA }, "B");
+    await writeToAndUpdateSync(() => noop, { ...syncA }, "A");
+    await writeToAndUpdateSync(() => noop, { ...syncB }, "B");
     (syncA.target as MemoryTarget).fails = true;
+    (syncB.target as MemoryTarget).fails = true;
 
     await manager.setValueAndAsyncPushToSyncs("C");
     expect(syncA.desynced).toBe(true);
+    expect(syncB.desynced).toBe(true);
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
+    (syncB.target as MemoryTarget).fails = false;
     await manager.poll();
 
     expect(syncA.desynced).toBe(false);
+    expect(syncB.desynced).toBe(false);
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
         Parameters<ConflictingRemoteBehaviour<DefaultTargetsType, string>>
-    >("C", [syncA, syncB], [{ sync: syncA, value: { value: "B", timestamp: expect.any(Date) } }]);
+    >(
+        "C",
+        [syncA, syncB, syncC],
+        [
+            { sync: syncA, value: { value: "A", timestamp: expect.any(Date) } },
+            { sync: syncB, value: { value: "B", timestamp: expect.any(Date) } },
+        ]
+    );
     expect(manager.getValue()).toBe("D");
     expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("D");
     expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("D");
+    expect((await readFromSync(() => noop, syncC)).value?.value).toEqual("D");
 });
 
 test("Correctly recovers from descyncs without needing conflict handler", async () => {
@@ -283,7 +297,7 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("B");
     expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("B");
 });
-test.todo("Calls conflict handler with parallel timestamp updates with existing and new values");
+
 test.todo("Correctly logs during read/write cycle");
 test.todo("Correctly handles new value during operation, then queued addition/removal operations");
 

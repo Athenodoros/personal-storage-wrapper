@@ -7,7 +7,7 @@ import { DefaultDeserialisers, DefaultTargetsType, MemoryTarget } from "../main"
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
-import { PSMCreationConfig, SyncFromTargets } from "./types";
+import { ConflictingRemoteBehaviour, PSMCreationConfig, SyncFromTargets } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
@@ -223,16 +223,42 @@ test("Calls onSyncsUpdate once with multiple changes (eg. add sync and desync an
         resolveConflictingSyncsUpdate: async () => "B",
         onSyncStatesUpdate: handler,
     });
-    (syncA.target as MemoryTarget).fails = true;
     expect(handler).toHaveBeenCalledOnce();
     handler.mockClear();
 
+    (syncA.target as MemoryTarget).fails = true;
     const syncB = await getTestSync({ value: "B" });
     await manager.addSync(syncB);
     expect(handler).toHaveBeenCalledOnce();
 });
 
-test.todo("Correctly recovers from desyncs by calling conflict handler");
+test("Correctly recovers from desyncs by calling conflict handler", async () => {
+    const resolveConflictingSyncsUpdate = vi.fn();
+    resolveConflictingSyncsUpdate.mockImplementation(() => "D");
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
+
+    await writeToAndUpdateSync(() => noop, { ...syncA }, "B");
+    (syncA.target as MemoryTarget).fails = true;
+
+    await manager.setValueAndAsyncPushToSyncs("C");
+    expect(syncA.desynced).toBe(true);
+
+    expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
+    (syncA.target as MemoryTarget).fails = false;
+    await manager.poll();
+
+    expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
+    expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
+        Parameters<ConflictingRemoteBehaviour<DefaultTargetsType, string>>
+    >("C", [syncA, syncB], [{ sync: syncA, value: { value: "B", timestamp: expect.any(Date) } }]);
+    expect(manager.getValue()).toBe("D");
+    expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("D");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("D");
+});
+
 test.todo("Correctly recovers from descyncs without needing conflict handler");
 test.todo("Correctly logs during read/write cycle");
 test.todo("Correctly handles new value during operation, then queued addition/removal operations");

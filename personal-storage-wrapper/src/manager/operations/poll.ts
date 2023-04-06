@@ -60,5 +60,7 @@ export const PollOperationRunner = async <V extends Value, T extends Targets>({
         });
     }
 
+    syncs.filter((sync) => !failures.includes(sync)).forEach((sync) => (sync.desynced = false));
+
     return { writes, update };
 };

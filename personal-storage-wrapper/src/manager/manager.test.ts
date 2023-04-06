@@ -250,6 +250,7 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     (syncA.target as MemoryTarget).fails = false;
     await manager.poll();
 
+    expect(syncA.desynced).toBe(false);
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
         Parameters<ConflictingRemoteBehaviour<DefaultTargetsType, string>>
@@ -259,7 +260,30 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("D");
 });
 
-test.todo("Correctly recovers from descyncs without needing conflict handler");
+test("Correctly recovers from descyncs without needing conflict handler", async () => {
+    const resolveConflictingSyncsUpdate = vi.fn();
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
+
+    await writeToAndUpdateSync(() => noop, { ...syncA }, "B");
+    (syncA.target as MemoryTarget).fails = true;
+
+    await manager.setValueAndAsyncPushToSyncs("B");
+    expect(syncA.desynced).toBe(true);
+
+    expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
+    (syncA.target as MemoryTarget).fails = false;
+    await manager.poll();
+
+    expect(syncA.desynced).toBe(false);
+    expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
+    expect(manager.getValue()).toBe("B");
+    expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("B");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("B");
+});
+test.todo("Calls conflict handler with parallel timestamp updates with existing and new values");
 test.todo("Correctly logs during read/write cycle");
 test.todo("Correctly handles new value during operation, then queued addition/removal operations");
 

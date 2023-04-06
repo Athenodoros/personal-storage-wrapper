@@ -3,7 +3,7 @@
  */
 
 import { expect, test, vi } from "vitest";
-import { DefaultDeserialisers, DefaultTargetsType } from "../main";
+import { DefaultDeserialisers, DefaultTargetsType, MemoryTarget } from "../main";
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
@@ -215,7 +215,23 @@ test("Successfully writes only to synced syncs", async () => {
  * Compound Tests
  */
 
-test.todo("Calls onSyncsUpdate once with multiple changes (eg. add sync and desync another one)");
+test("Calls onSyncsUpdate once with multiple changes (eg. add sync and desync another one)", async () => {
+    const handler = vi.fn();
+
+    const syncA = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA], {
+        resolveConflictingSyncsUpdate: async () => "B",
+        onSyncStatesUpdate: handler,
+    });
+    (syncA.target as MemoryTarget).fails = true;
+    expect(handler).toHaveBeenCalledOnce();
+    handler.mockClear();
+
+    const syncB = await getTestSync({ value: "B" });
+    await manager.addSync(syncB);
+    expect(handler).toHaveBeenCalledOnce();
+});
+
 test.todo("Correctly recovers from desyncs by calling conflict handler");
 test.todo("Correctly recovers from descyncs without needing conflict handler");
 test.todo("Correctly logs during read/write cycle");

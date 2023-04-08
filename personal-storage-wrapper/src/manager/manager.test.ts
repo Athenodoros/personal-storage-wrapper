@@ -119,7 +119,11 @@ test("Successfully adds a sync and pushes to channel", async () => {
 
     const syncA = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA], { id });
-    expect(listener).not.toHaveBeenCalled();
+
+    await delay(DELAY);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA]));
+    listener.mockClear();
 
     const syncB = await getTestSync({ value: "A" });
     await manager.addSync(syncB);
@@ -139,7 +143,11 @@ test("Successfully removes a sync and pushes to channel", async () => {
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB], { id });
-    expect(listener).not.toHaveBeenCalled();
+
+    await delay(DELAY);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA, syncB]));
+    listener.mockClear();
 
     await manager.removeSync(syncB);
     expect(manager.getSyncsState()).toEqual([syncA]);
@@ -223,12 +231,16 @@ test("Calls onSyncsUpdate once with multiple changes (eg. add sync and desync an
         resolveConflictingSyncsUpdate: async () => "B",
         onSyncStatesUpdate: handler,
     });
+
+    await delay(DELAY);
     expect(handler).toHaveBeenCalledOnce();
     handler.mockClear();
 
     (syncA.target as MemoryTarget).fails = true;
     const syncB = await getTestSync({ value: "B" });
     await manager.addSync(syncB);
+
+    await delay(DELAY);
     expect(handler).toHaveBeenCalledOnce();
 });
 
@@ -298,7 +310,41 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("B");
 });
 
-test.todo("Correctly logs during read/write cycle");
+test("Correctly logs during read/write cycle", async () => {
+    const logger = vi.fn();
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A", fails: true });
+    const manager = await getTestManager([syncA, syncB], { handleSyncOperationLog: logger });
+
+    expect(logger).toHaveBeenCalledTimes(3);
+    expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "START", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "OFFLINE", sync: syncB });
+    logger.mockClear();
+
+    console.log(syncA.lastSeenWriteTime);
+    (syncB.target as MemoryTarget).fails = false;
+    await manager.poll();
+
+    expect(logger).toHaveBeenCalledTimes(6);
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "START", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "SUCCESS", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "START", sync: syncB });
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "SUCCESS", sync: syncB });
+    expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "START", sync: syncB });
+    expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync: syncB });
+    logger.mockClear();
+
+    await manager.setValueAndAsyncPushToSyncs("B");
+
+    expect(logger).toHaveBeenCalledTimes(4);
+    expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "SUCCESS", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync: syncB });
+    expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "SUCCESS", sync: syncB });
+});
+
 test.todo("Correctly handles new value during operation, then queued addition/removal operations");
 
 /**

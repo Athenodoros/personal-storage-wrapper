@@ -81,7 +81,6 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
         this.operations.running = "startup";
         this.syncs = start.syncs.map(({ sync }) => sync);
-        this.config.onSyncStatesUpdate(this.syncs);
 
         // Wait for all results to return, handle results, and start polling
         const originalSyncs = this.getSyncsCopy();
@@ -90,9 +89,9 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 handleInitialSyncValuesAndGetResult(start.value, () => this.value, results, start.resolve, this.logger)
             )
             .then((value) => {
-                if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate();
                 if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
 
+                this.onSyncsUpdate(!deepEquals(originalSyncs, this.syncs));
                 this.schedulePoll();
                 this.operations.running = undefined;
                 this.resolveQueuedOperations();

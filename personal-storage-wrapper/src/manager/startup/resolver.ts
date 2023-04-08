@@ -36,6 +36,8 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
         results.map(async ({ sync, result }) => {
             if (result.type === "value" && !deepEquals(result.value?.value, value)) {
                 await writeToAndUpdateSync(logger, sync, value);
+            } else if (result.type === "value" && result.value) {
+                sync.lastSeenWriteTime = result.value.timestamp;
             }
         })
     );

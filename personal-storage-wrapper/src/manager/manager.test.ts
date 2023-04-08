@@ -437,10 +437,6 @@ test("Handles poll soon after new value from broadcast", async () => {
     expect(await value(sync)).toBe("B");
 });
 
-test.todo("Handles broadcast => write => sync");
-// ...More?
-// Broadcast with each operation?
-
 /**
  * Utilities
  */

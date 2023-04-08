@@ -5,6 +5,7 @@
 import "fake-indexeddb/auto";
 import { expect, test } from "vitest";
 import { encodeTextToBuffer } from "../../utilities/buffers";
+import { MemoryTarget } from "../memory";
 import { IndexedDBTarget } from "./target";
 
 const TEST_BUFFER = await encodeTextToBuffer("Hello, World!");
@@ -66,4 +67,16 @@ test("Correctly serialises and retains values", async () => {
 
     const read = await newTarget!.read();
     expect(read.value?.buffer).toEqual(TEST_BUFFER);
+});
+
+test("Correctly checks for equality", async () => {
+    const idb1 = await IndexedDBTarget.create("equality-id1");
+    const idb2 = await IndexedDBTarget.create("equality-id1");
+    const idb3 = await IndexedDBTarget.create("equality-id3");
+    const memory = new MemoryTarget();
+
+    expect(idb1.equals(idb1)).toBe(true);
+    expect(idb1.equals(idb2)).toBe(true);
+    expect(idb1.equals(idb3)).toBe(false);
+    expect(idb1.equals(memory)).toBe(false);
 });

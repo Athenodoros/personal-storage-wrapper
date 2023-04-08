@@ -1,4 +1,4 @@
-import { noop } from "../../utilities/data";
+import { deepEquals, noop } from "../../utilities/data";
 import { Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
 import { catchRedirectForAuth, redirectForAuth, runAuthInPopup } from "./auth";
@@ -105,6 +105,12 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     // Error Handling
     online = () => navigator.onLine;
+    equals = (other: Target<any, any>): boolean =>
+        other instanceof GDriveTarget &&
+        deepEquals(
+            [other.connection.clientId, other.connection.useAppData, other.user.email, other.file.id],
+            [this.connection.clientId, this.connection.useAppData, this.user.email, this.file.id]
+        );
 
     // Other requests
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runGDriveQuery(this.connection, input, init);

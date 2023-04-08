@@ -15,6 +15,7 @@ export interface Target<Type extends string, SerialisationConfig> {
 
     // Error Handling
     online: () => boolean;
+    equals: (other: Target<any, any>) => boolean;
 }
 
 export type Deserialiser<Type extends string, Config> = (config: Config) => Promise<Target<Type, Config>>;

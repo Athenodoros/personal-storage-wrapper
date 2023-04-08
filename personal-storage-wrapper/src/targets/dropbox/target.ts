@@ -1,3 +1,4 @@
+import { deepEquals } from "../../utilities/data";
 import { Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
 import { catchRedirectForAuth, getUserMetadata, redirectForAuth, runAuthInPopup } from "./auth";
@@ -83,6 +84,12 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
 
     // Error Handling
     online = () => navigator.onLine;
+    equals = (other: Target<any, any>): boolean =>
+        other instanceof DropboxTarget &&
+        deepEquals(
+            [other.connection.clientId, other.user.id, other.path],
+            [this.connection.clientId, this.user.id, this.path]
+        );
 
     // Other requests
     // This should probably track when the connection is changed and run callbacks

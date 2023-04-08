@@ -79,4 +79,5 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
 
     // Error Handling
     online = () => this.db !== null;
+    equals = (other: Target<any, any>): boolean => other instanceof IndexedDBTarget && other.id === this.id;
 }

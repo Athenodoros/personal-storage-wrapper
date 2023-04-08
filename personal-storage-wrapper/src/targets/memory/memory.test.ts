@@ -75,3 +75,13 @@ test("Correctly serialises for preserving targets", async () => {
     const read = await newTarget!.read();
     expect(read.value?.buffer).toEqual(TEST_BUFFER);
 });
+
+test("Correctly checks for equality", async () => {
+    const memory1 = new MemoryTarget();
+    const memory2 = new MemoryTarget();
+    const dummy = {};
+
+    expect(memory1.equals(memory1)).toBe(true);
+    expect(memory1.equals(memory2)).toBe(false);
+    expect(memory1.equals(dummy as any)).toBe(false);
+});

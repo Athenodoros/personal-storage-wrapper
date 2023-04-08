@@ -1,4 +1,4 @@
-import { deepEquals, fromKeys, uniqBy } from "../utilities/data";
+import { deepEquals, fromKeys, uniqEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
 import { OperationRunOutput } from "./operations/types";
@@ -203,7 +203,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         // Run writes
         if (output.writes && output.writes.length)
             await Promise.all(
-                uniqBy(output.writes, (sync) => sync.target).map(async (sync) => {
+                uniqEquals(output.writes, (s1, s2) => s1.target.equals(s2.target)).map(async (sync) => {
                     if (this.syncs.includes(sync)) await writeToAndUpdateSync(this.logger, sync, this.value.value);
                 })
             );

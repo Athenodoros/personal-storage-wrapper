@@ -1,5 +1,16 @@
 import { expect, test } from "vitest";
-import { deepEquals, deepEqualsList, fromKeys, maxBy, maxByAsync, orderByAsc, orderByDesc, uniq, uniqBy } from ".";
+import {
+    deepEquals,
+    deepEqualsList,
+    fromKeys,
+    maxBy,
+    maxByAsync,
+    orderByAsc,
+    orderByDesc,
+    uniq,
+    uniqBy,
+    uniqEquals,
+} from ".";
 
 const array = [
     { id: 0, val: 5 },
@@ -110,7 +121,7 @@ test("Check deepEqualsList", () => {
     ).toBe(false);
 });
 
-test("Check uniq and uniqBy", () => {
+test("Check uniq, uniqBy, and uniqEquals", () => {
     const a = { k: 1 };
     const b = { k: 2 };
     const c = { k: 1 };
@@ -129,6 +140,11 @@ test("Check uniq and uniqBy", () => {
     expect(uniqByResult[1]).toBe(b);
     expect(uniqByResult[2]).toBe(d);
     expect(uniqByResult[0]).not.toBe(c);
+
+    const uniqEqualsResult = uniqEquals([a, b, c, d], (x, y) => x.k <= 2 === y.k <= 2);
+    expect(uniqEqualsResult.length).toBe(2);
+    expect(uniqEqualsResult[0]).toBe(a);
+    expect(uniqEqualsResult[1]).toBe(d);
 });
 
 test("Check fromKeys", () => {

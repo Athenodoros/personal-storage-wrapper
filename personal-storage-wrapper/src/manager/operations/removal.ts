@@ -5,5 +5,5 @@ export const RemovalOperationRunner = async <V extends Value, T extends Targets>
     args,
     syncs,
 }: OperationRunConfig<V, T, SyncFromTargets<Targets>>): Promise<OperationRunOutput<V, T>> => ({
-    syncs: syncs.filter((sync) => args.every((removal) => removal.target !== sync.target)),
+    syncs: syncs.filter((sync) => args.every((removal) => !removal.target.equals(sync.target))),
 });

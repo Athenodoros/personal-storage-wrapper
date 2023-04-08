@@ -88,8 +88,10 @@ export const partition = <T>(array: T[], predicate: (t: T) => boolean): [T[], T[
     array.filter((value) => !predicate(value)),
 ];
 
+export const uniqEquals = <T>(array: T[], equals: (t1: T, t2: T) => boolean) =>
+    array.filter((t1, idx) => array.findIndex((t2) => equals(t1, t2)) === idx);
 export const uniqBy = <T, S>(array: T[], getter: (t: T) => S) =>
-    array.filter((t1, idx) => array.findIndex((t2) => getter(t1) === getter(t2)) === idx);
+    uniqEquals(array, (t1, t2) => getter(t1) === getter(t2));
 export const uniq = <T>(array: T[]): T[] => array.filter((t1, idx) => array.findIndex((t2) => t1 === t2) === idx);
 
 export const fromPairs = <K extends string | number | symbol, V>(pairs: [K, V][]) =>

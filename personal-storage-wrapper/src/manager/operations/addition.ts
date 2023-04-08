@@ -1,4 +1,4 @@
-import { deepEquals, uniqBy } from "../../utilities/data";
+import { deepEquals, uniqEquals } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, SyncFromTargets, Targets, Value } from "../types";
 import { readFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
@@ -10,8 +10,8 @@ export const AdditionOperationRunner = async <V extends Value, T extends Targets
     value,
     config,
 }: OperationRunConfig<V, T, SyncFromTargets<T>>): Promise<OperationRunOutput<V, T>> => {
-    let additions = uniqBy(args, (sync) => sync.target).filter((addition) =>
-        syncs.every((sync) => sync.target !== addition.target)
+    let additions = uniqEquals(args, (s1, s2) => s1.target.equals(s2.target)).filter((addition) =>
+        syncs.every((sync) => !sync.target.equals(addition.target))
     );
     if (additions.length === 0) return {};
 

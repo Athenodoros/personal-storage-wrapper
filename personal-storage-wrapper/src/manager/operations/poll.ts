@@ -43,7 +43,8 @@ export const PollOperationRunner = async <V extends Value, T extends Targets>({
     if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.desynced)) {
         update = { value: conflicts[0].value.value, origin: "REMOTE" };
         writes = syncs.filter(
-            (sync) => !conflicts.some((conflict) => conflict.sync.target === sync.target) && !failures.includes(sync)
+            (sync) =>
+                !conflicts.some((conflict) => conflict.sync.target.equals(sync.target)) && !failures.includes(sync)
         );
     } else if (conflicts.length) {
         const newValue = await config.resolveConflictingSyncsUpdate(value, syncs, conflicts);
@@ -55,7 +56,7 @@ export const PollOperationRunner = async <V extends Value, T extends Targets>({
         syncs.forEach((sync) => {
             if (failures.includes(sync)) return;
 
-            const conflict = conflicts.find((conflict) => conflict.sync.target === sync.target);
+            const conflict = conflicts.find((conflict) => conflict.sync.target.equals(sync.target));
             if (conflict === undefined || !deepEquals(conflict.value.value, newValue)) writes.push(sync);
         });
     }

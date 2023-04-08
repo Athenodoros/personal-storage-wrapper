@@ -323,7 +323,6 @@ test("Correctly logs during read/write cycle", async () => {
     expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "OFFLINE", sync: syncB });
     logger.mockClear();
 
-    console.log(syncA.lastSeenWriteTime);
     (syncB.target as MemoryTarget).fails = false;
     await manager.poll();
 

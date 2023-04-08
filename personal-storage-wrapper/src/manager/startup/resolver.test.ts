@@ -10,6 +10,7 @@ test("Does nothing if no conflict", async () => {
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
+        () => ({ val: "DEFAULT" }),
         [await getQuickStoreWithValue({ val: "DEFAULT" }), await getQuickStoreWithValue({ val: "DEFAULT" })],
         resolver,
         () => logger
@@ -28,6 +29,7 @@ test("Writes back to empty sync", async () => {
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
+        () => ({ val: "DEFAULT" }),
         [await getQuickStoreWithValue({ val: "DEFAULT" }), { sync, result: { type: "value", value: null } }],
         resolver,
         () => logger
@@ -46,12 +48,14 @@ test("Calls conflict handler if there is a conflict and writes back to available
 
     const online = await getTestSync({ value: "DEFAULT" });
     const offline = await getTestSync({ value: "OFFLINE" });
+    const update = await getQuickStoreWithValue({ val: "UPDATE" });
 
     const result = await handleInitialSyncValuesAndGetResult(
         { val: "DEFAULT" },
+        () => ({ val: "UNUSED_DEFAULT2" }),
         [
             { sync: online, result: { type: "value", value: { timestamp: new Date(), value: { val: "DEFAULT" } } } },
-            await getQuickStoreWithValue({ val: "UPDATE" }),
+            update,
             { sync: offline, result: { type: "error" } },
         ],
         resolver,
@@ -59,6 +63,10 @@ test("Calls conflict handler if there is a conflict and writes back to available
     );
 
     expect(resolver).toHaveBeenCalledOnce();
+    expect(resolver).toHaveBeenCalledWith({ val: "DEFAULT" }, { val: "UNUSED_DEFAULT2" }, [
+        { sync: online, value: { value: { val: "DEFAULT" }, timestamp: expect.any(Date) } },
+        { sync: update.sync, value: update.result.value },
+    ]);
     expect(logger).toHaveBeenCalledTimes(2);
     expect(logger).toHaveBeenCalledWith({ sync: online, operation: "UPLOAD", stage: "START" });
     expect(logger).toHaveBeenCalledWith({ sync: online, operation: "UPLOAD", stage: "SUCCESS" });

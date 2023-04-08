@@ -132,5 +132,5 @@ test("Check uniq and uniqBy", () => {
 });
 
 test("Check fromKeys", () => {
-    expect(fromKeys(["a", "b", "c"], 1)).toEqual({ a: 1, b: 1, c: 1 });
+    expect(fromKeys(["a", "b", "c"], () => 1)).toEqual({ a: 1, b: 1, c: 1 });
 });

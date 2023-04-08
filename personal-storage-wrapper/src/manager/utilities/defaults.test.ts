@@ -4,14 +4,14 @@ import { getTestDropBoxSync, getTestSync } from "./test";
 
 test("Prioritises recent results", async () => {
     expect(
-        await resolveStartupConflictsWithRemoteStateAndLatestEdit([
+        await resolveStartupConflictsWithRemoteStateAndLatestEdit("D", "D", [
             await getSyncAndValue(0, "A"),
             await getSyncAndValue(10, "B"),
         ])
     ).toBe("B");
 
     expect(
-        await resolveStartupConflictsWithRemoteStateAndLatestEdit([
+        await resolveStartupConflictsWithRemoteStateAndLatestEdit("D", "D", [
             await getSyncAndValue(10, "B"),
             await getSyncAndValue(0, "A"),
         ])
@@ -20,14 +20,14 @@ test("Prioritises recent results", async () => {
 
 test("Prioritises remote results", async () => {
     expect(
-        await resolveStartupConflictsWithRemoteStateAndLatestEdit([
+        await resolveStartupConflictsWithRemoteStateAndLatestEdit("D", "D", [
             await getSyncAndValue(0, "A", true),
             await getSyncAndValue(10, "B"),
         ])
     ).toBe("A");
 
     expect(
-        await resolveStartupConflictsWithRemoteStateAndLatestEdit([
+        await resolveStartupConflictsWithRemoteStateAndLatestEdit("D", "D", [
             await getSyncAndValue(10, "B"),
             await getSyncAndValue(0, "A", true),
         ])

@@ -4,10 +4,11 @@
 
 import { expect, test, vi } from "vitest";
 import { DefaultDeserialisers, DefaultTargetsType, MemoryTarget } from "../main";
+import { MemoryTargetSerialisationConfig } from "../targets/memory/types";
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
-import { ConflictingRemoteBehaviour, PSMCreationConfig, SyncFromTargets } from "./types";
+import { ConflictingRemoteBehaviour, PSMCreationConfig, Sync, SyncFromTargets } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
@@ -41,7 +42,7 @@ test("Handles conflicting results correctly on startup", async () => {
     await delay(DELAY * 1.5);
     expect(manager.getValue()).toBe("B");
 
-    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("B");
+    expect(await value(syncA)).toBe("B");
 });
 
 test("Handles operations during startup and returns promise to actioned result", async () => {
@@ -57,8 +58,8 @@ test("Handles operations during startup and returns promise to actioned result",
     expect(manager.getValue()).toBe("C");
     expect(manager.getSyncsState()).toEqual([syncA]);
 
-    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("C");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toBe("C");
+    expect(await value(syncA)).toBe("C");
+    expect(await value(syncB)).toBe("C");
 });
 
 /**
@@ -80,13 +81,13 @@ test("Updates state and broadcasts to channel immediately in callback but pushes
     await delay(DELAY * 0.5);
 
     expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith("B");
-    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("A");
+    expect(listener).toHaveBeenCalledWith({ value: "B", timestamp: expect.any(Date) });
+    expect(await value(syncA)).toBe("A");
 
     await delay(DELAY * 1);
 
     expect(listener).toHaveBeenCalledOnce(); // Doesn't clobber new value after remote read
-    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("B");
+    expect(await value(syncA)).toBe("B");
 });
 
 test("Provides newest value to startup conflict handler", async () => {
@@ -175,7 +176,7 @@ test("Successfully updates values from channel", async () => {
     const manager = await getTestManager([], { id });
 
     const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
-    channel.sendNewValue("UPDATE");
+    channel.sendNewValue({ value: "UPDATE", timestamp: new Date() });
     await delay(DELAY);
 
     expect(manager.getValue()).toEqual("UPDATE");
@@ -191,7 +192,7 @@ test("Successfully polls on manual trigger and writes to remotes", async () => {
 
     await manager.poll();
     expect(manager.getValue()).toEqual("UPDATE");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("UPDATE");
+    expect(await value(syncB)).toEqual("UPDATE");
 });
 
 test("Successfully polls on schedule and writes to remotes", async () => {
@@ -204,7 +205,7 @@ test("Successfully polls on schedule and writes to remotes", async () => {
 
     await delay(DELAY * 1.5);
     expect(manager.getValue()).toEqual("UPDATE");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("UPDATE");
+    expect(await value(syncB)).toEqual("UPDATE");
 });
 
 test("Successfully writes only to synced syncs", async () => {
@@ -215,8 +216,8 @@ test("Successfully writes only to synced syncs", async () => {
 
     await manager.setValueAndAsyncPushToSyncs("B");
 
-    expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("B");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("A");
+    expect(await value(syncA)).toEqual("B");
+    expect(await value(syncB)).toEqual("A");
 });
 
 /**
@@ -281,9 +282,9 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
         ]
     );
     expect(manager.getValue()).toBe("D");
-    expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("D");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("D");
-    expect((await readFromSync(() => noop, syncC)).value?.value).toEqual("D");
+    expect(await value(syncA)).toEqual("D");
+    expect(await value(syncB)).toEqual("D");
+    expect(await value(syncC)).toEqual("D");
 });
 
 test("Correctly recovers from descyncs without needing conflict handler", async () => {
@@ -306,8 +307,8 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     expect(syncA.desynced).toBe(false);
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     expect(manager.getValue()).toBe("B");
-    expect((await readFromSync(() => noop, syncA)).value?.value).toEqual("B");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toEqual("B");
+    expect(await value(syncA)).toEqual("B");
+    expect(await value(syncB)).toEqual("B");
 });
 
 test("Correctly logs during read/write cycle", async () => {
@@ -358,9 +359,9 @@ test("Correctly handles new value during operation, then queued addition/removal
         manager.removeSync(syncB),
     ]);
 
-    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("D");
-    expect((await readFromSync(() => noop, syncB)).value?.value).toBe("A"); // Removals before additions
-    expect((await readFromSync(() => noop, syncC)).value?.value).toBe("D");
+    expect(await value(syncA)).toBe("D");
+    expect(await value(syncB)).toBe("A"); // Removals before additions
+    expect(await value(syncC)).toBe("D");
     expect(manager.getSyncsState()).toEqual([syncA, syncC]);
 });
 
@@ -368,8 +369,46 @@ test("Correctly handles new value during operation, then queued addition/removal
  * Multiple Manager Tests
  */
 
-test.todo("Handles competing writes to same source with broadcast");
-test.todo("Handles competing writes to same source without broadcast");
+test("Handles overlapping writes to same source with broadcast", async () => {
+    const id = "overlapping-writes-to-same-source";
+
+    const sync = await getTestSync({ value: "A" });
+    const managerA = await getTestManager([sync], { id, resolveConflictingSyncsUpdate: async () => "D" });
+    const managerB = await getTestManager([{ ...sync }], { id, ignoreDuplicateCheck: true });
+
+    managerA.setValueAndAsyncPushToSyncs("B");
+    managerB.setValueAndAsyncPushToSyncs("C");
+
+    await delay(DELAY); // For broadcasting to complete
+    expect(managerA.getValue()).toBe("C");
+    expect(managerB.getValue()).toBe("C");
+    expect(await value(sync)).toBe("C");
+});
+
+test("Handles overlapping writes to same source without broadcast", async () => {
+    const resolveConflictingSyncsUpdate = vi.fn();
+
+    const sync = await getTestSync({ value: "A", delay: DELAY });
+    const managerA = await getTestManager([sync], { resolveConflictingSyncsUpdate });
+    const managerB = await getTestManager([{ ...sync }], { resolveConflictingSyncsUpdate });
+
+    managerA.setValueAndAsyncPushToSyncs("B");
+    await delay(DELAY * 0.2);
+    managerB.setValueAndAsyncPushToSyncs("C");
+
+    await delay(DELAY * 2.5); // Wait for any dust to settle
+    expect(managerA.getValue()).toBe("B");
+    expect(managerB.getValue()).toBe("C");
+    expect(await value(sync)).toBe("C");
+
+    await managerA.poll();
+    expect(managerA.getValue()).toBe("C");
+    expect(managerB.getValue()).toBe("C");
+    expect(await value(sync)).toBe("C");
+
+    expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
+});
+
 test.todo("Handles poll soon after new value from broadcast");
 test.todo("Handles broadcast => write => sync");
 // ...More?
@@ -392,3 +431,6 @@ const getTestManager = async (
         pollPeriodInSeconds: null,
         ...config,
     });
+
+const value = async (sync: Sync<"memory", MemoryTargetSerialisationConfig>) =>
+    (await readFromSync(() => noop, sync)).value?.value;

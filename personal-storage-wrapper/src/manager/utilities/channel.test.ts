@@ -14,14 +14,15 @@ test("Correctly updates values", async () => {
     const { value: valueA, syncs: syncsA, channel: channelA } = getTestChannel(0);
     const { value: valueB, syncs: syncsB, channel: channelB } = getTestChannel(0);
 
-    channelA.sendNewValue("TEST");
+    const timestamp = new Date();
+    channelA.sendNewValue({ value: "TEST", timestamp });
 
     await delay(DELAY);
 
     expect(valueA).not.toHaveBeenCalled();
     expect(syncsA).not.toHaveBeenCalled();
     expect(valueB).toHaveBeenCalledOnce();
-    expect(valueB).toHaveBeenCalledWith("TEST");
+    expect(valueB).toHaveBeenCalledWith({ value: "TEST", timestamp });
     expect(syncsB).not.toHaveBeenCalled();
     expect(channelB.recents.values()).toEqual(["TEST"]);
 

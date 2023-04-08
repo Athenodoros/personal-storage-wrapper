@@ -1,11 +1,11 @@
 import { TypedBroadcastChannel } from "../../utilities/channel";
 import { ListBuffer } from "../../utilities/listbuffer";
-import { Deserialisers, SyncFromTargets, Targets, Value } from "../types";
+import { Deserialisers, SyncFromTargets, Targets, TimestampedValue, Value } from "../types";
 import { getConfigFromSyncs, getSyncsFromConfig } from "./serialisation";
 
 interface PSMBroadcastChannelValueMessage<V extends Value> {
     type: "VALUE";
-    value: V;
+    value: TimestampedValue<V>;
 }
 
 interface PSMBroadcastChannelSyncMessage {
@@ -23,13 +23,13 @@ export class PSMBroadcastChannel<V extends Value, T extends Targets> {
         id: string,
         recents: ListBuffer<V>,
         deserialisers: Deserialisers<T>,
-        handleNewValue: (value: V) => void,
+        handleNewValue: (value: TimestampedValue<V>) => void,
         handleUpdateSyncs: (syncs: SyncFromTargets<T>[]) => void
     ) {
         this.recents = recents;
         this.channel = new TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>(id, async (message) => {
             if (message.type === "VALUE") {
-                recents.push(message.value);
+                recents.push(message.value.value);
                 handleNewValue(message.value);
             } else {
                 const sync = await getSyncsFromConfig(message.syncs, deserialisers);
@@ -38,7 +38,7 @@ export class PSMBroadcastChannel<V extends Value, T extends Targets> {
         });
     }
 
-    sendNewValue = (value: V) => this.channel.send({ type: "VALUE", value });
+    sendNewValue = (value: TimestampedValue<V>) => this.channel.send({ type: "VALUE", value });
     sendUpdatedSyncs = (syncs: SyncFromTargets<T>[]) =>
         this.channel.send({ type: "UPDATE_SYNCS", syncs: getConfigFromSyncs(syncs) });
 }

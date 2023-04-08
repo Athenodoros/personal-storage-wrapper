@@ -101,6 +101,7 @@ export async function createPSM<V extends Value, T extends Targets>(
     const deserialisers = maybeDeserialisers ?? (DefaultDeserialisers as Deserialisers<T>);
     const {
         id = "psm-default-id",
+        ignoreDuplicateCheck = false,
 
         // Updates
         pollPeriodInSeconds = 10,
@@ -128,7 +129,10 @@ export async function createPSM<V extends Value, T extends Targets>(
     /**
      * Dedupe so that managers don't clobber each other over broadcast channels
      */
-    if (managers.has(id)) throw new Error("Multiple PSMs cannot exist within one browser context!");
+    if (managers.has(id) && !ignoreDuplicateCheck)
+        throw new Error(
+            "Duplicate PSMs found within browser context - this is probably an error, or at least a bad idea. If not, pass `ignoreDuplicateCheck = true`."
+        );
     managers.add(id);
 
     /**

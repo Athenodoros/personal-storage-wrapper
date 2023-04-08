@@ -12,6 +12,7 @@ import {
     PSMCreationConfig,
     SyncFromTargets,
     Targets,
+    TimestampedValue,
     Value,
     ValueUpdateOrigin,
 } from "./types";
@@ -21,7 +22,7 @@ import { writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
-    private value: V;
+    private value: TimestampedValue<V>;
     private operations: OperationState;
     private syncs: SyncFromTargets<T>[];
     private channel: PSMBroadcastChannel<V, T>;
@@ -67,10 +68,17 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             id,
             recents,
             deserialisers,
-            (value: V) => this.setNewValue(value, "BROADCAST"),
+            (value: TimestampedValue<V>) => {
+                if (
+                    value.timestamp > this.value.timestamp ||
+                    (value.timestamp.valueOf() === this.value.timestamp.valueOf() &&
+                        JSON.stringify(value.value) > JSON.stringify(this.value.value))
+                )
+                    this.setNewValue(value.value, "BROADCAST");
+            },
             (syncs: SyncFromTargets<T>[]) => this.enqueueOperation("update", syncs)
         );
-        this.value = start.value;
+        this.value = { value: start.value, timestamp: new Date() };
         this.config = config;
 
         if (start.type === "final") {
@@ -86,7 +94,13 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         const originalSyncs = this.getSyncsCopy();
         Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result }))))
             .then((results) =>
-                handleInitialSyncValuesAndGetResult(start.value, () => this.value, results, start.resolve, this.logger)
+                handleInitialSyncValuesAndGetResult(
+                    start.value,
+                    () => this.value.value,
+                    results,
+                    start.resolve,
+                    this.logger
+                )
             )
             .then((value) => {
                 if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
@@ -112,7 +126,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      * Value Interactions
      */
 
-    public getValue = (): V => this.value;
+    public getValue = (): V => this.value.value;
     public setValueAndAsyncPushToSyncs = (value: V): Promise<void> => {
         this.setNewValue(value, "LOCAL");
         return this.enqueueOperation("write", null);
@@ -130,10 +144,10 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     };
 
     private setNewValue = (value: V, origin: ValueUpdateOrigin) => {
-        if (origin !== "BROADCAST") this.channel.sendNewValue(value);
-
-        this.value = value;
+        this.value = { value, timestamp: new Date() };
         this.config.onValueUpdate(value, origin);
+
+        if (origin !== "BROADCAST") this.channel.sendNewValue(this.value);
     };
 
     private schedulePoll = () =>
@@ -173,7 +187,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         const output = (await OperationRunners[operation]({
             args: operations.map(({ argument }) => argument as any),
             logger: this.logger,
-            value: this.value,
+            value: this.value.value,
             recents: this.channel.recents.values(),
             config: this.config,
             syncs: this.syncs,
@@ -183,14 +197,14 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         if (output.syncs && !deepEquals(this.syncs, output.syncs)) this.syncs = output.syncs;
 
         // Update value
-        if (output.update && !deepEquals(output.update.value, this.value))
+        if (output.update && !deepEquals(output.update.value, this.value.value))
             this.setNewValue(output.update.value, output.update.origin);
 
         // Run writes
         if (output.writes && output.writes.length)
             await Promise.all(
                 uniqBy(output.writes, (sync) => sync.target).map(async (sync) => {
-                    if (this.syncs.includes(sync)) await writeToAndUpdateSync(this.logger, sync, this.value);
+                    if (this.syncs.includes(sync)) await writeToAndUpdateSync(this.logger, sync, this.value.value);
                 })
             );
 

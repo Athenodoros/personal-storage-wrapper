@@ -2,6 +2,7 @@
     "private": true,
     "workspaces": [
         "personal-storage-wrapper",
+        "personal-storage-wrapper-browser-tests",
         "personal-storage-wrapper-example",
         "personal-storage-wrapper-react"
     ],

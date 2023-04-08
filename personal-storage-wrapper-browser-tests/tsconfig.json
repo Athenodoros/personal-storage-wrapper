@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "useDefineForClassFields": true,
+        "lib": ["DOM", "DOM.Iterable", "ESNext"],
+        "allowJs": false,
+        "skipLibCheck": true,
+        "esModuleInterop": false,
+        "allowSyntheticDefaultImports": true,
+        "strict": true,
+        "forceConsistentCasingInFileNames": true,
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "resolveJsonModule": true,
+        "isolatedModules": true,
+        "noEmit": true,
+        "jsx": "react-jsx",
+        "paths": {
+            // For VS Code, otherwise it can't find the libraries
+            "personal-storage-wrapper": ["../personal-storage-wrapper/src/main.ts"]
+        }
+    },
+    "include": ["src"],
+    "references": [{ "path": "./tsconfig.node.json" }]
+}

@@ -409,7 +409,34 @@ test("Handles overlapping writes to same source without broadcast", async () => 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
 });
 
-test.todo("Handles poll soon after new value from broadcast");
+test("Handles poll soon after new value from broadcast", async () => {
+    const id = "poll-after-broadcast";
+
+    const sync = await getTestSync({ value: "A" });
+    const managerA = await getTestManager([sync], { id });
+    const managerB = await getTestManager([{ ...sync }], { id, ignoreDuplicateCheck: true });
+
+    (sync.target as MemoryTarget).delay = DELAY * 2;
+    managerA.setValueAndAsyncPushToSyncs("B");
+
+    await delay(DELAY * 0.5);
+    (sync.target as MemoryTarget).delay = 0;
+
+    expect(managerB.getValue()).toEqual("B");
+    expect(await value(sync)).toBe("A");
+    await managerB.poll();
+    expect(managerB.getValue()).toEqual("B");
+    expect(await value(sync)).toBe("A");
+
+    await delay(DELAY * 2);
+
+    expect(managerB.getValue()).toEqual("B");
+    expect(await value(sync)).toBe("B");
+    await managerB.poll();
+    expect(managerB.getValue()).toEqual("B");
+    expect(await value(sync)).toBe("B");
+});
+
 test.todo("Handles broadcast => write => sync");
 // ...More?
 // Broadcast with each operation?

@@ -345,7 +345,25 @@ test("Correctly logs during read/write cycle", async () => {
     expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "SUCCESS", sync: syncB });
 });
 
-test.todo("Correctly handles new value during operation, then queued addition/removal operations");
+test("Correctly handles new value during operation, then queued addition/removal operations", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A", delay: DELAY });
+    const syncC = await getTestSync({ value: "C" });
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate: async () => "D" });
+    await delay(DELAY * 1.5);
+
+    await Promise.all([
+        manager.poll(),
+        manager.setValueAndAsyncPushToSyncs("B"),
+        manager.addSync(syncC),
+        manager.removeSync(syncB),
+    ]);
+
+    expect((await readFromSync(() => noop, syncA)).value?.value).toBe("D");
+    expect((await readFromSync(() => noop, syncB)).value?.value).toBe("A"); // Removals before additions
+    expect((await readFromSync(() => noop, syncC)).value?.value).toBe("D");
+    expect(manager.getSyncsState()).toEqual([syncA, syncC]);
+});
 
 /**
  * Multiple Manager Tests

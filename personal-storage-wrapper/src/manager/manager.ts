@@ -2,6 +2,7 @@ import { deepEquals, fromKeys, uniqEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
 import { OperationRunOutput } from "./operations/types";
+import { createPSMWithCache } from "./startup/cache";
 import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
 import { StartValue } from "./startup/types";
@@ -31,6 +32,31 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     /**
      * Manager Initialisation
      */
+    static createWithCache<V extends Value>(
+        defaultInitialValue: InitialValue<V>,
+        config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
+    ): Promise<PersonalStorageManager<V, DefaultTargetsType>>;
+
+    static createWithCache<V extends Value, T extends Targets>(
+        defaultInitialValue: InitialValue<V>,
+        config: Partial<PSMCreationConfig<V, T>>,
+        deserialisers: Deserialisers<T>
+    ): Promise<PersonalStorageManager<V, T>>;
+
+    static createWithCache<V extends Value, T extends Targets>(
+        defaultInitialValue: InitialValue<V>,
+        initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
+        maybeDeserialisers?: Deserialisers<T>
+    ): Promise<PersonalStorageManager<V, T>> {
+        return createPSMWithCache(
+            (id, start, deserialisers, recents, config) =>
+                new PersonalStorageManager(id, start, deserialisers, recents, config),
+            defaultInitialValue,
+            initialisationConfig,
+            maybeDeserialisers
+        );
+    }
+
     static create<V extends Value>(
         defaultInitialValue: InitialValue<V>,
         config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>

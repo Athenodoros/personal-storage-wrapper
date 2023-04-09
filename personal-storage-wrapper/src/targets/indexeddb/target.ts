@@ -35,7 +35,7 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
             request.onupgradeneeded = () => {
                 const db = request.result;
                 db.createObjectStore(TABLE_NAME, { keyPath: "id" });
-                resolve(db);
+                setTimeout(() => resolve(db), 1); // End upgrade transaction before further processing
             };
         });
 

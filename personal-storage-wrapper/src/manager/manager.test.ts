@@ -76,7 +76,7 @@ test("Updates state and broadcasts to channel immediately in callback but pushes
     const manager = await getTestManager([syncA, syncB], { id });
     expect(listener).not.toHaveBeenCalled(); // Doesn't broadcast on first load
 
-    manager.setValueAndAsyncPushToSyncs("B");
+    manager.setValue("B");
     expect(manager.getValue()).toBe("B");
     await delay(DELAY * 0.5);
 
@@ -99,7 +99,7 @@ test("Provides newest value to startup conflict handler", async () => {
     const manager = await getTestManager([syncA, syncB], {
         resolveConflictingSyncValuesOnStartup: handler,
     });
-    manager.setValueAndAsyncPushToSyncs("C");
+    manager.setValue("C");
 
     const valueA = (await readFromSync(() => noop, syncA)).value;
     const valueB = (await readFromSync(() => noop, syncB)).value;
@@ -214,7 +214,7 @@ test("Successfully writes only to synced syncs", async () => {
     const manager = await getTestManager([syncA, syncB]);
     syncB.desynced = true;
 
-    await manager.setValueAndAsyncPushToSyncs("B");
+    await manager.setValue("B");
 
     expect(await value(syncA)).toEqual("B");
     expect(await value(syncB)).toEqual("A");
@@ -301,7 +301,7 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     (syncA.target as MemoryTarget).fails = true;
     (syncB.target as MemoryTarget).fails = true;
 
-    await manager.setValueAndAsyncPushToSyncs("C");
+    await manager.setValue("C");
     expect(syncA.desynced).toBe(true);
     expect(syncB.desynced).toBe(true);
 
@@ -339,7 +339,7 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     await writeToAndUpdateSync(() => noop, { ...syncA }, "B");
     (syncA.target as MemoryTarget).fails = true;
 
-    await manager.setValueAndAsyncPushToSyncs("B");
+    await manager.setValue("B");
     expect(syncA.desynced).toBe(true);
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
@@ -378,7 +378,7 @@ test("Correctly logs during read/write cycle", async () => {
     expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync: syncB });
     logger.mockClear();
 
-    await manager.setValueAndAsyncPushToSyncs("B");
+    await manager.setValue("B");
 
     expect(logger).toHaveBeenCalledTimes(4);
     expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync: syncA });
@@ -394,12 +394,7 @@ test("Correctly handles new value during operation, then queued addition/removal
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate: async () => "D" });
     await delay(DELAY * 1.5);
 
-    await Promise.all([
-        manager.poll(),
-        manager.setValueAndAsyncPushToSyncs("B"),
-        manager.addSync(syncC),
-        manager.removeSync(syncB),
-    ]);
+    await Promise.all([manager.poll(), manager.setValue("B"), manager.addSync(syncC), manager.removeSync(syncB)]);
 
     expect(await value(syncA)).toBe("D");
     expect(await value(syncB)).toBe("A"); // Removals before additions
@@ -426,8 +421,8 @@ test("Handles overlapping writes to same source with broadcast", async () => {
     const managerA = await getTestManager([sync], { id, resolveConflictingSyncsUpdate: async () => "D" });
     const managerB = await getTestManager([{ ...sync }], { id, ignoreDuplicateCheck: true });
 
-    managerA.setValueAndAsyncPushToSyncs("B");
-    managerB.setValueAndAsyncPushToSyncs("C");
+    managerA.setValue("B");
+    managerB.setValue("C");
 
     await delay(DELAY); // For broadcasting to complete
     expect(managerA.getValue()).toBe("C");
@@ -442,9 +437,9 @@ test("Handles overlapping writes to same source without broadcast", async () => 
     const managerA = await getTestManager([sync], { resolveConflictingSyncsUpdate });
     const managerB = await getTestManager([{ ...sync }], { resolveConflictingSyncsUpdate });
 
-    managerA.setValueAndAsyncPushToSyncs("B");
+    managerA.setValue("B");
     await delay(DELAY * 0.2);
-    managerB.setValueAndAsyncPushToSyncs("C");
+    managerB.setValue("C");
 
     await delay(DELAY * 2.5); // Wait for any dust to settle
     expect(managerA.getValue()).toBe("B");
@@ -467,7 +462,7 @@ test("Handles poll soon after new value from broadcast", async () => {
     const managerB = await getTestManager([{ ...sync }], { id, ignoreDuplicateCheck: true });
 
     (sync.target as MemoryTarget).delay = DELAY * 2;
-    managerA.setValueAndAsyncPushToSyncs("B");
+    managerA.setValue("B");
 
     await delay(DELAY * 0.5);
     (sync.target as MemoryTarget).delay = 0;

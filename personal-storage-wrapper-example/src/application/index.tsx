@@ -34,25 +34,23 @@ export function App() {
             <SyncDisplay
                 syncs={syncs}
                 remove={manager?.removeSync}
-                memory={() => manager?.addSync({ target: new MemoryTarget({ delay: 1000 }), compressed: true })}
-                indexeddb={async () => manager?.addSync({ target: await IndexedDBTarget.create(), compressed: true })}
+                memory={() => manager?.addTarget(new MemoryTarget({ delay: 1000 }))}
+                indexeddb={async () => manager?.addTarget(await IndexedDBTarget.create())}
                 dropbox={async () => {
                     const target = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
-                    if (target) manager?.addSync({ target, compressed: true });
+                    if (target) manager?.addTarget(target);
                 }}
                 gdrive={async () => {
                     const target = await GDriveTarget.setupInPopup(GDRIVE_CLIENT_ID, GDRIVE_REDIRECT_URI);
-                    if (target) manager?.addSync({ target, compressed: true });
+                    if (target) manager?.addTarget(target);
                 }}
             />
 
             {manager ? (
                 <ToDoDisplay
                     todos={todos}
-                    add={(text) =>
-                        manager.setValueAndAsyncPushToSyncs(todos.concat({ id: new Date().valueOf(), text }))
-                    }
-                    remove={(id) => manager.setValueAndAsyncPushToSyncs(todos.filter((todo) => id !== todo.id))}
+                    add={(text) => manager.setValue(todos.concat({ id: new Date().valueOf(), text }))}
+                    remove={(id) => manager.setValue(todos.filter((todo) => id !== todo.id))}
                 />
             ) : (
                 <LoadingScreen />

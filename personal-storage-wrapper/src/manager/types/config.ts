@@ -1,5 +1,5 @@
 import { ResultValueType } from "../../targets/result";
-import { Deserialiser } from "../../targets/types";
+import { Deserialiser, Target } from "../../targets/types";
 import { SyncOperationLogger } from "./logs";
 import { Sync } from "./syncs";
 import { Targets, TimestampedValue, Value } from "./values";
@@ -41,6 +41,9 @@ export type Deserialisers<T extends Targets> = {
     [K in keyof T]: K extends string ? Deserialiser<K, T[K]> : never;
 };
 
+export type TargetFromTargets<T extends Targets> = {
+    [K in keyof T]: K extends string ? Target<K, T[K]> : never;
+}[keyof T];
 export type SyncFromTargets<T extends Targets> = {
     [K in keyof T]: K extends string ? Sync<K, T[K]> : never;
 }[keyof T];

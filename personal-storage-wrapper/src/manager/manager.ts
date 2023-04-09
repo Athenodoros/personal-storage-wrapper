@@ -12,6 +12,7 @@ import {
     PSMConfig,
     PSMCreationConfig,
     SyncFromTargets,
+    TargetFromTargets,
     Targets,
     TimestampedValue,
     Value,
@@ -157,6 +158,8 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
     private getSyncsCopy = (): SyncFromTargets<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
     public getSyncsState = this.getSyncsCopy;
+    public addTarget = (target: TargetFromTargets<T>, compressed: boolean = true): Promise<void> =>
+        this.enqueueOperation("addition", { target, compressed });
     public addSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("addition", sync);
     public removeSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("removal", sync);
     public poll = (): Promise<void> => this.enqueueOperation("poll", null);
@@ -166,7 +169,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      */
 
     public getValue = (): V => this.value.value;
-    public setValueAndAsyncPushToSyncs = (value: V): Promise<void> => {
+    public setValue = (value: V): Promise<void> => {
         this.setNewValue(value, "LOCAL");
         return this.enqueueOperation("write", null);
     };

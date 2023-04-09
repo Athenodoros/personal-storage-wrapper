@@ -7,6 +7,7 @@ import {
     maxByAsync,
     orderByAsc,
     orderByDesc,
+    pick,
     uniq,
     uniqBy,
     uniqEquals,
@@ -149,4 +150,8 @@ test("Check uniq, uniqBy, and uniqEquals", () => {
 
 test("Check fromKeys", () => {
     expect(fromKeys(["a", "b", "c"], () => 1)).toEqual({ a: 1, b: 1, c: 1 });
+});
+
+test("Check pick", () => {
+    expect(pick({ a: 1, b: 2, c: "3" }, ["a", "c"])).toEqual({ a: 1, c: "3" });
 });

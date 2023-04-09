@@ -95,7 +95,12 @@ export const uniqBy = <T, S>(array: T[], getter: (t: T) => S) =>
     uniqEquals(array, (t1, t2) => getter(t1) === getter(t2));
 export const uniq = <T>(array: T[]): T[] => array.filter((t1, idx) => array.findIndex((t2) => t1 === t2) === idx);
 
+/**
+ * Object Utils
+ */
 export const fromPairs = <K extends string | number | symbol, V>(pairs: [K, V][]) =>
     Object.fromEntries(pairs) as Record<K, V>;
 export const fromKeys = <K extends string | number | symbol, V>(keys: K[], getValue: (k: K) => V) =>
     Object.fromEntries(keys.map((key) => [key, getValue(key)])) as Record<K, V>;
+export const pick = <T extends object, K extends keyof T>(obj: T, keys: K[]) =>
+    fromKeys(keys, (key) => obj[key]) as Pick<T, K>;

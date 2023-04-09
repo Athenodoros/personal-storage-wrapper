@@ -51,9 +51,10 @@ export async function maxByAsync<T>(
 }
 
 /**
- * No-Op
+ * Named Trivial Functions
  */
 export const noop = (): void => void null;
+export const identity = <T>(t: T) => t;
 
 /**
  * Deep Equality

@@ -8,8 +8,8 @@ import { DropboxConnection, DropboxTargetSerialisationConfig, DropboxTargetType,
 export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSerialisationConfig> {
     type: DropboxTargetType = DropboxTargetType;
     private connection: DropboxConnection;
-    private user: DropboxUserDetails;
-    private path: string;
+    readonly user: DropboxUserDetails;
+    readonly path: string;
 
     private constructor(connection: DropboxConnection, user: DropboxUserDetails, path: string) {
         this.connection = connection;

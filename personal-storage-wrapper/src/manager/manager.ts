@@ -104,38 +104,50 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
             },
             (syncs: SyncFromTargets<T>[]) => this.enqueueOperation("update", syncs)
         );
-        this.value = { value: start.value, timestamp: new Date() };
         this.config = config;
+        this.value = { value: start.value, timestamp: new Date() };
+        this.config.onValueUpdate(start.value, "CREATION");
 
         if (start.type === "final") {
-            this.syncs = start.syncs;
+            this.syncs = start.results.map(({ sync }) => sync);
             this.config.onSyncStatesUpdate(this.syncs);
+
+            const emptySyncs = start.results
+                .filter(({ value }) => value.type === "value" && value.value === null)
+                .map(({ sync }) => sync);
+            if (emptySyncs.length) this.enqueueOperation("write", emptySyncs);
+
             return;
         }
 
         this.operations.running = "startup";
-        this.syncs = start.syncs.map(({ sync }) => sync);
+        this.syncs = start.values.map(({ sync }) => sync);
 
         // Wait for all results to return, handle results, and start polling
         const originalSyncs = this.getSyncsCopy();
-        Promise.all(start.syncs.map(({ sync, value }) => value.then((result) => ({ sync, result }))))
-            .then((results) =>
-                handleInitialSyncValuesAndGetResult(
+        Promise.all(start.values.map(({ sync, value }) => value.then((result) => ({ sync, result })))).then(
+            async (results) => {
+                const value = await handleInitialSyncValuesAndGetResult(
                     start.value,
                     () => this.value.value,
                     results,
                     start.resolve,
                     this.logger
-                )
-            )
-            .then((value) => {
+                );
+
                 if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
+
+                const emptySyncs = results
+                    .filter(({ result }) => result.type === "value" && result.value === null)
+                    .map(({ sync }) => sync);
+                if (emptySyncs.length) this.enqueueOperation("write", emptySyncs);
 
                 this.onSyncsUpdate(!deepEquals(originalSyncs, this.syncs));
                 this.schedulePoll();
                 this.operations.running = undefined;
                 this.resolveQueuedOperations();
-            });
+            }
+        );
     }
 
     /**
@@ -173,7 +185,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
         this.value = { value, timestamp: new Date() };
         this.config.onValueUpdate(value, origin);
 
-        if (origin !== "BROADCAST") this.channel.sendNewValue(this.value);
+        if (origin !== "BROADCAST" && origin !== "CREATION") this.channel.sendNewValue(this.value);
     };
 
     private schedulePoll = () =>

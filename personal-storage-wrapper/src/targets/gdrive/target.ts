@@ -18,8 +18,8 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
     static onRefreshNeeded: (target: GDriveTarget) => void;
 
     private connection: GDriveConnection;
-    private user: GDriveUserDetails;
-    private file: GDriveFileReference;
+    readonly user: GDriveUserDetails;
+    readonly file: GDriveFileReference;
 
     private constructor(connection: GDriveConnection, user: GDriveUserDetails, file: GDriveFileReference) {
         this.connection = connection;
@@ -55,9 +55,9 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     static setupInPopup = async (
         clientId: string,
-        file: FileInitDescription,
-        useAppData: boolean = true,
         redirectURI?: string,
+        file: FileInitDescription = { type: "name", name: "data.bak" },
+        useAppData: boolean = true,
         scopes?: string[]
     ): Promise<GDriveTarget | null> =>
         this.createFromMaybeConnection(runAuthInPopup(clientId, useAppData, redirectURI, scopes), file);

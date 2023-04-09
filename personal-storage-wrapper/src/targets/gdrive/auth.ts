@@ -37,8 +37,8 @@ interface SessionStorageStruct {
 
 export const redirectForAuth = async (
     clientId: string,
-    useAppData: boolean,
     redirectURI?: string,
+    useAppData: boolean = true,
     scopes?: string[]
 ): Promise<void> => {
     const definitelyRedirectURI = redirectURI || window.location.href.split("?")[0].split("#")[0];

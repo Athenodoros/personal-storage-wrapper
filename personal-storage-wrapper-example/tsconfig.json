@@ -17,10 +17,9 @@
         "jsx": "react-jsx",
         "paths": {
             // For VS Code, otherwise it can't find the libraries
-            "personal-storage-wrapper": ["../personal-storage-wrapper/src/main.ts"],
-            "personal-storage-wrapper-react": ["../personal-storage-wrapper-react/src/main.ts"]
+            "personal-storage-wrapper": ["../personal-storage-wrapper/src/main.ts"]
         }
     },
-    "include": ["src"],
+    "include": ["src/**/*"],
     "references": [{ "path": "./tsconfig.node.json" }]
 }

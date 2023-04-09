@@ -1,15 +1,15 @@
-import { Result } from "../../targets/result";
+import { Result, ResultValueType } from "../../targets/result";
 import { ConflictingSyncStartupBehaviour, MaybeValue, SyncFromTargets, Targets, Value } from "../types";
 
 export interface PSMFinalValue<V extends Value, T extends Targets> {
     type: "final";
-    syncs: SyncFromTargets<T>[];
+    results: { sync: SyncFromTargets<T>; value: ResultValueType<MaybeValue<V>> }[];
     value: V;
 }
 
 export interface PSMProvisionalValue<V extends Value, T extends Targets> {
     type: "provisional";
-    syncs: { sync: SyncFromTargets<T>; value: Result<MaybeValue<V>> }[];
+    values: { sync: SyncFromTargets<T>; value: Result<MaybeValue<V>> }[];
     value: V;
     resolve: ConflictingSyncStartupBehaviour<T, V>;
 }

@@ -4,7 +4,7 @@ import { SyncOperationLogger } from "./logs";
 import { Sync } from "./syncs";
 import { Targets, TimestampedValue, Value } from "./values";
 
-export type ValueUpdateOrigin = "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT";
+export type ValueUpdateOrigin = "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT" | "CREATION";
 
 export interface PSMConfig<V extends Value, T extends Targets> {
     // Updates

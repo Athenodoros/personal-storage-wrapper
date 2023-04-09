@@ -22,6 +22,7 @@ export type DefaultTargetsType = {
         ? Config
         : never;
 };
+export type DefaultSyncsType = SyncFromTargets<DefaultTargetsType>;
 
 /**
  * Sync state storage

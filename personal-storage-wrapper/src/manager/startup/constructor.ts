@@ -49,7 +49,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
                 resolve({
                     type: "provisional",
                     value: result.value.value,
-                    syncs: values,
+                    values,
                     resolve: resolveConflictingSyncValuesOnStartup,
                 });
             }
@@ -66,7 +66,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
             );
             if (behaviour.behaviour === "VALUE" && !resolved) {
                 resolved = true;
-                resolve({ type: "final", value: behaviour.value, syncs });
+                resolve({ type: "final", value: behaviour.value, results });
                 return;
             }
         }
@@ -77,7 +77,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
                 typeof defaultInitialValue !== "function"
                     ? defaultInitialValue
                     : await Promise.resolve(defaultInitialValue());
-            resolve({ type: "final", value, syncs });
+            resolve({ type: "final", value, results });
         }
     });
 

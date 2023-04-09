@@ -26,7 +26,7 @@ export type {
     ConflictingRemoteBehaviour,
 } from "./types";
 
-export type { DefaultTargetsType } from "./utilities/defaults";
+export type { DefaultTargetsType, DefaultSyncsType } from "./utilities/defaults";
 export {
     // Deserialisers
     DefaultDeserialisers,

@@ -365,6 +365,14 @@ test("Correctly handles new value during operation, then queued addition/removal
     expect(manager.getSyncsState()).toEqual([syncA, syncC]);
 });
 
+test("Writes to empty syncs with fallback values", async () => {
+    const syncA = await getTestSync();
+    const syncB = await getTestSync({ fails: true });
+    await getTestManager([syncA, syncB]);
+
+    expect(await value(syncA)).toBe("DEFAULT_VALUE");
+});
+
 /**
  * Multiple Manager Tests
  */

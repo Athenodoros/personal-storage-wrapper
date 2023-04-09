@@ -20,9 +20,9 @@ export const trackSyncState = (
     setCallback: (callback: (syncs: SyncWithState[]) => void) => void;
     getState: () => SyncWithState[];
 } => {
-    const map = new WeakMap<DefaultSyncsType, SyncState>();
+    const map = new WeakMap<DefaultSyncsType["target"], SyncState>();
     let syncs: DefaultSyncsType[] = [];
-    const getState = () => syncs.map((sync) => ({ ...sync, state: map.get(sync) ?? BaselineState }));
+    const getState = () => syncs.map((sync) => ({ ...sync, state: map.get(sync.target) ?? BaselineState }));
     const send = () => callback(getState());
 
     const onSyncStatesUpdate = (newSyncs: DefaultSyncsType[]) => {
@@ -31,11 +31,11 @@ export const trackSyncState = (
     };
 
     const handleSyncOperationLog: SyncOperationLogger = ({ sync, stage, operation: rawOperation }) => {
-        if (!syncs.includes(sync)) syncs.push(sync);
+        if (!syncs.some(({ target }) => target === sync.target)) syncs.push(sync);
 
         const connection: SyncStateConnection = stage === "OFFLINE" || stage === "ERROR" ? stage : "CONNECTED";
         const operation: SyncStateOperation = stage === "SUCCESS" ? null : stage === "START" ? rawOperation : null;
-        map.set(sync, { connection, operation });
+        map.set(sync.target, { connection, operation });
 
         send();
     };

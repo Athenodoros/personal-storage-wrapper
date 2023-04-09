@@ -17,14 +17,16 @@ export const runGDriveJSONQuery = <T = unknown>(
     new Result<T>(async (resolve) => {
         if (connection.expiry < new Date()) {
             onRefreshNeeded();
-            return Result.error<T>();
+            resolve({ type: "error" });
+            return;
         }
 
         const result = await fetch(input, init);
 
         if (result.status === 401) {
             onRefreshNeeded();
-            return Result.error<T>();
+            resolve({ type: "error" });
+            return;
         }
 
         const json = await result.json();

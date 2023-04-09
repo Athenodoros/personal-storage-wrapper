@@ -8,7 +8,7 @@ test("Correctly initialises for resolve and reject", async () => {
     expect(await Result.error()).toEqual({ type: "error" });
     expect(await new Result((resolve) => resolve({ type: "value", value: 7 }))).toEqual({ type: "value", value: 7 });
 
-    expect(await new Result((resolve, reject) => reject())).toEqual({ type: "error" });
+    expect(await new Result((_resolve, reject) => reject())).toEqual({ type: "error" });
 });
 
 test("Correctly handles maps", async () => {
@@ -18,7 +18,7 @@ test("Correctly handles maps", async () => {
 
 test("Correctly handles flatmaps", async () => {
     expect(await Result.value(7).flatmap((x) => Result.value(x + 1))).toEqual({ type: "value", value: 8 });
-    expect(await Result.error().flatmap((x) => Result.value(8))).toEqual({ type: "error" });
+    expect(await Result.error().flatmap(() => Result.value(8))).toEqual({ type: "error" });
 });
 
 test("Result.rall waits for all results", async () => {

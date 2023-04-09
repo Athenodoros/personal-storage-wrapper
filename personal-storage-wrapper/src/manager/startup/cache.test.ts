@@ -3,10 +3,7 @@ import { noop } from "../../utilities/data";
 import { getTestSync } from "../utilities/test";
 import { createPSMWithCache } from "./cache";
 
-const DELAY = 20;
-
 test("Returns and updates cache correctly", async () => {
-    const store = await getTestSync();
     const createPSMObject = vi.fn().mockImplementation((_1, _2, _3, _4, _5) => ({ config: _5 }));
 
     const createPSMStubFromCache = async (id: string, handler: () => void) =>

@@ -62,7 +62,8 @@ export const identity = <T>(t: T) => t;
 export const deepEquals = <T>(left: T, right: T): boolean => {
     if (typeof left !== typeof right) return false;
 
-    if (typeof left !== "object" || left === undefined || left === null) return left === right;
+    if (typeof left !== "object" || left === undefined || left === null || right === undefined || right === null)
+        return left === right;
 
     if (Array.isArray(left) !== Array.isArray(right)) return false;
 

@@ -103,6 +103,7 @@ test("Check deepEquals", () => {
     expect(deepEquals(1, 2)).toBe(false);
     expect(deepEquals(1, "1" as any)).toBe(false);
     expect(deepEquals(["a", "b"], { 0: "a", 1: "b" })).toBe(false);
+    expect(deepEquals({}, null)).toBe(false);
 });
 
 test("Check deepEqualsList", () => {

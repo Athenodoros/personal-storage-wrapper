@@ -28,7 +28,7 @@ const getTestSyncAndValue = async <V extends Value>({
         timestamp: timestamp === undefined ? new Date() : new Date(timestamp),
         buffer: await getBufferFromValue(raw, compressed),
     };
-    const target = new MemoryTarget({ value, ...config });
+    const target = new MemoryTarget({ value, preserveValueOnSave: true, ...config });
     const sync: Sync<MemoryTargetType, MemoryTargetSerialisationConfig> = { target, compressed };
 
     return { sync, value };

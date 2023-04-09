@@ -65,7 +65,7 @@ test("Correctly serialises for resetting targets", async () => {
 });
 
 test("Correctly serialises for preserving targets", async () => {
-    const target = new MemoryTarget();
+    const target = new MemoryTarget({ preserveValueOnSave: true });
     await target.write(TEST_BUFFER);
 
     const config = JSON.stringify(target.serialise());

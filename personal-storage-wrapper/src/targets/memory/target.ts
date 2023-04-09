@@ -19,7 +19,7 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
             preserveValueOnSave: boolean;
         }>
     ) {
-        const { value = null, delay = 0, fails = false, preserveValueOnSave = true } = config ?? {};
+        const { value = null, delay = 0, fails = false, preserveValueOnSave = false } = config ?? {};
 
         this.value = value;
         this.delay = delay;
@@ -47,6 +47,7 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
     static deserialise: Deserialiser<MemoryTargetType, MemoryTargetSerialisationConfig> = (config) =>
         Promise.resolve(
             new MemoryTarget({
+                preserveValueOnSave: config.value !== undefined,
                 value: config.value
                     ? { timestamp: new Date(config.value.timestamp), buffer: encodeToArrayBuffer(config.value.encoded) }
                     : null,

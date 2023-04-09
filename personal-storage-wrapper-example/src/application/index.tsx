@@ -22,7 +22,7 @@ export function App() {
         PersonalStorageManager.createWithCache(DEFAULT_TODO_ITEMS, {
             ...trackSyncState(setSyncs),
             onValueUpdate: setToDos,
-            defaultSyncStates: DEFAULT_SYNC_STATE,
+            getDefaultSyncs: () => DEFAULT_SYNC_STATE,
         }).then((manager) => {
             (window as any).manager = manager;
             setManager(manager);

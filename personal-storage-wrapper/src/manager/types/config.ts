@@ -26,7 +26,7 @@ export interface PSMCreationConfig<V extends Value, T extends Targets> extends P
 
     // Syncs Config
     getSyncData: () => string | null;
-    defaultSyncStates: Promise<SyncFromTargets<T>[]>;
+    getDefaultSyncs: () => Promise<SyncFromTargets<T>[]>;
 
     // Value Cache
     valueCacheMillis: number | undefined;

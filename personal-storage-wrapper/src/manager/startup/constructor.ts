@@ -103,7 +103,7 @@ export async function createPSM<V extends Value, T extends Targets>(
     const {
         id = "psm-default-id",
         ignoreDuplicateCheck = false,
-        defaultSyncStates = (maybeDeserialisers ? Promise.resolve([]) : getDefaultSyncStates()) as Promise<
+        getDefaultSyncs = (maybeDeserialisers ? () => Promise.resolve([]) : getDefaultSyncStates) as () => Promise<
             SyncFromTargets<T>[]
         >,
         getSyncData = getSyncDataFromLocalStorage,
@@ -124,7 +124,7 @@ export async function createPSM<V extends Value, T extends Targets>(
      * Get initialisation values
      */
     const syncsConfig = getSyncData();
-    const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await defaultSyncStates;
+    const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await getDefaultSyncs();
 
     // Get initial values, including updating logger after PSM creation, and return manager
     let getHandleSyncOperationLog = () => getLatestConfig().handleSyncOperationLog ?? noop;

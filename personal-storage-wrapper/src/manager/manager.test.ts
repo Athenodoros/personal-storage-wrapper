@@ -498,7 +498,7 @@ const getTestManager = async (
     cache?: boolean
 ) =>
     (cache ? PersonalStorageManager.createWithCache : PersonalStorageManager.create)(DEFAULT_VALUE, {
-        defaultSyncStates: Promise.resolve(syncs),
+        getDefaultSyncs: () => Promise.resolve(syncs),
         getSyncData: () => null,
         saveSyncData: noop,
         id: "" + id++,

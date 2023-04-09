@@ -10,7 +10,7 @@ test("Returns and updates cache correctly", async () => {
         createPSMWithCache(createPSMObject, "A", {
             id,
             onValueUpdate: handler,
-            defaultSyncStates: Promise.resolve([await getTestSync()]),
+            getDefaultSyncs: async () => [await getTestSync()],
             getSyncData: () => null,
             saveSyncData: noop,
         });

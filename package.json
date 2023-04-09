@@ -3,8 +3,7 @@
     "workspaces": [
         "personal-storage-wrapper",
         "personal-storage-wrapper-browser-tests",
-        "personal-storage-wrapper-example",
-        "personal-storage-wrapper-react"
+        "personal-storage-wrapper-example"
     ],
     "scripts": {
         "dev": "yarn workspace personal-storage-wrapper-example dev",

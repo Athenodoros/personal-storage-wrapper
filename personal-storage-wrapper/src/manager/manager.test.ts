@@ -222,12 +222,24 @@ test("Successfully writes only to synced syncs", async () => {
 
 test("Updates callbacks in real time on cached creation", async () => {
     const id = "realtime-callback-update-on-cache-creation";
-    const sync = await getTestSync({ delay: DELAY, value: DEFAULT_VALUE });
+    const sync = await getTestSync({ delay: DELAY });
 
     const logger1 = vi.fn();
-    const manager1 = getTestManager([sync], { handleSyncOperationLog: logger1, id }, true);
+    const handler1 = vi.fn();
+    const manager1 = getTestManager(
+        [sync],
+        { handleSyncOperationLog: logger1, id, onSyncStatesUpdate: handler1 },
+        true
+    );
     const logger2 = vi.fn();
-    const manager2 = await getTestManager([sync], { handleSyncOperationLog: logger2, id }, true);
+    const handler2 = vi.fn();
+    const manager2 = await getTestManager(
+        [sync],
+        { handleSyncOperationLog: logger2, id, onSyncStatesUpdate: handler2 },
+        true
+    );
+
+    await delay(DELAY * 1.5);
 
     (sync.target as MemoryTarget).fails = true;
     const logger3 = vi.fn();
@@ -238,10 +250,14 @@ test("Updates callbacks in real time on cached creation", async () => {
 
     expect(await manager1).toBe(manager2);
     expect(await manager1).toBe(manager3);
+    expect(handler1).not.toHaveBeenCalled();
+    expect(handler2).toHaveBeenCalled();
     expect(logger1).not.toHaveBeenCalled();
-    expect(logger2).toHaveBeenCalledTimes(2);
+    expect(logger2).toHaveBeenCalledTimes(4);
     expect(logger2).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "START", sync });
     expect(logger2).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync });
+    expect(logger2).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync });
+    expect(logger2).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "SUCCESS", sync });
     expect(logger3).toHaveBeenCalledOnce();
     expect(logger3).toHaveBeenCalledWith({ operation: "POLL", stage: "OFFLINE", sync });
 });

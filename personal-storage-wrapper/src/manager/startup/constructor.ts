@@ -93,7 +93,7 @@ export async function createPSM<V extends Value, T extends Targets>(
     ) => PersonalStorageManager<V, T>,
     defaultInitialValue: InitialValue<V>,
     initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
-    getLogger: () => SyncOperationLogger<SyncFromTargets<T>>,
+    getLatestConfig: () => Partial<PSMCreationConfig<V, T>> = () => ({}),
     maybeDeserialisers?: Deserialisers<T>
 ): Promise<PersonalStorageManager<V, T>> {
     /**
@@ -103,27 +103,12 @@ export async function createPSM<V extends Value, T extends Targets>(
     const {
         id = "psm-default-id",
         ignoreDuplicateCheck = false,
-
-        // Updates
-        pollPeriodInSeconds = 10,
-        onValueUpdate = noop,
-
-        // Syncs Config
         defaultSyncStates = (maybeDeserialisers ? Promise.resolve([]) : getDefaultSyncStates()) as Promise<
             SyncFromTargets<T>[]
         >,
         getSyncData = getSyncDataFromLocalStorage,
-        saveSyncData = saveSyncDataToLocalStorage,
-        onSyncStatesUpdate = noop,
-
-        // Value Cache
-        valueCacheMillis = 3000,
-        valueCacheCount = undefined,
-
-        // Conflict Handlers
         handleAllEmptyAndFailedSyncsOnStartup = resetToDefaultsOnOfflineTargets,
         resolveConflictingSyncValuesOnStartup = resolveStartupConflictsWithRemoteStateAndLatestEdit,
-        resolveConflictingSyncsUpdate = resolveUpdateConflictsWithRemoteStateAndLatestEdit,
     } = initialisationConfig;
 
     /**
@@ -140,10 +125,9 @@ export async function createPSM<V extends Value, T extends Targets>(
      */
     const syncsConfig = getSyncData();
     const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await defaultSyncStates;
-    const buffer = new ListBuffer<V>([], { maxLength: valueCacheCount, maxMillis: valueCacheMillis });
 
     // Get initial values, including updating logger after PSM creation, and return manager
-    let getHandleSyncOperationLog = () => getLogger();
+    let getHandleSyncOperationLog = () => getLatestConfig().handleSyncOperationLog ?? noop;
     const start = await getPSMStartValue<V, T>(
         syncs,
         defaultInitialValue,
@@ -152,15 +136,21 @@ export async function createPSM<V extends Value, T extends Targets>(
         () => getHandleSyncOperationLog()
     );
 
-    const config = {
-        pollPeriodInSeconds,
-        onValueUpdate,
-        handleSyncOperationLog: getLogger(),
-        getSyncData,
-        saveSyncData,
-        onSyncStatesUpdate,
-        resolveConflictingSyncsUpdate,
+    const latestConfig = getLatestConfig();
+    const config: PSMConfig<V, T> = {
+        pollPeriodInSeconds: latestConfig.pollPeriodInSeconds === undefined ? 10 : latestConfig.pollPeriodInSeconds,
+        onValueUpdate: latestConfig.onValueUpdate ?? noop,
+        saveSyncData: latestConfig.saveSyncData ?? saveSyncDataToLocalStorage,
+        onSyncStatesUpdate: latestConfig.onSyncStatesUpdate ?? noop,
+        resolveConflictingSyncsUpdate:
+            latestConfig.resolveConflictingSyncsUpdate ?? resolveUpdateConflictsWithRemoteStateAndLatestEdit,
+        handleSyncOperationLog: getHandleSyncOperationLog(),
     };
+    const buffer = new ListBuffer<V>([], {
+        maxLength: latestConfig.valueCacheCount,
+        maxMillis: latestConfig.valueCacheMillis ?? 3000,
+    });
+
     const manager = createPSMObject(id, start, deserialisers, buffer, config);
     getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
     return manager;

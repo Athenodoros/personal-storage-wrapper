@@ -1,16 +1,7 @@
-import { deepEquals, identity, noop, orderByAsc } from "../../utilities/data";
+import { deepEquals, identity, orderByAsc } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
 import { PersonalStorageManager } from "../manager";
-import {
-    Deserialisers,
-    InitialValue,
-    PSMConfig,
-    PSMCreationConfig,
-    SyncFromTargets,
-    SyncOperationLogger,
-    Targets,
-    Value,
-} from "../types";
+import { Deserialisers, InitialValue, PSMConfig, PSMCreationConfig, Targets, Value } from "../types";
 import { DefaultDeserialisers } from "../utilities/defaults";
 import { createPSM } from "./constructor";
 import { StartValue } from "./types";
@@ -20,7 +11,7 @@ const anyCache: Record<
     {
         manager: Promise<PersonalStorageManager<any>>;
         types: string[];
-        logger: SyncOperationLogger<SyncFromTargets<any>>;
+        config: Partial<PSMCreationConfig<any, any>>;
     }
 > = {};
 
@@ -41,7 +32,7 @@ export function createPSMWithCache<V extends Value, T extends Targets>(
         {
             manager: Promise<PersonalStorageManager<V, T>>;
             types: string[];
-            logger: SyncOperationLogger<SyncFromTargets<T>>;
+            config: Partial<PSMCreationConfig<V, T>>;
         }
     >;
 
@@ -53,8 +44,9 @@ export function createPSMWithCache<V extends Value, T extends Targets>(
         if (!deepEquals(value.types, types))
             throw new Error("Inconsistent deserialisers between cached PSM creations!");
 
-        if (config.handleSyncOperationLog) typedCache[id].logger = config.handleSyncOperationLog;
+        typedCache[id].config = config;
 
+        // This is kept in case the manager has already been created when createPSMWithCache is called
         typedCache[id].manager = value.manager.then((manager) => {
             if (config.pollPeriodInSeconds !== undefined)
                 manager.config.pollPeriodInSeconds = config.pollPeriodInSeconds;
@@ -75,10 +67,10 @@ export function createPSMWithCache<V extends Value, T extends Targets>(
                 createPSMObject,
                 defaultInitialValue,
                 config,
-                () => typedCache[id].logger,
+                () => typedCache[id].config,
                 maybeDeserialisers
             ),
-            logger: config.handleSyncOperationLog ?? noop,
+            config,
         };
     }
 

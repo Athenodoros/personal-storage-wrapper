@@ -93,6 +93,7 @@ export async function createPSM<V extends Value, T extends Targets>(
     ) => PersonalStorageManager<V, T>,
     defaultInitialValue: InitialValue<V>,
     initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
+    getLogger: () => SyncOperationLogger<SyncFromTargets<T>>,
     maybeDeserialisers?: Deserialisers<T>
 ): Promise<PersonalStorageManager<V, T>> {
     /**
@@ -106,7 +107,6 @@ export async function createPSM<V extends Value, T extends Targets>(
         // Updates
         pollPeriodInSeconds = 10,
         onValueUpdate = noop,
-        handleSyncOperationLog = noop,
 
         // Syncs Config
         defaultSyncStates = (maybeDeserialisers ? Promise.resolve([]) : getDefaultSyncStates()) as Promise<
@@ -141,18 +141,9 @@ export async function createPSM<V extends Value, T extends Targets>(
     const syncsConfig = getSyncData();
     const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await defaultSyncStates;
     const buffer = new ListBuffer<V>([], { maxLength: valueCacheCount, maxMillis: valueCacheMillis });
-    const config = {
-        pollPeriodInSeconds,
-        onValueUpdate,
-        handleSyncOperationLog,
-        getSyncData,
-        saveSyncData,
-        onSyncStatesUpdate,
-        resolveConflictingSyncsUpdate,
-    };
 
     // Get initial values, including updating logger after PSM creation, and return manager
-    let getHandleSyncOperationLog = () => handleSyncOperationLog;
+    let getHandleSyncOperationLog = () => getLogger();
     const start = await getPSMStartValue<V, T>(
         syncs,
         defaultInitialValue,
@@ -161,6 +152,15 @@ export async function createPSM<V extends Value, T extends Targets>(
         () => getHandleSyncOperationLog()
     );
 
+    const config = {
+        pollPeriodInSeconds,
+        onValueUpdate,
+        handleSyncOperationLog: getLogger(),
+        getSyncData,
+        saveSyncData,
+        onSyncStatesUpdate,
+        resolveConflictingSyncsUpdate,
+    };
     const manager = createPSMObject(id, start, deserialisers, buffer, config);
     getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
     return manager;

@@ -1,4 +1,4 @@
-import { deepEquals, fromKeys, uniqEquals } from "../utilities/data";
+import { deepEquals, fromKeys, noop, uniqEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
 import { OperationRunOutput } from "./operations/types";
@@ -78,6 +78,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 new PersonalStorageManager(id, start, deserialisers, recents, config),
             defaultInitialValue,
             initialisationConfig,
+            () => initialisationConfig.handleSyncOperationLog ?? noop,
             maybeDeserialisers
         );
     }

@@ -14,7 +14,7 @@ import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 import { delay, getTestSync } from "./utilities/test";
 
-const DELAY = 10;
+const DELAY = 20;
 const DEFAULT_VALUE = "DEFAULT_VALUE";
 
 test("Can create a PSM correctly", async () => {
@@ -220,6 +220,32 @@ test("Successfully writes only to synced syncs", async () => {
     expect(await value(syncB)).toEqual("A");
 });
 
+test("Updates callbacks in real time on cached creation", async () => {
+    const id = "realtime-callback-update-on-cache-creation";
+    const sync = await getTestSync({ delay: DELAY, value: DEFAULT_VALUE });
+
+    const logger1 = vi.fn();
+    const manager1 = getTestManager([sync], { handleSyncOperationLog: logger1, id }, true);
+    const logger2 = vi.fn();
+    const manager2 = await getTestManager([sync], { handleSyncOperationLog: logger2, id }, true);
+
+    (sync.target as MemoryTarget).fails = true;
+    const logger3 = vi.fn();
+    const manager3 = await getTestManager([sync], { handleSyncOperationLog: logger3, id }, true);
+    await manager3.poll();
+
+    await delay(DELAY);
+
+    expect(await manager1).toBe(manager2);
+    expect(await manager1).toBe(manager3);
+    expect(logger1).not.toHaveBeenCalled();
+    expect(logger2).toHaveBeenCalledTimes(2);
+    expect(logger2).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "START", sync });
+    expect(logger2).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync });
+    expect(logger3).toHaveBeenCalledOnce();
+    expect(logger3).toHaveBeenCalledWith({ operation: "POLL", stage: "OFFLINE", sync });
+});
+
 /**
  * Compound Tests
  */
@@ -312,7 +338,7 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
 });
 
 test("Correctly logs during read/write cycle", async () => {
-    const logger = vi.fn();
+    const logger = vi.fn().mockImplementation(() => noop);
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A", fails: true });
@@ -452,9 +478,10 @@ test("Handles poll soon after new value from broadcast", async () => {
 let id = 0;
 const getTestManager = async (
     syncs: SyncFromTargets<DefaultTargetsType>[],
-    config?: Partial<PSMCreationConfig<string, DefaultTargetsType>>
+    config?: Partial<PSMCreationConfig<string, DefaultTargetsType>>,
+    cache?: boolean
 ) =>
-    PersonalStorageManager.create(DEFAULT_VALUE, {
+    (cache ? PersonalStorageManager.createWithCache : PersonalStorageManager.create)(DEFAULT_VALUE, {
         defaultSyncStates: Promise.resolve(syncs),
         getSyncData: () => null,
         saveSyncData: noop,

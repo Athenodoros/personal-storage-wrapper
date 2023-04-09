@@ -15,7 +15,7 @@ export const DEFAULT_TODO_ITEMS: ToDoItem[] = [
 
 export const DEFAULT_SYNC_STATE: Promise<DefaultSyncsType[]> = IndexedDBTarget.create().then((idbTarget) => [
     {
-        target: new MemoryTarget({ delay: 1000, preserveValueOnSave: true }),
+        target: new MemoryTarget({ delay: 1000 }),
         compressed: true,
     },
     {

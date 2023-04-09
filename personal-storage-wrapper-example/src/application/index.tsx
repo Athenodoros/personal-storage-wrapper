@@ -1,4 +1,10 @@
-import { DropboxTarget, GDriveTarget, PersonalStorageManager } from "personal-storage-wrapper";
+import {
+    DropboxTarget,
+    GDriveTarget,
+    IndexedDBTarget,
+    MemoryTarget,
+    PersonalStorageManager,
+} from "personal-storage-wrapper";
 import { useEffect, useState } from "react";
 import { LoadingScreen } from "./LoadingScreen";
 import { SyncDisplay } from "./SyncDisplay";
@@ -28,6 +34,8 @@ export function App() {
             <SyncDisplay
                 syncs={syncs}
                 remove={manager?.removeSync}
+                memory={() => manager?.addSync({ target: new MemoryTarget({ delay: 1000 }), compressed: true })}
+                indexeddb={async () => manager?.addSync({ target: await IndexedDBTarget.create(), compressed: true })}
                 dropbox={async () => {
                     const target = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
                     if (target) manager?.addSync({ target, compressed: true });

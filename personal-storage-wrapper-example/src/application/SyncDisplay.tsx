@@ -4,10 +4,14 @@ import { SyncState, SyncWithState } from "./tracking";
 export const SyncDisplay: React.FC<{
     syncs: SyncWithState[];
     remove?: (sync: SyncWithState) => void;
+    memory: () => void;
+    indexeddb: () => void;
     dropbox: () => void;
     gdrive: () => void;
-}> = ({ syncs, remove, dropbox, gdrive }) => {
-    // console.log(syncs[0].state);
+}> = ({ syncs, remove, memory, indexeddb, dropbox, gdrive }) => {
+    const hasMemorySync = syncs.some((sync) => sync.target.type === "memory");
+    const hasIDBSync = syncs.some((sync) => sync.target.type === "indexeddb");
+
     return (
         <div className="bg-violet-50 w-96 flex flex-col items-center">
             <h2 className="text-xl text-violet-500 mt-6 mb-4 font-semibold">Synced To-Do App</h2>
@@ -15,6 +19,30 @@ export const SyncDisplay: React.FC<{
                 {syncs.map((sync, idx) => (
                     <SourceTableEntry key={idx} sync={sync} remove={remove} />
                 ))}
+                {!hasMemorySync || !hasIDBSync ? (
+                    <div className="text-center text-sm text-slate-400 italic font-light mt-3">
+                        Recreate{" "}
+                        {hasMemorySync ? undefined : (
+                            <a
+                                href="#"
+                                className="text-violet-500 font-normal underline before:content-['↗_']"
+                                onClick={memory}
+                            >
+                                Memory Sync
+                            </a>
+                        )}
+                        {!hasMemorySync && !hasIDBSync ? " or " : undefined}
+                        {hasIDBSync ? undefined : (
+                            <a
+                                href="#"
+                                className="text-violet-500 font-normal underline before:content-['↗_']"
+                                onClick={indexeddb}
+                            >
+                                IndexedDB Sync
+                            </a>
+                        )}
+                    </div>
+                ) : undefined}
             </div>
             <div className="w-64 text-center text-sm text-slate-400 italic font-light">
                 <p className="mb-4">

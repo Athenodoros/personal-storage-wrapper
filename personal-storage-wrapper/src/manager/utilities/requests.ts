@@ -32,15 +32,13 @@ export const readFromSync = <V extends Value, T extends Targets>(
     sync: SyncFromTargets<T>
 ): Result<MaybeValue<V>> =>
     runWithLogger(logger, sync, "DOWNLOAD", () =>
-        sync.target
-            .read()
-            .pmap(
-                async (value) =>
-                    value && {
-                        timestamp: value.timestamp,
-                        value: await getValueFromBuffer<V>(value.buffer, sync.compressed),
-                    }
-            )
+        sync.target.read().pmap(
+            async (value) =>
+                value && {
+                    timestamp: value.timestamp,
+                    value: await getValueFromBuffer<V>(value.buffer, sync.compressed),
+                }
+        )
     );
 
 export const writeToAndUpdateSync = async <V extends Value, T extends Targets>(

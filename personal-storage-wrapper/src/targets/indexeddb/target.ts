@@ -78,6 +78,6 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
     serialise = (): IndexedDBTargetSerialisationConfig => ({ id: this.id });
 
     // Error Handling
-    online = () => this.db !== null;
+    online = () => true;
     equals = (other: Target<any, any>): boolean => other instanceof IndexedDBTarget && other.id === this.id;
 }

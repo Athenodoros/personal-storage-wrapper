@@ -111,7 +111,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
         if (start.type === "final") {
             this.syncs = start.results.map(({ sync }) => sync);
-            this.config.onSyncStatesUpdate(this.syncs);
+            this.onSyncsUpdate(false);
 
             const emptySyncs = start.results
                 .filter(({ value }) => value.type === "value" && value.value === null)
@@ -178,7 +178,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
     private onSyncsUpdate = (sendToChannel: boolean = true) => {
         if (sendToChannel) this.channel.sendUpdatedSyncs(this.syncs);
 
-        this.config.onSyncStatesUpdate(this.syncs);
+        this.config.onSyncStatesUpdate(this.getSyncsCopy());
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
     };
 

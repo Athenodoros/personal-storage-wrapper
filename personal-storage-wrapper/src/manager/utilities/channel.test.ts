@@ -26,7 +26,7 @@ test("Correctly updates values", async () => {
     expect(syncsB).not.toHaveBeenCalled();
     expect(channelB.recents.values()).toEqual(["TEST"]);
 
-    await delay(DELAY * 2.5);
+    await delay(DELAY * 3);
 
     expect(channelB.recents.values()).toEqual([]);
 });

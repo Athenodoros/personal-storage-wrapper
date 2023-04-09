@@ -8,7 +8,7 @@ import { encodeTextToBuffer } from "../../utilities/buffers";
 import { MemoryTarget } from "../memory";
 import { IndexedDBTarget } from "./target";
 
-const TEST_BUFFER = await encodeTextToBuffer("Hello, World!");
+const TEST_BUFFER = await encodeTextToBuffer("Hello, World!", false);
 
 /**
  * jsdom's IDB implementation seems to take time to become available after returning the db instance
@@ -44,8 +44,8 @@ test("Can store multiple values without overrides", async () => {
     const targetA = (await IndexedDBTarget.create())!;
     const targetB = (await IndexedDBTarget.create())!;
 
-    const test1 = await encodeTextToBuffer("Test 1");
-    const test2 = await encodeTextToBuffer("Test 2");
+    const test1 = await encodeTextToBuffer("Test 1", false);
+    const test2 = await encodeTextToBuffer("Test 2", false);
 
     await targetA.write(test1);
     await targetB.write(test2);

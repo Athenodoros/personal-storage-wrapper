@@ -12,7 +12,7 @@ import { getBufferFromValue, getConfigFromSyncs, getSyncsFromConfig, getValueFro
 test("Correctly serialises and deserialises uncompressed buffers", async () => {
     const test = { a: 1, b: [2, 3, 4, "asdfgh"] };
     const buffer = await getBufferFromValue(test, false);
-    expect(buffer).toEqual(await encodeTextToBuffer(JSON.stringify(test)));
+    expect(buffer).toEqual(await encodeTextToBuffer(JSON.stringify(test), false));
 
     const result = await getValueFromBuffer(buffer, false);
     expect(result).toEqual(test);

@@ -53,7 +53,7 @@ export type OfflineSyncStartupBehaviour<V extends Value> = { behaviour: "DEFAULT
 export type OfflineSyncStartupHandler<V extends Value, T extends Targets = DefaultTargetsType> = (
     syncs: {
         sync: SyncFromTargets<T>;
-        value: ResultValueType<null>;
+        value: ResultValueType<V>;
     }[]
 ) => Promise<OfflineSyncStartupBehaviour<V>>;
 

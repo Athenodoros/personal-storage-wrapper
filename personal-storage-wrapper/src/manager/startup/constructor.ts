@@ -31,8 +31,8 @@ import { StartValue } from "./types";
 export const getPSMStartValue = <V extends Value, T extends Targets>(
     syncs: SyncFromTargets<T>[],
     defaultInitialValue: InitialValue<V>,
-    handleAllEmptyAndFailedSyncsOnStartup: OfflineSyncStartupHandler<T, V>,
-    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>,
+    handleAllEmptyAndFailedSyncsOnStartup: OfflineSyncStartupHandler<V, T>,
+    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T>,
     logger: () => SyncOperationLogger<SyncFromTargets<T>>
 ) =>
     new Promise<StartValue<V, T>>(async (resolve) => {
@@ -62,7 +62,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
 
         if (results.some(({ value }) => value.type === "error") && results.every(({ value }) => !value.value)) {
             const behaviour = await handleAllEmptyAndFailedSyncsOnStartup(
-                results as { sync: SyncFromTargets<T>; value: ResultValueType<null> }[]
+                results as { sync: SyncFromTargets<T>; value: ResultValueType<V> }[]
             );
             if (behaviour.behaviour === "VALUE" && !resolved) {
                 resolved = true;

@@ -18,7 +18,7 @@ export const AdditionOperationRunner = async <V extends Value, T extends Targets
     let writes: SyncFromTargets<T>[] = [];
     let update: OperationRunOutput<V, T>["update"];
 
-    const conflicts: Parameters<ConflictingRemoteBehaviour<T, V>>[2] = [];
+    const conflicts: Parameters<ConflictingRemoteBehaviour<V, T>>[2] = [];
     await Promise.all(
         additions.map((sync) =>
             readFromSync<V, T>(logger, sync).then(async (result) => {

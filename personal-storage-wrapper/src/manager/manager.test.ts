@@ -314,7 +314,7 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     expect(syncB.desynced).toBe(false);
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
-        Parameters<ConflictingRemoteBehaviour<DefaultTargetsType, string>>
+        Parameters<ConflictingRemoteBehaviour<string, DefaultTargetsType>>
     >(
         "C",
         [syncA, syncB, syncC],

@@ -75,12 +75,12 @@ const getPSMValue = (
     stores: Sync<MemoryTargetType, MemoryTargetSerialisationConfig>[],
     initialValue: InitialValue<string> = "DEFAULT",
     handleFullyOfflineSyncsOnStartup: OfflineSyncStartupHandler<
-        DefaultTargetsType,
-        string
+        string,
+        DefaultTargetsType
     > = resetToDefaultsOnOfflineTargets,
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<
-        DefaultTargetsType,
-        string
+        string,
+        DefaultTargetsType
     > = resolveStartupConflictsWithRemoteStateAndLatestEdit
 ) =>
     getPSMStartValue<string, DefaultTargetsType>(

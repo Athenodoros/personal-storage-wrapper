@@ -19,7 +19,7 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
         sync: SyncFromTargets<T>;
         result: ResultValueType<MaybeValue<V>>;
     }[],
-    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<T, V>,
+    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T>,
     logger: () => SyncOperationLogger<SyncFromTargets<T>>
 ): Promise<V> => {
     // If conflict or out of date sync, update value using callback

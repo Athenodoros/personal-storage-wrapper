@@ -1,5 +1,5 @@
 import { DropboxTarget, GDriveTarget, MemoryTarget } from "personal-storage-wrapper";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SyncState, SyncWithState } from "./tracking";
 
 export const SyncDisplay: React.FC<{
@@ -10,6 +10,9 @@ export const SyncDisplay: React.FC<{
     dropbox: () => void;
     gdrive: () => void;
 }> = ({ syncs, remove, memory, indexeddb, dropbox, gdrive }) => {
+    const [hasAdded, setHasAdded] = useState(false);
+    useEffect(() => setHasAdded(false), [syncs.map(({ target }) => target.type).join("-")]);
+
     const hasMemorySync = syncs.some((sync) => sync.target.type === "memory");
     const hasIDBSync = syncs.some((sync) => sync.target.type === "indexeddb");
 
@@ -17,17 +20,20 @@ export const SyncDisplay: React.FC<{
         <div className="bg-violet-50 w-96 flex flex-col items-center">
             <h2 className="text-xl text-violet-500 mt-6 mb-4 font-semibold">Synced To-Do App</h2>
             <div className="self-stretch px-4 grow">
-                {syncs.map((sync, idx) => (
-                    <SourceTableEntry key={idx} sync={sync} remove={remove} />
+                {syncs.map((sync) => (
+                    <SourceTableEntry key={JSON.stringify(sync.target.serialise())} sync={sync} remove={remove} />
                 ))}
-                {!hasMemorySync || !hasIDBSync ? (
+                {(!hasMemorySync || !hasIDBSync) && !hasAdded ? (
                     <div className="text-center text-sm text-slate-400 italic font-light mt-3">
                         Recreate{" "}
                         {hasMemorySync ? undefined : (
                             <a
                                 href="#"
                                 className="text-violet-500 font-normal underline before:content-['↗_']"
-                                onClick={memory}
+                                onClick={() => {
+                                    setHasAdded(true);
+                                    memory();
+                                }}
                             >
                                 Memory Sync
                             </a>
@@ -37,7 +43,10 @@ export const SyncDisplay: React.FC<{
                             <a
                                 href="#"
                                 className="text-violet-500 font-normal underline before:content-['↗_']"
-                                onClick={indexeddb}
+                                onClick={() => {
+                                    setHasAdded(true);
+                                    indexeddb();
+                                }}
                             >
                                 IndexedDB Sync
                             </a>

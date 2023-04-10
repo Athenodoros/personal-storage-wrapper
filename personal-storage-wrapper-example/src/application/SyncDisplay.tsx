@@ -1,4 +1,5 @@
 import { DropboxTarget, GDriveTarget, MemoryTarget } from "personal-storage-wrapper";
+import { useState } from "react";
 import { SyncState, SyncWithState } from "./tracking";
 
 export const SyncDisplay: React.FC<{
@@ -92,8 +93,15 @@ const SourceTableEntry: React.FC<{
     sync: SyncWithState;
     remove?: (sync: SyncWithState) => void;
 }> = ({ sync, remove }) => {
+    const [removed, setRemoved] = useState(false);
+
     return (
-        <div className="bg-white rounded-xl border-slate-200 border p-2 flex items-center mb-2">
+        <div
+            className={
+                "bg-white rounded-xl border-slate-200 border p-2 flex items-center mb-2 [&>*]:transition" +
+                (removed ? " [&>*]:opacity-60" : "")
+            }
+        >
             <img
                 className="h-7 ml-2 mr-3"
                 src={
@@ -135,10 +143,22 @@ const SourceTableEntry: React.FC<{
                 </span>
             </div>
             <button
-                className="text-slate-500 rounded-lg p-1 flex hover:text-slate-800 hover:bg-slate-100 transition"
-                onClick={() => remove && remove(sync)}
+                className={
+                    "text-slate-500 rounded-lg p-1 flex transition " +
+                    (removed
+                        ? "animate-spin pointer-events-none cursor-default"
+                        : "hover:text-slate-800 hover:bg-slate-100")
+                }
+                onClick={() => {
+                    if (remove) {
+                        setRemoved(true);
+                        remove(sync);
+                    }
+                }}
             >
-                <span className="material-icons">close</span>
+                <span className={"material-icons" + (removed ? " scale-90" : "")}>
+                    {removed ? "autorenew" : "close"}
+                </span>
             </button>
         </div>
     );

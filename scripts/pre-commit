@@ -2,4 +2,8 @@
 
 echo "Running validations..."
 cd $(git rev-parse --show-toplevel)
-./scripts/validate.sh > /dev/null
+if ! ./scripts/validate.sh > /dev/null ; then
+	echo "Validation failed!"
+	exit 1
+fi
+

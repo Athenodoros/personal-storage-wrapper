@@ -4,7 +4,8 @@ export function App() {
     const [count, setCount] = useState(0);
 
     return (
-        <div className="h-screen w-screen flex justify-center bg-slate-200 py-24">
+        <div className="h-screen w-screen flex flex-col items-center bg-slate-200 overflow-y-scroll">
+            <Buffer />
             <div className="w-[800px]">
                 <h1 className="text-4xl uppercase mb-12 text-slate-400 font-light text-center">PSM Test Page</h1>
                 <Division
@@ -13,7 +14,32 @@ export function App() {
                     image="/dropbox.png"
                     accounts={[{ email: "dropbox@example.com", name: "Harry Potter", selected: true }]}
                 >
-                    <h6 className="font-bold uppercase">Creation</h6>
+                    <Heading title="Creation" />
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Connect In Popup</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Redirect for Auth</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Catch Auth Redirect</h6>
+                        <ActionButton />
+                    </Container>
+                    <Heading title="File Management" />
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Get Timestamp</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Pull File</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Write File</h6>
+                        <ActionButton />
+                    </Container>
                 </Division>
                 <Division
                     title="GDrive"
@@ -21,9 +47,35 @@ export function App() {
                     image="/gdrive.png"
                     accounts={[{ email: "gdrive@example.com", name: "Hermione Granger", selected: true }]}
                 >
-                    <div />
+                    <Heading title="Creation" />
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Connect In Popup</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Redirect for Auth</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Catch Auth Redirect</h6>
+                        <ActionButton />
+                    </Container>
+                    <Heading title="File Management" />
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Get Timestamp</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Pull File</h6>
+                        <ActionButton />
+                    </Container>
+                    <Container className="flex justify-between items-center p-2">
+                        <h6 className="font-semibold leading-none ml-1">Write File</h6>
+                        <ActionButton />
+                    </Container>
                 </Division>
             </div>
+            <Buffer />
         </div>
     );
 }
@@ -37,15 +89,16 @@ const Division: React.FC<
     }>
 > = ({ title, cloud, image, children, accounts }) => (
     <div className="mt-16 border-t-2 border-slate-400 py-6 px-2">
-        <div className="flex flex-row mb-4 items-center">
+        <div className="flex items-center">
             <img src={image} alt={title} className="h-16 bg-slate-800 p-3 rounded-2xl mr-4" />
             <div className="flex flex-col">
                 <h2 className="text-xl text-slate-400 uppercase leading-none">{cloud ? "Cloud" : "Local"}</h2>
                 <h1 className="text-3xl text-slate-800 uppercase font-bold leading-none mt-2">{title}</h1>
             </div>
         </div>
-        <div className="flex flex-row">
-            <div className="flex-0 mr-32">
+        <div className="flex">
+            <div className="flex-0 mr-20">
+                <Heading title="Accounts" />
                 {accounts.map((account) => (
                     <Account {...account} />
                 ))}
@@ -61,7 +114,7 @@ interface AccountType {
     selected: boolean;
 }
 const Account: React.FC<AccountType> = ({ email, name, selected }) => (
-    <div className={"bg-slate-100 w-80 rounded-lg p-1 py-3" + (selected ? " border-slate-500 border-2" : "")}>
+    <Container selected={selected} className="w-72 py-3">
         <div className="flex flex-row items-center">
             <button
                 className={
@@ -71,9 +124,36 @@ const Account: React.FC<AccountType> = ({ email, name, selected }) => (
                 <span className="material-icons">close</span>
             </button>
             <div>
-                <h5 className="text-slate-400 text-sm leading-none">{name}</h5>
+                <h5 className="text-slate-600 text-sm leading-none">{name}</h5>
                 <h5 className="leading-none mt-1.5 font-bold">{email}</h5>
             </div>
         </div>
+    </Container>
+);
+
+const Container: React.FC<React.PropsWithChildren<{ selected?: boolean; className?: string }>> = ({
+    children,
+    selected,
+    className,
+}) => (
+    <div
+        className={
+            (className ?? "") + " bg-slate-100 rounded-lg p-1 mb-2" + (selected ? " border-slate-500 border-2" : "")
+        }
+    >
+        {children}
     </div>
 );
+
+const Heading: React.FC<{ title: string }> = ({ title }) => (
+    <h6 className="font-bold uppercase text-slate-400 mb-2 mt-4">{title}</h6>
+);
+
+const ActionButton: React.FC = () => (
+    <button className="text-sky-600 flex py-0.5 pl-2 rounded-md hover:bg-sky-100 active:bg-sky-600 active:text-sky-100">
+        <h6>Run</h6>
+        <span className="material-icons scale-75 ml-2">arrow_forward_ios</span>
+    </button>
+);
+
+const Buffer: React.FC = () => <div className="h-24 flex-none w-1" />;

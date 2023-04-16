@@ -85,8 +85,6 @@ export const catchRedirectForAuth = async (): Promise<DropboxConnection | null> 
     const code = new URLSearchParams(window.location.search).get("code");
     if (!code) return null;
 
-    window.history.replaceState(null, "", redirectURI);
-
     const expiry = new Date();
     const access = await getAccessTokenForAuthCode(
         clientId,
@@ -104,7 +102,7 @@ export const runAuthInPopup = async (clientId: string, redirectURI?: string): Pr
 
     // Open separate window for auth
     const { url, verifier } = await getAuthRedirectDetails(clientId, definiteRedirectURI);
-    const code = await getFromPopup({ url }, (context) => {
+    const code = await getFromPopup({ url, height: 800, width: 680 }, (context) => {
         if (context.location.href.split("?")[0] !== redirectURI) return null;
         return new URLSearchParams(context.location.search).get("code");
     });

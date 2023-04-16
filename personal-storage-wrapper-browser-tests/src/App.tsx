@@ -2,14 +2,26 @@ import { DropboxTarget, GDriveTarget } from "personal-storage-wrapper";
 import { useState } from "react";
 
 interface AccountState {
-    dropbox: DropboxTarget[];
-    gdrive: GDriveTarget[];
+    dropbox: {
+        id: string;
+        target: DropboxTarget;
+    }[];
+    gdrive: {
+        id: string;
+        target: GDriveTarget;
+    }[];
 }
 
 const LOCAL_STORAGE_KEY = "PSW_BROWSER_TEST_STORAGE";
 interface StoredState {
-    dropbox: string[];
-    gdrive: string[];
+    dropbox: {
+        id: string;
+        target: string;
+    }[];
+    gdrive: {
+        id: string;
+        target: string;
+    }[];
 }
 
 export function App() {
@@ -18,15 +30,33 @@ export function App() {
         if (!stored) return { dropbox: [], gdrive: [] };
         const state = JSON.parse(stored) as StoredState;
         return {
-            dropbox: state.dropbox.map((serialised) => DropboxTarget.deserialise(JSON.parse(serialised))),
-            gdrive: state.gdrive.map((serialised) => GDriveTarget.deserialise(JSON.parse(serialised))),
+            dropbox: state.dropbox.map((serialised) => ({
+                id: serialised.id,
+                target: DropboxTarget.deserialise(JSON.parse(serialised.target)),
+            })),
+            gdrive: state.gdrive.map((serialised) => ({
+                id: serialised.id,
+                target: GDriveTarget.deserialise(JSON.parse(serialised.target)),
+            })),
         };
     });
+
+    const [selectedDropbox, setSelectedDropbox] = useState<DropboxTarget | null>(
+        () => accounts.dropbox[0]?.target ?? null
+    );
+    const [selectedGDrive, setSelectedGDrive] = useState<GDriveTarget | null>(() => accounts.gdrive[0]?.target ?? null);
+
     const setAccounts = (update: AccountState) => {
         rawSetAccounts(update);
+
+        if (update.dropbox.length !== 0 && selectedDropbox === null) setSelectedDropbox(update.dropbox[0].target);
+        else if (!update.dropbox.includes(selectedDropbox as any)) setSelectedDropbox(null);
+        if (update.gdrive.length !== 0 && selectedGDrive === null) setSelectedGDrive(update.gdrive[0].target);
+        else if (!update.gdrive.includes(selectedGDrive as any)) setSelectedGDrive(null);
+
         const state: StoredState = {
-            dropbox: update.dropbox.map((target) => JSON.stringify(target.serialise())),
-            gdrive: update.gdrive.map((target) => JSON.stringify(target.serialise())),
+            dropbox: update.dropbox.map(({ id, target }) => ({ id, target: JSON.stringify(target.serialise()) })),
+            gdrive: update.gdrive.map(({ id, target }) => ({ id, target: JSON.stringify(target.serialise()) })),
         };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
     };
@@ -40,19 +70,33 @@ export function App() {
                     title="Dropbox"
                     cloud={true}
                     image="/dropbox.png"
-                    accounts={[{ email: "dropbox@example.com", name: "Harry Potter", selected: true }]}
+                    accounts={accounts.dropbox.map(({ id, target }) => ({
+                        subtitle: target.user.email,
+                        title: id,
+                        select: () => setSelectedDropbox(target),
+                        selected: target === selectedDropbox,
+                        remove: () =>
+                            setAccounts({
+                                gdrive: accounts.gdrive,
+                                dropbox: accounts.dropbox.filter((candidate) => target !== candidate.target),
+                            }),
+                    }))}
                 >
                     <Heading title="Creation" />
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Connect In Popup</h6>
                         <ActionButton
                             run={() =>
-                                DropboxTarget.setupInPopup("3m19g9vaop7nvrb", window.location.origin + "/dropbox-popup")
+                                DropboxTarget.setupInPopup(
+                                    "3m19g9vaop7nvrb",
+                                    window.location.origin + "/dropbox-popup",
+                                    "/data.json.tgz"
+                                )
                             }
                             then={(target) => {
                                 if (target)
                                     setAccounts({
-                                        dropbox: accounts.dropbox.concat([target]),
+                                        dropbox: accounts.dropbox.concat([{ id: getDateString(), target }]),
                                         gdrive: accounts.gdrive,
                                     });
                             }}
@@ -60,11 +104,31 @@ export function App() {
                     </Container>
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Redirect for Auth</h6>
-                        <ActionButton />
+                        <ActionButton
+                            run={() =>
+                                DropboxTarget.redirectForAuth(
+                                    "3m19g9vaop7nvrb",
+                                    window.location.origin + "/dropbox-redirect"
+                                )
+                            }
+                        />
                     </Container>
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Catch Auth Redirect</h6>
-                        <ActionButton />
+                        <ActionButton
+                            run={() => {
+                                const promise = DropboxTarget.catchRedirectForAuth("/data.json.tgz");
+                                window.history.replaceState(null, "", window.location.origin);
+                                return promise;
+                            }}
+                            then={(target) => {
+                                if (target)
+                                    setAccounts({
+                                        dropbox: accounts.dropbox.concat([{ id: getDateString(), target }]),
+                                        gdrive: accounts.gdrive,
+                                    });
+                            }}
+                        />
                     </Container>
                     <Heading title="File Management" />
                     <Container className="flex justify-between items-center p-2">
@@ -84,7 +148,17 @@ export function App() {
                     title="GDrive"
                     cloud={true}
                     image="/gdrive.png"
-                    accounts={[{ email: "gdrive@example.com", name: "Hermione Granger", selected: true }]}
+                    accounts={accounts.gdrive.map(({ id, target }) => ({
+                        subtitle: target.user.email,
+                        title: id,
+                        select: () => setSelectedGDrive(target),
+                        selected: target === selectedGDrive,
+                        remove: () =>
+                            setAccounts({
+                                dropbox: accounts.dropbox,
+                                gdrive: accounts.gdrive.filter((candidate) => target !== candidate.target),
+                            }),
+                    }))}
                 >
                     <Heading title="Creation" />
                     <Container className="flex justify-between items-center p-2">
@@ -136,10 +210,10 @@ const Division: React.FC<
             </div>
         </div>
         <div className="flex">
-            <div className="flex-0 mr-20">
+            <div className="flex-0 mr-20 w-80">
                 <Heading title="Accounts" />
                 {accounts.map((account) => (
-                    <Account {...account} />
+                    <Account key={account.title + "-" + account.subtitle} {...account} />
                 ))}
             </div>
             <div className="grow">{children}</div>
@@ -147,15 +221,32 @@ const Division: React.FC<
     </div>
 );
 
+const getDateString = () => {
+    const date = new Date();
+    return `${date.toLocaleString("default", {
+        month: "long",
+    })} ${date.getDate()}, ${date.getHours()}:${date.getMinutes()}`;
+};
+
 interface AccountType {
-    email: string;
-    name: string;
+    title: string;
+    subtitle: string;
+    select: () => void;
     selected: boolean;
+    remove: () => void;
 }
-const Account: React.FC<AccountType> = ({ email, name, selected }) => (
-    <Container selected={selected} className="w-72 py-3">
+const Account: React.FC<AccountType> = ({ title, subtitle, select, selected, remove }) => (
+    <Container
+        selected={selected}
+        onClick={select}
+        className={
+            "py-3 border-2 transition-all hover:bg-slate-200 cursor-pointer " +
+            (selected ? "hover:border-slate-900" : "hover:border-slate-400")
+        }
+    >
         <div className="flex flex-row items-center">
             <button
+                onClick={remove}
                 className={
                     "text-slate-400 rounded-lg flex transition hover:bg-slate-200 active:bg-slate-400 active:text-slate-700 mx-3"
                 }
@@ -163,21 +254,20 @@ const Account: React.FC<AccountType> = ({ email, name, selected }) => (
                 <span className="material-icons">close</span>
             </button>
             <div>
-                <h5 className="text-slate-600 text-sm leading-none">{name}</h5>
-                <h5 className="leading-none mt-1.5 font-bold">{email}</h5>
+                <h5 className="text-slate-600 text-sm leading-none">{subtitle}</h5>
+                <h5 className="leading-none mt-1.5 font-bold">{title}</h5>
             </div>
         </div>
     </Container>
 );
 
-const Container: React.FC<React.PropsWithChildren<{ selected?: boolean; className?: string }>> = ({
-    children,
-    selected,
-    className,
-}) => (
+const Container: React.FC<
+    React.PropsWithChildren<{ selected?: boolean; className?: string; onClick?: () => void }>
+> = ({ children, selected, className, onClick }) => (
     <div
+        onClick={onClick}
         className={
-            (className ?? "") + " bg-slate-100 rounded-lg p-1 mb-2" + (selected ? " border-slate-500 border-2" : "")
+            "bg-slate-100 rounded-lg p-1 mb-2" + (selected ? " border-slate-500 border-2 " : " ") + (className ?? "")
         }
     >
         {children}
@@ -193,10 +283,14 @@ const ActionButton = <T,>({ run, then }: { run?: () => Promise<T>; then?: (t: T)
 
     const onClick = async () => {
         setClicked(true);
-        const result = run && (await run());
-        // console.log(result);
-        if (then) await then(result!);
-        setClicked(false);
+        try {
+            const result = run && (await run());
+            console.log(result);
+            if (then) await then(result!);
+            setClicked(false);
+        } catch {
+            setClicked(false);
+        }
     };
 
     return (

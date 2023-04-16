@@ -28,10 +28,22 @@ export const getFromPopup = <T>(
     if (context === null) return Promise.resolve(null);
 
     return new Promise<T | null>((resolve) => {
-        context.onload = () => {
-            const result = callback(context);
-            resolve(result);
-            context.close();
-        };
+        const setPoll = () =>
+            setTimeout(() => {
+                try {
+                    if (context.closed) {
+                        resolve(null);
+                    } else if (context.location.origin === window.location.origin) {
+                        resolve(callback(context));
+                        context.close();
+                    } else {
+                        setPoll();
+                    }
+                } catch {
+                    setPoll();
+                }
+            }, 50);
+
+        setPoll();
     });
 };

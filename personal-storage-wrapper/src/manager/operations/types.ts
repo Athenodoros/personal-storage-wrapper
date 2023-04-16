@@ -1,24 +1,25 @@
-import { PSMConfig, SyncFromTargets, SyncOperationLogger, Targets, Value, ValueUpdateOrigin } from "../types";
+import { Target } from "../../targets";
+import { PSMConfig, Sync, SyncOperationLogger, Value, ValueUpdateOrigin } from "../types";
 
-export interface OperationRunConfig<V extends Value, T extends Targets, S = null> {
+export interface OperationRunConfig<V extends Value, T extends Target<any, any>, S = null> {
     args: S[];
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>;
+    logger: () => SyncOperationLogger<Sync<T>>;
     value: V;
     recents: V[];
     config: PSMConfig<V, T>;
-    syncs: SyncFromTargets<T>[];
+    syncs: Sync<T>[];
 }
 
-export interface OperationRunOutput<V extends Value, T extends Targets> {
+export interface OperationRunOutput<V extends Value, T extends Target<any, any>> {
     update?: {
         value: V;
         origin: ValueUpdateOrigin;
     };
-    writes?: SyncFromTargets<T>[];
-    syncs?: SyncFromTargets<T>[];
+    writes?: Sync<T>[];
+    syncs?: Sync<T>[];
     skipChannel?: boolean;
 }
 
-export type OperationRunner<S> = <V extends Value = Value, T extends Targets = Targets>(
+export type OperationRunner<S> = <V extends Value = Value, T extends Target<any, any> = Target<any, any>>(
     config: OperationRunConfig<V, T, S>
 ) => Promise<OperationRunOutput<V, T>>;

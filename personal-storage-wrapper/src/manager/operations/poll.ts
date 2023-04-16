@@ -1,20 +1,21 @@
+import { Target } from "../../targets";
 import { deepEquals, deepEqualsList } from "../../utilities/data";
-import { ConflictingRemoteBehaviour, SyncFromTargets, Targets, Value } from "../types";
+import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
 import { readFromSync, timestampFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
-export const PollOperationRunner = async <V extends Value, T extends Targets>({
+export const PollOperationRunner = async <V extends Value, T extends Target<any, any>>({
     syncs,
     logger,
     value,
     recents,
     config,
 }: OperationRunConfig<V, T>): Promise<OperationRunOutput<V, T>> => {
-    let writes: SyncFromTargets<T>[] = [];
+    let writes: Sync<T>[] = [];
     let update: OperationRunOutput<V, T>["update"];
 
     const conflicts: Parameters<ConflictingRemoteBehaviour<V, T>>[2] = [];
-    const failures: SyncFromTargets<T>[] = [];
+    const failures: Sync<T>[] = [];
     await Promise.all(
         syncs.map(async (sync) => {
             const timestamp = await timestampFromSync(logger, sync);

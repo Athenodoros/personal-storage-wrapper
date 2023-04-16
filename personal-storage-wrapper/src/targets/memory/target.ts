@@ -44,18 +44,16 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
         });
 
     // Serialisation
-    static deserialise: Deserialiser<MemoryTargetType, MemoryTargetSerialisationConfig> = (config) =>
-        Promise.resolve(
-            new MemoryTarget({
-                delay: config.delay,
-                fails: config.fails,
-                preserveValueOnSave: config.preserveValueOnSave,
-                value: config.value && {
-                    timestamp: new Date(config.value.timestamp),
-                    buffer: encodeToArrayBuffer(config.value.encoded),
-                },
-            })
-        );
+    static deserialise: Deserialiser<MemoryTarget, false> = (config) =>
+        new MemoryTarget({
+            delay: config.delay,
+            fails: config.fails,
+            preserveValueOnSave: config.preserveValueOnSave,
+            value: config.value && {
+                timestamp: new Date(config.value.timestamp),
+                buffer: encodeToArrayBuffer(config.value.encoded),
+            },
+        });
 
     serialise = () => ({
         preserveValueOnSave: this.preserveValueOnSave,

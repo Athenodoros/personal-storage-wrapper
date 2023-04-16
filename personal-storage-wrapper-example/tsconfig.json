@@ -15,6 +15,9 @@
         "isolatedModules": true,
         "noEmit": true,
         "jsx": "react-jsx",
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "noImplicitReturns": true,
         "paths": {
             // For VS Code, otherwise it can't find the libraries
             "personal-storage-wrapper": ["../personal-storage-wrapper/src/main.ts"]

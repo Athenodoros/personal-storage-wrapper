@@ -1,26 +1,26 @@
+import { Target } from "../../targets";
 import { ResultValueType } from "../../targets/result";
 import { deepEquals } from "../../utilities/data";
 import {
     ConflictingSyncStartupBehaviour,
     MaybeValue,
-    SyncFromTargets,
+    Sync,
     SyncOperationLogger,
-    Targets,
     TimestampedValue,
     Value,
 } from "../types";
-import { DefaultTargetsType } from "../utilities/defaults";
+import {} from "../utilities/defaults";
 import { writeToAndUpdateSync } from "../utilities/requests";
 
-export const handleInitialSyncValuesAndGetResult = async <V extends Value, T extends Targets = DefaultTargetsType>(
+export const handleInitialSyncValuesAndGetResult = async <V extends Value, T extends Target<any, any>>(
     value: V,
     getValue: () => V,
     results: {
-        sync: SyncFromTargets<T>;
+        sync: Sync<T>;
         result: ResultValueType<MaybeValue<V>>;
     }[],
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T>,
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>
+    logger: () => SyncOperationLogger<Sync<T>>
 ): Promise<V> => {
     // If conflict or out of date sync, update value using callback
     if (results.some(({ result }) => result.value && !deepEquals(result.value?.value, value))) {

@@ -1,3 +1,5 @@
+import { DefaultTarget } from "../main";
+import { Target } from "../targets";
 import { deepEquals, fromKeys, uniqEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
@@ -11,22 +13,19 @@ import {
     InitialValue,
     PSMConfig,
     PSMCreationConfig,
-    SyncFromTargets,
-    TargetFromTargets,
-    Targets,
+    Sync,
     TimestampedValue,
     Value,
     ValueUpdateOrigin,
 } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
-import { DefaultTargetsType } from "./utilities/defaults";
 import { writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
-export class PersonalStorageManager<V extends Value, T extends Targets = DefaultTargetsType> {
+export class PersonalStorageManager<V extends Value, T extends Target<any, any> = DefaultTarget> {
     private value: TimestampedValue<V>;
     private operations: OperationState;
-    private syncs: SyncFromTargets<T>[];
+    private syncs: Sync<T>[];
     private channel: PSMBroadcastChannel<V, T>;
     public config: PSMConfig<V, T>;
 
@@ -35,16 +34,16 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      */
     static createWithCache<V extends Value>(
         defaultInitialValue: InitialValue<V>,
-        config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
-    ): Promise<PersonalStorageManager<V, DefaultTargetsType>>;
+        config?: Partial<PSMCreationConfig<V, DefaultTarget>>
+    ): Promise<PersonalStorageManager<V, DefaultTarget>>;
 
-    static createWithCache<V extends Value, T extends Targets>(
+    static createWithCache<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         config: Partial<PSMCreationConfig<V, T>>,
         deserialisers: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>>;
 
-    static createWithCache<V extends Value, T extends Targets>(
+    static createWithCache<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
         maybeDeserialisers?: Deserialisers<T>
@@ -60,16 +59,16 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
 
     static create<V extends Value>(
         defaultInitialValue: InitialValue<V>,
-        config?: Partial<PSMCreationConfig<V, DefaultTargetsType>>
-    ): Promise<PersonalStorageManager<V, DefaultTargetsType>>;
+        config?: Partial<PSMCreationConfig<V, DefaultTarget>>
+    ): Promise<PersonalStorageManager<V, DefaultTarget>>;
 
-    static create<V extends Value, T extends Targets>(
+    static create<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         config: Partial<PSMCreationConfig<V, T>>,
         deserialisers: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>>;
 
-    static create<V extends Value, T extends Targets>(
+    static create<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
         maybeDeserialisers?: Deserialisers<T>
@@ -104,7 +103,7 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
                 )
                     this.setNewValue(value.value, "BROADCAST");
             },
-            (syncs: SyncFromTargets<T>[]) => this.enqueueOperation("update", syncs)
+            (syncs: Sync<T>[]) => this.enqueueOperation("update", syncs)
         );
         this.config = config;
         this.value = { value: start.value, timestamp: new Date() };
@@ -156,12 +155,12 @@ export class PersonalStorageManager<V extends Value, T extends Targets = Default
      * Sync Management
      */
 
-    private getSyncsCopy = (): SyncFromTargets<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
+    private getSyncsCopy = (): Sync<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
     public getSyncsState = this.getSyncsCopy;
-    public addTarget = (target: TargetFromTargets<T>, compressed: boolean = true): Promise<void> =>
+    public addTarget = (target: T, compressed: boolean = true): Promise<void> =>
         this.enqueueOperation("addition", { target, compressed });
-    public addSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("addition", sync);
-    public removeSync = (sync: SyncFromTargets<T>): Promise<void> => this.enqueueOperation("removal", sync);
+    public addSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("addition", sync);
+    public removeSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("removal", sync);
     public poll = (): Promise<void> => this.enqueueOperation("poll", null);
 
     /**

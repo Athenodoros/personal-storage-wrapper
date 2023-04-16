@@ -1,5 +1,5 @@
 {
-    "name": "personal-storage-wrapper-tests",
+    "name": "personal-storage-wrapper-browser-tests",
     "private": true,
     "version": "0.0.0",
     "type": "module",

@@ -1,11 +1,12 @@
+import { Target } from "../../targets";
 import { Result } from "../../targets/result";
-import { MaybeValue, SyncFromTargets, SyncOperation, SyncOperationLogger, Targets, Value } from "../types";
+import { MaybeValue, Sync, SyncOperation, SyncOperationLogger, Value } from "../types";
 import { getBufferFromValue, getValueFromBuffer } from "./serialisation";
 
 // Exported only for tests
-export const runWithLogger = <S, T extends Targets>(
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
-    sync: SyncFromTargets<T>,
+export const runWithLogger = <S, T extends Target<any, any>>(
+    logger: () => SyncOperationLogger<Sync<T>>,
+    sync: Sync<T>,
     operation: SyncOperation,
     runner: () => Result<S>
 ): Result<S> => {
@@ -22,14 +23,14 @@ export const runWithLogger = <S, T extends Targets>(
     return promise;
 };
 
-export const timestampFromSync = <T extends Targets>(
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
-    sync: SyncFromTargets<T>
+export const timestampFromSync = <T extends Target<any, any>>(
+    logger: () => SyncOperationLogger<Sync<T>>,
+    sync: Sync<T>
 ): Result<Date | null> => runWithLogger(logger, sync, "POLL", () => sync.target.timestamp());
 
-export const readFromSync = <V extends Value, T extends Targets>(
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
-    sync: SyncFromTargets<T>
+export const readFromSync = <V extends Value, T extends Target<any, any>>(
+    logger: () => SyncOperationLogger<Sync<T>>,
+    sync: Sync<T>
 ): Result<MaybeValue<V>> =>
     runWithLogger(logger, sync, "DOWNLOAD", () =>
         sync.target.read().pmap(
@@ -41,9 +42,9 @@ export const readFromSync = <V extends Value, T extends Targets>(
         )
     );
 
-export const writeToAndUpdateSync = async <V extends Value, T extends Targets>(
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>,
-    sync: SyncFromTargets<T>,
+export const writeToAndUpdateSync = async <V extends Value, T extends Target<any, any>>(
+    logger: () => SyncOperationLogger<Sync<T>>,
+    sync: Sync<T>,
     value: V
 ): Promise<void> => {
     const buffer = await getBufferFromValue(value, sync.compressed);

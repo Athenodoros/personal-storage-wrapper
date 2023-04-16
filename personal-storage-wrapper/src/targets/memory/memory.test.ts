@@ -32,10 +32,10 @@ test("Correctly handles basic storage and retrieval", async () => {
     const target = new MemoryTarget({ delay: DELAY_MILLIS });
     const start = new Date().valueOf();
 
-    const result = await target.write(await encodeToArrayBuffer(TEST_STRING));
+    const result = await target.write(encodeToArrayBuffer(TEST_STRING));
     const read = await target.read();
 
-    expect(await decodeFromArrayBuffer(read.value!.buffer)).toEqual(TEST_STRING);
+    expect(decodeFromArrayBuffer(read.value!.buffer)).toEqual(TEST_STRING);
     expect(start + DELAY_MILLIS - TEST_TIME_TOLERANCE_MILLIS).lessThanOrEqual(result.value?.valueOf() ?? 0);
     expect(result.value).toEqual(read.value?.timestamp);
 });
@@ -47,22 +47,22 @@ test("Can store multiple values without overrides", async () => {
     const test1 = "Test 1";
     const test2 = "Test 2";
 
-    await targetA.write(await encodeToArrayBuffer(test1));
-    await targetB.write(await encodeToArrayBuffer(test2));
+    await targetA.write(encodeToArrayBuffer(test1));
+    await targetB.write(encodeToArrayBuffer(test2));
 
     const result1 = await targetA.read();
     const result2 = await targetB.read();
 
-    expect(await decodeFromArrayBuffer(result1.value!.buffer)).toEqual(test1);
-    expect(await decodeFromArrayBuffer(result2.value!.buffer)).toEqual(test2);
+    expect(decodeFromArrayBuffer(result1.value!.buffer)).toEqual(test1);
+    expect(decodeFromArrayBuffer(result2.value!.buffer)).toEqual(test2);
 });
 
 test("Correctly serialises for resetting targets", async () => {
     const target = new MemoryTarget({ preserveValueOnSave: false });
-    await target.write(await encodeToArrayBuffer(TEST_STRING));
+    await target.write(encodeToArrayBuffer(TEST_STRING));
 
     const config = JSON.stringify(target.serialise());
-    const newTarget = await MemoryTarget.deserialise(JSON.parse(config));
+    const newTarget = MemoryTarget.deserialise(JSON.parse(config));
     expect(newTarget).not.toBeNull();
 
     const read = await newTarget!.read();
@@ -74,7 +74,7 @@ test("Correctly serialises for preserving targets", async () => {
     await target.write(await compress(TEST_STRING));
 
     const config = JSON.stringify(target.serialise());
-    const newTarget = await MemoryTarget.deserialise(JSON.parse(config));
+    const newTarget = MemoryTarget.deserialise(JSON.parse(config));
     expect(newTarget).not.toBeNull();
 
     const read = await newTarget!.read();

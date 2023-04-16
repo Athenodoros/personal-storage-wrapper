@@ -3,8 +3,7 @@
  */
 
 import { expect, test, vi } from "vitest";
-import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
-import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
+import { MemoryTarget } from "../../targets/memory";
 import { Result } from "../../targets/result";
 import { compress } from "../../utilities/buffers/compression";
 import { encodeToArrayBuffer } from "../../utilities/buffers/encoding";
@@ -72,10 +71,7 @@ test("Writes and reads compressed values correctly", async () => {
     expect((await readFromSync(() => noop, sync)).value?.value).toBe(1);
 });
 
-const runRequestTest = async (
-    fails: boolean,
-    runner: (sync: Sync<MemoryTargetType, MemoryTargetSerialisationConfig>) => Result<any>
-) => {
+const runRequestTest = async (fails: boolean, runner: (sync: Sync<MemoryTarget>) => Result<any>) => {
     const logger = vi.fn();
     const sync = await getTestSync({ fails });
 

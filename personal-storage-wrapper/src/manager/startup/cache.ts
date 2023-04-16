@@ -1,7 +1,8 @@
+import { Target } from "../../targets";
 import { deepEquals, identity, orderByAsc } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
 import { PersonalStorageManager } from "../manager";
-import { Deserialisers, InitialValue, PSMConfig, PSMCreationConfig, Targets, Value } from "../types";
+import { Deserialisers, InitialValue, PSMConfig, PSMCreationConfig, Value } from "../types";
 import { DefaultDeserialisers } from "../utilities/defaults";
 import { createPSM } from "./constructor";
 import { StartValue } from "./types";
@@ -15,7 +16,7 @@ const anyCache: Record<
     }
 > = {};
 
-export function createPSMWithCache<V extends Value, T extends Targets>(
+export function createPSMWithCache<V extends Value, T extends Target<any, any>>(
     createPSMObject: (
         id: string,
         start: StartValue<V, T>,

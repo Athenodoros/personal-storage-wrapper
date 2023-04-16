@@ -1,4 +1,4 @@
-import { DefaultSyncsType, SyncOperationLogger } from "personal-storage-wrapper";
+import { Sync, SyncOperationLogger } from "personal-storage-wrapper";
 
 export type SyncStateConnection = "CONNECTED" | "OFFLINE" | "ERROR";
 export type SyncStateOperation = "POLL" | "DOWNLOAD" | "UPLOAD" | null;
@@ -8,24 +8,24 @@ export interface SyncState {
     operation: SyncStateOperation;
 }
 
-export type SyncWithState = DefaultSyncsType & { state: SyncState };
+export type SyncWithState = Sync & { state: SyncState };
 
 const BaselineState: SyncState = { connection: "CONNECTED", operation: null };
 
 export const trackSyncState = (
     callback: (syncs: SyncWithState[]) => void = () => void null
 ): {
-    handleSyncOperationLog: SyncOperationLogger<DefaultSyncsType>;
-    onSyncStatesUpdate: (syncs: DefaultSyncsType[]) => void;
+    handleSyncOperationLog: SyncOperationLogger<Sync>;
+    onSyncStatesUpdate: (syncs: Sync[]) => void;
     setCallback: (callback: (syncs: SyncWithState[]) => void) => void;
     getState: () => SyncWithState[];
 } => {
-    const map = new WeakMap<DefaultSyncsType["target"], SyncState>();
-    let syncs: DefaultSyncsType[] = [];
+    const map = new WeakMap<Sync["target"], SyncState>();
+    let syncs: Sync[] = [];
     const getState = () => syncs.map((sync) => ({ ...sync, state: map.get(sync.target) ?? BaselineState }));
     const send = () => callback(getState());
 
-    const onSyncStatesUpdate = (newSyncs: DefaultSyncsType[]) => {
+    const onSyncStatesUpdate = (newSyncs: Sync[]) => {
         syncs = newSyncs;
         send();
     };

@@ -1,4 +1,4 @@
-import { DefaultSyncsType, IndexedDBTarget, MemoryTarget } from "personal-storage-wrapper";
+import { IndexedDBTarget, MemoryTarget, Sync } from "personal-storage-wrapper";
 
 export interface ToDoItem {
     id: number;
@@ -13,7 +13,7 @@ export const DEFAULT_TODO_ITEMS: ToDoItem[] = [
     { id: 4, text: "Try again offline" },
 ];
 
-export const DEFAULT_SYNC_STATE: Promise<DefaultSyncsType[]> = IndexedDBTarget.create().then((idbTarget) => [
+export const DEFAULT_SYNC_STATE: Promise<Sync[]> = IndexedDBTarget.create().then((idbTarget) => [
     {
         target: new MemoryTarget({ delay: 1000 }),
         compressed: true,

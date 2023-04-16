@@ -1,8 +1,6 @@
 export type {
     // Basic Types
     Sync,
-    Targets,
-    SyncFromTargets,
     Value,
     TimestampedValue,
 
@@ -26,7 +24,7 @@ export type {
     ConflictingRemoteBehaviour,
 } from "./types";
 
-export type { DefaultTargetsType, DefaultSyncsType } from "./utilities/defaults";
+export type { DefaultTarget } from "./utilities/defaults";
 export {
     // Deserialisers
     DefaultDeserialisers,

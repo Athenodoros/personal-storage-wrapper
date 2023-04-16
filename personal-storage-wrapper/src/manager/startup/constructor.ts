@@ -1,3 +1,4 @@
+import { Target } from "../../targets";
 import { ResultValueType } from "../../targets/result";
 import { noop } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
@@ -9,9 +10,8 @@ import {
     OfflineSyncStartupHandler,
     PSMConfig,
     PSMCreationConfig,
-    SyncFromTargets,
+    Sync,
     SyncOperationLogger,
-    Targets,
     Value,
 } from "../types";
 import {
@@ -28,12 +28,12 @@ import { getSyncsFromConfig } from "../utilities/serialisation";
 import { StartValue } from "./types";
 
 // Only exported for testing
-export const getPSMStartValue = <V extends Value, T extends Targets>(
-    syncs: SyncFromTargets<T>[],
+export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
+    syncs: Sync<T>[],
     defaultInitialValue: InitialValue<V>,
     handleAllEmptyAndFailedSyncsOnStartup: OfflineSyncStartupHandler<V, T>,
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T>,
-    logger: () => SyncOperationLogger<SyncFromTargets<T>>
+    logger: () => SyncOperationLogger<Sync<T>>
 ) =>
     new Promise<StartValue<V, T>>(async (resolve) => {
         // Pull values from all syncs
@@ -62,7 +62,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
 
         if (results.some(({ value }) => value.type === "error") && results.every(({ value }) => !value.value)) {
             const behaviour = await handleAllEmptyAndFailedSyncsOnStartup(
-                results as { sync: SyncFromTargets<T>; value: ResultValueType<V> }[]
+                results as { sync: Sync<T>; value: ResultValueType<V> }[]
             );
             if (behaviour.behaviour === "VALUE" && !resolved) {
                 resolved = true;
@@ -83,7 +83,7 @@ export const getPSMStartValue = <V extends Value, T extends Targets>(
 
 const managers = new Set<string>();
 
-export async function createPSM<V extends Value, T extends Targets>(
+export async function createPSM<V extends Value, T extends Target<any, any>>(
     createPSMObject: (
         id: string,
         start: StartValue<V, T>,
@@ -104,7 +104,7 @@ export async function createPSM<V extends Value, T extends Targets>(
         id = "psm-default-id",
         ignoreDuplicateCheck = false,
         getDefaultSyncs = (maybeDeserialisers ? () => Promise.resolve([]) : getDefaultSyncStates) as () => Promise<
-            SyncFromTargets<T>[]
+            Sync<T>[]
         >,
         getSyncData = getSyncDataFromLocalStorage,
         handleAllEmptyAndFailedSyncsOnStartup = resetToDefaultsOnOfflineTargets,

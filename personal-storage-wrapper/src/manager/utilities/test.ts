@@ -1,6 +1,5 @@
 import { DropboxTarget } from "../../targets";
-import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
-import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
+import { MemoryTarget } from "../../targets/memory";
 import { Sync, Value } from "../types";
 import { getBufferFromValue } from "../utilities/serialisation";
 
@@ -29,13 +28,15 @@ const getTestSyncAndValue = async <V extends Value>({
         buffer: await getBufferFromValue(raw, compressed),
     };
     const target = new MemoryTarget({ value, preserveValueOnSave: true, ...config });
-    const sync: Sync<MemoryTargetType, MemoryTargetSerialisationConfig> = { target, compressed };
+    const sync: Sync<MemoryTarget> = { target, compressed };
 
     return { sync, value };
 };
 
-export const getTestDropBoxSync = async ({ compressed = false }: { compressed?: boolean } = {}) => ({
-    target: await DropboxTarget.deserialise({
+export const getTestDropBoxSync = async ({ compressed = false }: { compressed?: boolean } = {}): Promise<
+    Sync<DropboxTarget>
+> => ({
+    target: DropboxTarget.deserialise({
         connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date() },
         user: { id: "", email: "", name: "" },
         path: "/data.bak",

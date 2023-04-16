@@ -1,10 +1,9 @@
 import { expect, test } from "vitest";
-import { MemoryTargetType } from "../../targets/memory";
-import { MemoryTargetSerialisationConfig } from "../../targets/memory/types";
+import { MemoryTarget } from "../../targets/memory";
 import { noop } from "../../utilities/data";
 import { ConflictingSyncStartupBehaviour, InitialValue, OfflineSyncStartupHandler, Sync } from "../types";
 import {
-    DefaultTargetsType,
+    DefaultTarget,
     resetToDefaultsOnOfflineTargets,
     resolveStartupConflictsWithRemoteStateAndLatestEdit,
 } from "../utilities/defaults";
@@ -72,18 +71,18 @@ test("Uses default value if required", async () => {
  * Utilities
  */
 const getPSMValue = (
-    stores: Sync<MemoryTargetType, MemoryTargetSerialisationConfig>[],
+    stores: Sync<MemoryTarget>[],
     initialValue: InitialValue<string> = "DEFAULT",
     handleFullyOfflineSyncsOnStartup: OfflineSyncStartupHandler<
         string,
-        DefaultTargetsType
+        DefaultTarget
     > = resetToDefaultsOnOfflineTargets,
     resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<
         string,
-        DefaultTargetsType
+        DefaultTarget
     > = resolveStartupConflictsWithRemoteStateAndLatestEdit
 ) =>
-    getPSMStartValue<string, DefaultTargetsType>(
+    getPSMStartValue<string, DefaultTarget>(
         stores,
         initialValue,
         handleFullyOfflineSyncsOnStartup,

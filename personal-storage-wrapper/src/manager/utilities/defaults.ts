@@ -1,28 +1,22 @@
+import { Target } from "../../targets";
 import { DropboxTarget } from "../../targets/dropbox";
 import { DropboxTargetType } from "../../targets/dropbox/types";
 import { GDriveTarget, GDriveTargetType } from "../../targets/gdrive";
 import { IndexedDBTarget, IndexedDBTargetType } from "../../targets/indexeddb";
-import { IndexedDBTargetSerialisationConfig } from "../../targets/indexeddb/types";
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
-import { Deserialiser } from "../../targets/types";
 import { deepEquals, maxBy } from "../../utilities/data";
-import { OfflineSyncStartupBehaviour, Sync, SyncFromTargets, Targets, TimestampedValue, Value } from "../types";
+import { Deserialisers, OfflineSyncStartupBehaviour, Sync, TimestampedValue, Value } from "../types";
 
 /**
  * Deserialiser definitions
  */
-export const DefaultDeserialisers = {
+export type DefaultTarget = DropboxTarget | GDriveTarget | IndexedDBTarget | MemoryTarget;
+export const DefaultDeserialisers: Deserialisers<DefaultTarget> = {
     [DropboxTargetType]: DropboxTarget.deserialise,
     [GDriveTargetType]: GDriveTarget.deserialise,
     [IndexedDBTargetType]: IndexedDBTarget.deserialise,
     [MemoryTargetType]: MemoryTarget.deserialise,
 };
-export type DefaultTargetsType = {
-    [K in keyof typeof DefaultDeserialisers]: typeof DefaultDeserialisers[K] extends Deserialiser<K, infer Config>
-        ? Config
-        : never;
-};
-export type DefaultSyncsType = SyncFromTargets<DefaultTargetsType>;
 
 /**
  * Sync state storage
@@ -31,9 +25,7 @@ const LOCAL_STORAGE_KEY = "personal-storage-manager-state";
 export const getSyncDataFromLocalStorage = () => localStorage.getItem(LOCAL_STORAGE_KEY);
 export const saveSyncDataToLocalStorage = (data: string) => localStorage.setItem(LOCAL_STORAGE_KEY, data);
 
-export const getDefaultSyncStates = async (): Promise<
-    [Sync<IndexedDBTargetType, IndexedDBTargetSerialisationConfig>]
-> => {
+export const getDefaultSyncStates = async (): Promise<[Sync<IndexedDBTarget>]> => {
     const target = await IndexedDBTarget.create();
     return [{ target, compressed: true }];
 };
@@ -44,18 +36,18 @@ export const getDefaultSyncStates = async (): Promise<
 export const resetToDefaultsOnOfflineTargets = <V extends Value>(): Promise<OfflineSyncStartupBehaviour<V>> =>
     Promise.resolve({ behaviour: "DEFAULT" });
 
-export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Targets, V extends Value>(
+export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Target<any, any>, V extends Value>(
     _originalValue: V,
     _currentValue: V,
     syncs: {
-        sync: SyncFromTargets<T>;
+        sync: Sync<T>;
         value: TimestampedValue<V>;
     }[]
 ): Promise<V> => {
     const priority = maxBy(
         syncs,
         ({ value }) => value.value !== null,
-        ({ sync }) => sync.target.type !== IndexedDBTargetType && sync.target.type !== MemoryTargetType,
+        ({ sync }) => !(sync.target instanceof IndexedDBTarget) && !(sync.target instanceof MemoryTarget),
         ({ value }) => value.timestamp
     );
 

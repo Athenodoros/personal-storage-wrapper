@@ -18,4 +18,6 @@ export interface Target<Type extends string, SerialisationConfig> {
     equals: (other: Target<any, any>) => boolean;
 }
 
-export type Deserialiser<Type extends string, Config> = (config: Config) => Promise<Target<Type, Config>>;
+export type Deserialiser<T extends Target<any, any>, Async extends boolean = boolean> = (
+    config: ReturnType<T["serialise"]>
+) => Async extends true ? Promise<T> : T;

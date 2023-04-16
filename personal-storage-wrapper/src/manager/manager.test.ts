@@ -3,13 +3,14 @@
  */
 
 import { expect, test, vi } from "vitest";
-import { DefaultDeserialisers, DefaultTargetsType, MemoryTarget } from "../main";
-import { MemoryTargetSerialisationConfig } from "../targets/memory/types";
+import { DefaultDeserialisers } from "../main";
+import { MemoryTarget } from "../targets";
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
-import { ConflictingRemoteBehaviour, PSMCreationConfig, Sync, SyncFromTargets } from "./types";
+import { ConflictingRemoteBehaviour, PSMCreationConfig, Sync } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
+import { DefaultTarget } from "./utilities/defaults";
 import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 import { delay, getTestSync } from "./utilities/test";
@@ -314,7 +315,7 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     expect(syncB.desynced).toBe(false);
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
-        Parameters<ConflictingRemoteBehaviour<string, DefaultTargetsType>>
+        Parameters<ConflictingRemoteBehaviour<string, DefaultTarget>>
     >(
         "C",
         [syncA, syncB, syncC],
@@ -488,8 +489,8 @@ test("Handles poll soon after new value from broadcast", async () => {
 
 let id = 0;
 const getTestManager = async (
-    syncs: SyncFromTargets<DefaultTargetsType>[],
-    config?: Partial<PSMCreationConfig<string, DefaultTargetsType>>,
+    syncs: Sync<DefaultTarget>[],
+    config?: Partial<PSMCreationConfig<string, DefaultTarget>>,
     cache?: boolean
 ) =>
     (cache ? PersonalStorageManager.createWithCache : PersonalStorageManager.create)(DEFAULT_VALUE, {
@@ -501,5 +502,4 @@ const getTestManager = async (
         ...config,
     });
 
-const value = async (sync: Sync<"memory", MemoryTargetSerialisationConfig>) =>
-    (await readFromSync(() => noop, sync)).value?.value;
+const value = async (sync: Sync<MemoryTarget>) => (await readFromSync(() => noop, sync)).value?.value;

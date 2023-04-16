@@ -1,4 +1,5 @@
-import { Deserialisers, SyncFromTargets, Targets, Value } from "../../manager/types";
+import { Deserialisers, Sync, Value } from "../../manager/types";
+import { Target } from "../../targets";
 import { compress, decompress } from "../../utilities/buffers/compression";
 import { decodeFromArrayBuffer, encodeToArrayBuffer } from "../../utilities/buffers/encoding";
 
@@ -15,15 +16,15 @@ export const getBufferFromValue = async <V extends Value>(value: V, compressed: 
  * Sync Serialisation
  */
 
-interface SyncSerialisedConfig<T extends Targets> {
+interface SyncSerialisedConfig<T extends Target<any, any>> {
     type: keyof T;
     config: string;
 }
 
-export const getSyncsFromConfig = async <T extends Targets>(
+export const getSyncsFromConfig = async <T extends Target<any, any>>(
     syncsConfigString: string,
     deserialisers: Deserialisers<T>
-): Promise<SyncFromTargets<T>[]> => {
+): Promise<Sync<T>[]> => {
     const configs = JSON.parse(syncsConfigString) as SyncSerialisedConfig<T>[];
 
     let syncs = await Promise.all(
@@ -42,10 +43,10 @@ export const getSyncsFromConfig = async <T extends Targets>(
         syncs = syncs.filter((sync) => sync !== undefined);
     }
 
-    return syncs as unknown[] as SyncFromTargets<T>[];
+    return syncs as unknown[] as Sync<T>[];
 };
 
-export const getConfigFromSyncs = <T extends Targets>(syncs: SyncFromTargets<T>[]): string => {
+export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: Sync<T>[]): string => {
     const config: SyncSerialisedConfig<T>[] = syncs.map((sync) => {
         return {
             type: sync.target.type,

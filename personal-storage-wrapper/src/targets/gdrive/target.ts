@@ -91,11 +91,8 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         ).map((file) => new Date(file.modifiedTime));
 
     // Serialisation
-    static deserialise: Deserialiser<GDriveTargetType, GDriveTargetSerialisationConfig> = ({
-        connection,
-        user,
-        file,
-    }) => Promise.resolve(new GDriveTarget(connection, user, file));
+    static deserialise: Deserialiser<GDriveTarget, false> = ({ connection, user, file }) =>
+        new GDriveTarget(connection, user, file);
 
     serialise = (): GDriveTargetSerialisationConfig => ({
         connection: this.connection,

@@ -1,7 +1,35 @@
+import { DropboxTarget, GDriveTarget } from "personal-storage-wrapper";
 import { useState } from "react";
 
+interface AccountState {
+    dropbox: DropboxTarget[];
+    gdrive: GDriveTarget[];
+}
+
+const LOCAL_STORAGE_KEY = "PSW_BROWSER_TEST_STORAGE";
+interface StoredState {
+    dropbox: string[];
+    gdrive: string[];
+}
+
 export function App() {
-    const [count, setCount] = useState(0);
+    const [accounts, rawSetAccounts] = useState<AccountState>(() => {
+        const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (!stored) return { dropbox: [], gdrive: [] };
+        const state = JSON.parse(stored) as StoredState;
+        return {
+            dropbox: state.dropbox.map((serialised) => DropboxTarget.deserialise(JSON.parse(serialised))),
+            gdrive: state.gdrive.map((serialised) => GDriveTarget.deserialise(JSON.parse(serialised))),
+        };
+    });
+    const setAccounts = (update: AccountState) => {
+        rawSetAccounts(update);
+        const state: StoredState = {
+            dropbox: update.dropbox.map((target) => JSON.stringify(target.serialise())),
+            gdrive: update.gdrive.map((target) => JSON.stringify(target.serialise())),
+        };
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+    };
 
     return (
         <div className="h-screen w-screen flex flex-col items-center bg-slate-200 overflow-y-scroll">
@@ -17,7 +45,18 @@ export function App() {
                     <Heading title="Creation" />
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Connect In Popup</h6>
-                        <ActionButton />
+                        <ActionButton
+                            run={() =>
+                                DropboxTarget.setupInPopup("3m19g9vaop7nvrb", window.location.origin + "/dropbox-popup")
+                            }
+                            then={(target) => {
+                                if (target)
+                                    setAccounts({
+                                        dropbox: accounts.dropbox.concat([target]),
+                                        gdrive: accounts.gdrive,
+                                    });
+                            }}
+                        />
                     </Container>
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Redirect for Auth</h6>
@@ -149,11 +188,37 @@ const Heading: React.FC<{ title: string }> = ({ title }) => (
     <h6 className="font-bold uppercase text-slate-400 mb-2 mt-4">{title}</h6>
 );
 
-const ActionButton: React.FC = () => (
-    <button className="text-sky-600 flex py-0.5 pl-2 rounded-md hover:bg-sky-100 active:bg-sky-600 active:text-sky-100">
-        <h6>Run</h6>
-        <span className="material-icons scale-75 ml-2">arrow_forward_ios</span>
-    </button>
-);
+const ActionButton = <T,>({ run, then }: { run?: () => Promise<T>; then?: (t: T) => void | Promise<void> }) => {
+    const [clicked, setClicked] = useState(false);
+
+    const onClick = async () => {
+        setClicked(true);
+        const result = run && (await run());
+        // console.log(result);
+        if (then) await then(result!);
+        setClicked(false);
+    };
+
+    return (
+        <button
+            className={
+                "text-sky-600 flex w-16 py-0.5 rounded-md " +
+                (clicked
+                    ? "cursor-default justify-center"
+                    : "justify-between pl-2 hover:bg-sky-100 active:bg-sky-600 active:text-sky-100")
+            }
+            onClick={clicked ? undefined : onClick}
+        >
+            {clicked ? (
+                <span className="material-icons animate-spin pointer-events-none">autorenew</span>
+            ) : (
+                <>
+                    <h6>Run</h6>
+                    <span className="material-icons scale-75">arrow_forward_ios</span>
+                </>
+            )}
+        </button>
+    );
+};
 
 const Buffer: React.FC = () => <div className="h-24 flex-none w-1" />;

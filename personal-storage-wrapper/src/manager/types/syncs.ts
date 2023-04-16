@@ -1,8 +1,9 @@
 import { Target } from "../../targets/types";
+import { DefaultTarget } from "../utilities/defaults";
 
-export interface Sync<Type extends string, Config> {
+export interface Sync<T extends Target<any, any> = DefaultTarget> {
     // Sync Config
-    target: Target<Type, Config>;
+    target: T;
     compressed: boolean;
 
     // Sync Status

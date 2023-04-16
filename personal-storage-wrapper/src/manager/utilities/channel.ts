@@ -1,6 +1,7 @@
+import { Target } from "../../targets";
 import { TypedBroadcastChannel } from "../../utilities/channel";
 import { ListBuffer } from "../../utilities/listbuffer";
-import { Deserialisers, SyncFromTargets, Targets, TimestampedValue, Value } from "../types";
+import { Deserialisers, Sync, TimestampedValue, Value } from "../types";
 import { getConfigFromSyncs, getSyncsFromConfig } from "./serialisation";
 
 interface PSMBroadcastChannelValueMessage<V extends Value> {
@@ -15,7 +16,7 @@ interface PSMBroadcastChannelSyncMessage {
 
 type PSMBroadcastChannelMessage<V extends Value> = PSMBroadcastChannelValueMessage<V> | PSMBroadcastChannelSyncMessage;
 
-export class PSMBroadcastChannel<V extends Value, T extends Targets> {
+export class PSMBroadcastChannel<V extends Value, T extends Target<any, any>> {
     private channel: TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>;
     public recents: ListBuffer<V>;
 
@@ -24,7 +25,7 @@ export class PSMBroadcastChannel<V extends Value, T extends Targets> {
         recents: ListBuffer<V>,
         deserialisers: Deserialisers<T>,
         handleNewValue: (value: TimestampedValue<V>) => void,
-        handleUpdateSyncs: (syncs: SyncFromTargets<T>[]) => void
+        handleUpdateSyncs: (syncs: Sync<T>[]) => void
     ) {
         this.recents = recents;
         this.channel = new TypedBroadcastChannel<PSMBroadcastChannelMessage<V>>(id, async (message) => {
@@ -39,6 +40,6 @@ export class PSMBroadcastChannel<V extends Value, T extends Targets> {
     }
 
     sendNewValue = (value: TimestampedValue<V>) => this.channel.send({ type: "VALUE", value });
-    sendUpdatedSyncs = (syncs: SyncFromTargets<T>[]) =>
+    sendUpdatedSyncs = (syncs: Sync<T>[]) =>
         this.channel.send({ type: "UPDATE_SYNCS", syncs: getConfigFromSyncs(syncs) });
 }

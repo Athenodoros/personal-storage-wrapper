@@ -1,9 +1,10 @@
-import { SyncFromTargets, Targets, Value } from "../types";
+import { Target } from "../../targets";
+import { Sync, Value } from "../types";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
-export const RemovalOperationRunner = async <V extends Value, T extends Targets>({
+export const RemovalOperationRunner = async <V extends Value, T extends Target<any, any>>({
     args,
     syncs,
-}: OperationRunConfig<V, T, SyncFromTargets<Targets>>): Promise<OperationRunOutput<V, T>> => ({
+}: OperationRunConfig<V, T, Sync<T>>): Promise<OperationRunOutput<V, T>> => ({
     syncs: syncs.filter((sync) => args.every((removal) => !removal.target.equals(sync.target))),
 });

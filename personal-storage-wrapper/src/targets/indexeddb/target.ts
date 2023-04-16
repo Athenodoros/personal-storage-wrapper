@@ -72,8 +72,7 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
     timestamp = (): Result<Date | null> => this.read().map((value) => value?.timestamp ?? null);
 
     // Serialisation
-    static deserialise: Deserialiser<IndexedDBTargetType, IndexedDBTargetSerialisationConfig> = ({ id }) =>
-        IndexedDBTarget.create(id);
+    static deserialise: Deserialiser<IndexedDBTarget, true> = ({ id }) => IndexedDBTarget.create(id);
 
     serialise = (): IndexedDBTargetSerialisationConfig => ({ id: this.id });
 

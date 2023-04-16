@@ -1,10 +1,11 @@
+import { Target } from "../../targets";
 import { last } from "../../utilities/data";
-import { SyncFromTargets, Targets, Value } from "../types";
+import { Sync, Value } from "../types";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
-export const UpdateOperationRunner = async <V extends Value, T extends Targets>({
+export const UpdateOperationRunner = async <V extends Value, T extends Target<any, any>>({
     args,
-}: OperationRunConfig<V, T, SyncFromTargets<T>[]>): Promise<OperationRunOutput<V, T>> => ({
+}: OperationRunConfig<V, T, Sync<T>[]>): Promise<OperationRunOutput<V, T>> => ({
     syncs: last(args),
     skipChannel: true,
 });

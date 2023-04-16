@@ -70,11 +70,8 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.server_modified);
 
     // Serialisation
-    static deserialise: Deserialiser<DropboxTargetType, DropboxTargetSerialisationConfig> = ({
-        connection,
-        user,
-        path,
-    }) => Promise.resolve(new DropboxTarget(connection, user, path));
+    static deserialise: Deserialiser<DropboxTarget, false> = ({ connection, user, path }) =>
+        new DropboxTarget(connection, user, path);
 
     serialise = (): DropboxTargetSerialisationConfig => ({
         connection: this.connection,

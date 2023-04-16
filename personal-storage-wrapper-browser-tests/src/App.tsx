@@ -1,5 +1,9 @@
 import { DropboxTarget, GDriveTarget } from "personal-storage-wrapper";
 import { useState } from "react";
+import {
+    decodeFromArrayBuffer,
+    encodeToArrayBuffer,
+} from "../../personal-storage-wrapper/src/utilities/buffers/encoding";
 
 interface AccountState {
     dropbox: {
@@ -24,6 +28,8 @@ interface StoredState {
     }[];
 }
 
+const file = encodeToArrayBuffer("Hello, World!");
+
 export function App() {
     const [accounts, rawSetAccounts] = useState<AccountState>(() => {
         const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -41,24 +47,45 @@ export function App() {
         };
     });
 
-    const [selectedDropbox, setSelectedDropbox] = useState<DropboxTarget | null>(
-        () => accounts.dropbox[0]?.target ?? null
-    );
-    const [selectedGDrive, setSelectedGDrive] = useState<GDriveTarget | null>(() => accounts.gdrive[0]?.target ?? null);
+    const [selectedDropbox, setSelectedDropbox] = useState<DropboxTarget | undefined>(accounts.dropbox[0]?.target);
+    const [selectedGDrive, setSelectedGDrive] = useState<GDriveTarget | undefined>(accounts.gdrive[0]?.target);
 
-    const setAccounts = (update: AccountState) => {
-        rawSetAccounts(update);
-
-        if (update.dropbox.length !== 0 && selectedDropbox === null) setSelectedDropbox(update.dropbox[0].target);
-        else if (!update.dropbox.includes(selectedDropbox as any)) setSelectedDropbox(null);
-        if (update.gdrive.length !== 0 && selectedGDrive === null) setSelectedGDrive(update.gdrive[0].target);
-        else if (!update.gdrive.includes(selectedGDrive as any)) setSelectedGDrive(null);
-
+    const setAccounts = (updated: AccountState) => {
+        rawSetAccounts(updated);
         const state: StoredState = {
-            dropbox: update.dropbox.map(({ id, target }) => ({ id, target: JSON.stringify(target.serialise()) })),
-            gdrive: update.gdrive.map(({ id, target }) => ({ id, target: JSON.stringify(target.serialise()) })),
+            dropbox: updated.dropbox.map(({ id, target }) => ({ id, target: JSON.stringify(target.serialise()) })),
+            gdrive: updated.gdrive.map(({ id, target }) => ({ id, target: JSON.stringify(target.serialise()) })),
         };
         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
+    };
+
+    const addDropbox = (target: DropboxTarget | null) => {
+        if (!target) return;
+
+        if (!selectedDropbox) setSelectedDropbox(target);
+
+        setAccounts({
+            dropbox: accounts.dropbox.concat([{ id: getDateString(), target }]),
+            gdrive: accounts.gdrive,
+        });
+    };
+
+    const removeDropbox = (target: DropboxTarget) => () => {
+        if (selectedDropbox === target) setSelectedDropbox(undefined);
+
+        setAccounts({
+            dropbox: accounts.dropbox.filter((candidate) => target !== candidate.target),
+            gdrive: accounts.gdrive,
+        });
+    };
+
+    const removeGDrive = (target: GDriveTarget) => () => {
+        if (selectedGDrive === target) setSelectedGDrive(undefined);
+
+        setAccounts({
+            dropbox: accounts.dropbox,
+            gdrive: accounts.gdrive.filter((candidate) => target !== candidate.target),
+        });
     };
 
     return (
@@ -75,17 +102,14 @@ export function App() {
                         title: id,
                         select: () => setSelectedDropbox(target),
                         selected: target === selectedDropbox,
-                        remove: () =>
-                            setAccounts({
-                                gdrive: accounts.gdrive,
-                                dropbox: accounts.dropbox.filter((candidate) => target !== candidate.target),
-                            }),
+                        remove: removeDropbox(target),
                     }))}
                 >
                     <Heading title="Creation" />
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Connect In Popup</h6>
                         <ActionButton
+                            then={(target) => void (target && addDropbox(target))}
                             run={() =>
                                 DropboxTarget.setupInPopup(
                                     "3m19g9vaop7nvrb",
@@ -93,13 +117,6 @@ export function App() {
                                     "/data.json.tgz"
                                 )
                             }
-                            then={(target) => {
-                                if (target)
-                                    setAccounts({
-                                        dropbox: accounts.dropbox.concat([{ id: getDateString(), target }]),
-                                        gdrive: accounts.gdrive,
-                                    });
-                            }}
                         />
                     </Container>
                     <Container className="flex justify-between items-center p-2">
@@ -116,32 +133,38 @@ export function App() {
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Catch Auth Redirect</h6>
                         <ActionButton
+                            then={addDropbox}
                             run={() => {
                                 const promise = DropboxTarget.catchRedirectForAuth("/data.json.tgz");
                                 window.history.replaceState(null, "", window.location.origin);
                                 return promise;
-                            }}
-                            then={(target) => {
-                                if (target)
-                                    setAccounts({
-                                        dropbox: accounts.dropbox.concat([{ id: getDateString(), target }]),
-                                        gdrive: accounts.gdrive,
-                                    });
                             }}
                         />
                     </Container>
                     <Heading title="File Management" />
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Get Timestamp</h6>
-                        <ActionButton />
+                        <ActionButton run={selectedDropbox && selectedDropbox.timestamp} />
                     </Container>
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Pull File</h6>
-                        <ActionButton />
+                        <ActionButton
+                            run={
+                                selectedDropbox &&
+                                (() =>
+                                    selectedDropbox.read().map(
+                                        (value) =>
+                                            value && {
+                                                timestamp: value.timestamp,
+                                                value: decodeFromArrayBuffer(value.buffer),
+                                            }
+                                    ))
+                            }
+                        />
                     </Container>
                     <Container className="flex justify-between items-center p-2">
                         <h6 className="font-semibold leading-none ml-1">Write File</h6>
-                        <ActionButton />
+                        <ActionButton run={selectedDropbox && (() => selectedDropbox.write(file))} />
                     </Container>
                 </Division>
                 <Division
@@ -153,11 +176,7 @@ export function App() {
                         title: id,
                         select: () => setSelectedGDrive(target),
                         selected: target === selectedGDrive,
-                        remove: () =>
-                            setAccounts({
-                                dropbox: accounts.dropbox,
-                                gdrive: accounts.gdrive.filter((candidate) => target !== candidate.target),
-                            }),
+                        remove: removeGDrive(target),
                     }))}
                 >
                     <Heading title="Creation" />
@@ -246,7 +265,11 @@ const Account: React.FC<AccountType> = ({ title, subtitle, select, selected, rem
     >
         <div className="flex flex-row items-center">
             <button
-                onClick={remove}
+                onClick={(event) => {
+                    remove();
+                    event.preventDefault();
+                    event.stopPropagation();
+                }}
                 className={
                     "text-slate-400 rounded-lg flex transition hover:bg-slate-200 active:bg-slate-400 active:text-slate-700 mx-3"
                 }
@@ -280,6 +303,7 @@ const Heading: React.FC<{ title: string }> = ({ title }) => (
 
 const ActionButton = <T,>({ run, then }: { run?: () => Promise<T>; then?: (t: T) => void | Promise<void> }) => {
     const [clicked, setClicked] = useState(false);
+    const disabled = run === undefined;
 
     const onClick = async () => {
         setClicked(true);
@@ -299,9 +323,12 @@ const ActionButton = <T,>({ run, then }: { run?: () => Promise<T>; then?: (t: T)
                 "text-sky-600 flex w-16 py-0.5 rounded-md " +
                 (clicked
                     ? "cursor-default justify-center"
+                    : disabled
+                    ? "cursor-disabled justify-between pl-2 opacity-50"
                     : "justify-between pl-2 hover:bg-sky-100 active:bg-sky-600 active:text-sky-100")
             }
             onClick={clicked ? undefined : onClick}
+            disabled={disabled}
         >
             {clicked ? (
                 <span className="material-icons animate-spin pointer-events-none">autorenew</span>

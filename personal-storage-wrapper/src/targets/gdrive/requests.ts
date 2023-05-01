@@ -21,7 +21,7 @@ export const runGDriveJSONQuery = <T = unknown>(
             return;
         }
 
-        const result = await fetch(input, init);
+        const result = await runGDriveQuery(connection, input, init);
 
         if (result.status === 401) {
             onRefreshNeeded();
@@ -29,6 +29,6 @@ export const runGDriveJSONQuery = <T = unknown>(
             return;
         }
 
-        const json = await result.json();
-        resolve(json);
+        const json = (await result.json()) as T;
+        resolve({ type: "value", value: json });
     });

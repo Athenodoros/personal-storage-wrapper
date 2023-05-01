@@ -43,13 +43,24 @@ export const runDropboxQuery = async (
 export const runDropboxQueryForJSON = <T = unknown>(
     connection: DropboxConnection,
     input: RequestInfo | URL,
-    init?: RequestInit
+    init?: RequestInit,
+    errorPrefixes: Record<string, T> = {}
 ) =>
     new Result<T>((resolve) =>
         runDropboxQuery(connection, input, init)
             .then((response) => response.json())
-            .then((json) =>
-                "error_summary" in json ? resolve({ type: "error" }) : resolve({ type: "value", value: json })
-            )
+            .then((json) => {
+                const summary = json["error_summary"] as string | undefined;
+
+                if (summary === undefined) return resolve({ type: "value", value: json });
+
+                for (const key in errorPrefixes) {
+                    if (summary.startsWith(key)) {
+                        return resolve({ type: "value", value: errorPrefixes[key] });
+                    }
+                }
+
+                return resolve({ type: "error" });
+            })
             .catch(() => resolve({ type: "error" }))
     );

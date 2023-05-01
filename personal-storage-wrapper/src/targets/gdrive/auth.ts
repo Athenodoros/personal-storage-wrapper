@@ -81,7 +81,7 @@ export const runAuthInPopup = async (
     const url = getAuthRedirectURL(clientId, useAppData, definitelyRedirectURI, scopes);
 
     // Wait for redirect after authing in to GDrive
-    const results = await getFromPopup({ url }, (context) => {
+    const results = await getFromPopup({ url, height: 720 }, (context) => {
         if (context.location.href.split("#")[0] !== definitelyRedirectURI) return null;
 
         const search = new URLSearchParams(context.location.hash.replace("#", ""));

@@ -2,7 +2,7 @@ import { deepEquals, noop } from "../../utilities/data";
 import { Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
 import { catchRedirectForAuth, redirectForAuth, runAuthInPopup } from "./auth";
-import { getUserMetadata, queryForFile } from "./queries";
+import { createNewFile, getUserMetadata, queryForFile } from "./queries";
 import { runGDriveJSONQuery, runGDriveQuery } from "./requests";
 import {
     GDriveConnection,
@@ -15,7 +15,7 @@ import {
 export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerialisationConfig> {
     type: GDriveTargetType = GDriveTargetType;
 
-    static onRefreshNeeded: (target: GDriveTarget) => void;
+    static onRefreshNeeded: (target: GDriveTarget) => void = noop;
 
     private connection: GDriveConnection;
     readonly user: GDriveUserDetails;
@@ -40,14 +40,21 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         const user = await getUserMetadata(result);
         if (user.type === "error") return null;
 
-        if (file.type === "id") return new GDriveTarget(result, user.value, { id: file.id, mime: file.mime });
+        if ("id" in file) return new GDriveTarget(result, user.value, { id: file.id, mime: file.mime });
         const files = await queryForFile(noop, result, file.name, file.mime, file.parent);
-        if (files.type === "error" || files.value.files.length === 0) return null;
+        if (files.type === "error") return null;
 
-        return new GDriveTarget(result, user.value, {
-            id: files.value.files[0].id,
-            mime: files.value.files[0].mimeType,
-        });
+        if (files.value.files.length > 0)
+            return new GDriveTarget(result, user.value, {
+                id: files.value.files[0].id,
+                mime: files.value.files[0].mimeType,
+            });
+
+        // TODO: create new file
+        const fileRef = await createNewFile(noop, result, file.name, file.mime, file.parent);
+        if (fileRef.type === "error") return null;
+
+        return new GDriveTarget(result, user.value, { id: fileRef.value.id, mime: fileRef.value.mimeType });
     };
 
     static catchRedirectForAuth = async (file: FileInitDescription): Promise<GDriveTarget | null> =>
@@ -56,7 +63,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
     static setupInPopup = async (
         clientId: string,
         redirectURI?: string,
-        file: FileInitDescription = { type: "name", name: "data.bak" },
+        file: FileInitDescription = { name: "data.bak" },
         useAppData: boolean = true,
         scopes?: string[]
     ): Promise<GDriveTarget | null> =>
@@ -64,9 +71,9 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     // Data handlers
     timestamp = (): Result<Date | null> =>
-        this.fetchJSON<FileDetails>(`https://www.googleapis.com/drive/v3/files/${this.file}?fields=modifiedTime`).map(
-            (file) => (file ? new Date(file.modifiedTime) : null)
-        );
+        this.fetchJSON<FileDetails>(
+            `https://www.googleapis.com/drive/v3/files/${this.file.id}?fields=modifiedTime`
+        ).map((file) => (file ? new Date(file.modifiedTime) : null));
     read = (): Result<TargetValue> =>
         this.timestamp().flatmap(
             (timestamp) =>
@@ -89,6 +96,10 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
                 headers: { "Content-Type": this.file.mime },
             }
         ).map((file) => new Date(file.modifiedTime));
+    delete = (): Result<null> =>
+        this.fetchJSON<unknown>(`https://www.googleapis.com/drive/v3/files/${this.file}`, { method: "DELETE" }).map(
+            () => null
+        );
 
     // Serialisation
     static deserialise: Deserialiser<GDriveTarget, false> = ({ connection, user, file }) =>
@@ -119,6 +130,4 @@ interface FileDetails {
     modifiedTime: string;
 }
 
-type FileInitDescription =
-    | { type: "id"; id: string; mime: string }
-    | { type: "name"; name: string; mime?: string; parent?: string };
+type FileInitDescription = { id: string; mime: string } | { name: string; mime?: string; parent?: string };

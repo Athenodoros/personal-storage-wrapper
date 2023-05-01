@@ -50,7 +50,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
             },
             body: buffer,
         }).flatmap((result) =>
-            result.server_modified ? Result.value(new Date(result.server_modified)) : Result.error()
+            result?.server_modified ? Result.value(new Date(result.server_modified)) : Result.error()
         );
 
     read = (): Result<TargetValue> =>
@@ -68,6 +68,13 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         });
 
     timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.server_modified);
+
+    delete = (): Result<null> =>
+        this.fetchJSON<unknown>("https://api.dropboxapi.com/2/files/delete_v2", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: this.path }),
+        }).map(() => null);
 
     // Serialisation
     static deserialise: Deserialiser<DropboxTarget, false> = ({ connection, user, path }) =>
@@ -91,16 +98,20 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     // Other requests
     // This should probably track when the connection is changed and run callbacks
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runDropboxQuery(this.connection, input, init);
-    fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit) =>
-        runDropboxQueryForJSON<T>(this.connection, input, init);
+    fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit, errorPrefixes: Record<string, T> = {}) =>
+        runDropboxQueryForJSON<T>(this.connection, input, init, errorPrefixes);
 
     private getFileMetadata = (): Result<FileMetadata | null> =>
-        this.fetchJSON<{ server_modified?: string; rev?: string }>("https://api.dropboxapi.com/2/files/get_metadata", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: this.path }),
-        }).map((result) =>
-            result.server_modified && result.rev
+        this.fetchJSON<{ server_modified?: string; rev?: string } | null>(
+            "https://api.dropboxapi.com/2/files/get_metadata",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: this.path }),
+            },
+            { "path/not_found": null, "path_lookup/not_found": null }
+        ).map((result) =>
+            result?.server_modified && result.rev
                 ? { server_modified: new Date(result.server_modified), rev: result.rev }
                 : null
         );

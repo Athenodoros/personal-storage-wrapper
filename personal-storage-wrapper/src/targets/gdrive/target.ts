@@ -93,7 +93,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
             {
                 method: "PATCH",
                 body: new Blob([buffer], { type: this.file.mime }),
-                headers: { "Content-Type": this.file.mime },
+                headers: this.file.mime ? { "Content-Type": this.file.mime } : undefined,
             }
         ).map((file) => new Date(file.modifiedTime));
     delete = (): Result<null> =>

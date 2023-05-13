@@ -16,7 +16,7 @@ export interface GDriveUserDetails {
 
 export interface GDriveFileReference {
     id: string;
-    mime: string;
+    mime?: string;
 }
 
 export interface GDriveTargetSerialisationConfig {

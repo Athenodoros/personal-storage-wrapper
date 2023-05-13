@@ -21,12 +21,12 @@ export const getConnectInPopup = <T extends DefaultTarget>(open: () => Promise<T
 });
 
 export const getGetConnectViaRedirect = <T extends DefaultTarget>(
-    name: string,
+    type: T["type"],
     redirect: () => void,
     handle: () => Promise<T | null>,
     expectDupe: boolean
 ) => {
-    const storage = getStorageManager<"approval">(name + "-load-behaviour-approval");
+    const storage = getStorageManager<"approval">(type + "-load-behaviour-approval");
 
     let approvalAddCache: (target: T) => void;
     let approvalRedirectResult: Promise<TestResult> | null = null;

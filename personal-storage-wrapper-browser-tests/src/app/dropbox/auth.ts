@@ -19,7 +19,7 @@ export const getDropboxConnectViaRedirect = getGetConnectViaRedirect(
     false
 );
 
-const storage = getStorageManager<"approval" | "rejection" | "popup">("dropbox-load-behaviour");
+const storage = getStorageManager<"rejection" | "popup">("dropbox-load-behaviour");
 
 const HandlePopupRejection: TestConfig<DropboxTarget> = {
     name: "Handle Popup Rejection",
@@ -41,6 +41,8 @@ const HandlePopupRejection: TestConfig<DropboxTarget> = {
 const rejectionRedirectResult: Promise<TestResult> =
     storage.load() === "rejection"
         ? DropboxTarget.catchRedirectForAuth("/data.back").then(async (target) => {
+              storage.clear();
+
               if (target === null) return { logs: "No target created!", success: true };
               else return { logs: "Target created!", success: false };
           })

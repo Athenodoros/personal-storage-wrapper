@@ -44,6 +44,8 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
                 if (!expectDupe && target2 !== null) return { success: false, logs: "Duplicate target created!" };
                 if (expectDupe && target2 === null) return { success: false, logs: "No duplicate target created!" };
 
+                window.history.replaceState(null, "", window.location.origin);
+
                 approvalAddCache(target);
                 return { success: true, logs: "Target created and added!" };
             });

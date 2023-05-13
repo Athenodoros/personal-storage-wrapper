@@ -43,9 +43,10 @@ export const useTargetState = <T extends DefaultTarget>(type: T["type"], deseria
     };
 
     const remove = (target: T) => {
-        if (selected === target) setSelected(undefined);
+        const updated = accounts.filter((candidate) => target !== candidate.target);
+        if (selected === target) setSelected(updated[0]?.target);
 
-        setAccounts(accounts.filter((candidate) => target !== candidate.target));
+        setAccounts(updated);
     };
 
     return { accounts, selected, set: setSelected, add, remove };
@@ -54,5 +55,5 @@ export const useTargetState = <T extends DefaultTarget>(type: T["type"], deseria
 export const formatDateString = (date: Date) => {
     return `${date.toLocaleString("default", {
         month: "long",
-    })} ${date.getDate()}, ${date.getHours()}:${date.getMinutes()}`;
+    })} ${date.getDate()}, ${("" + date.getHours()).padStart(2, "0")}:${("" + date.getMinutes()).padStart(2, "0")}`;
 };

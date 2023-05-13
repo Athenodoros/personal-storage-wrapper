@@ -68,3 +68,31 @@ export const HandleEmptyRedirectCatch: DropboxTest = {
 export const HandlePopupBlockerDelay: DropboxTest = {
     name: "Handle Popup Blocker Delay",
 };
+
+export const BadToken: DropboxTest = {
+    name: "Handle Bad Token",
+    runner: async (logger) => {
+        logger("Creating bad target...");
+        const target = DropboxTarget.deserialise({
+            user: null as any,
+            connection: {
+                clientId: CLIENT_ID,
+                refreshToken: "BAD_TOKEN",
+                accessToken: "",
+                expiry: "1970-01-01",
+            },
+            path: "/data.bak",
+        });
+
+        logger("Attempting operation...");
+        const result = await target.timestamp();
+
+        if (result.type === "error") {
+            logger("Operation returned an error!");
+            return true;
+        }
+
+        logger("Operation returned result");
+        return false;
+    },
+};

@@ -4,6 +4,7 @@ import { TestResult } from "../../components/test";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
 import {
+    BadToken,
     ConnectInPopup,
     ConnectViaRedirect,
     HandleEmptyRedirectCatch,
@@ -11,7 +12,7 @@ import {
     HandlePopupRejection,
     HandleRedirectRejection,
 } from "./auth";
-import { OldToken, RunOperations } from "./operations";
+import { HandleOffline, HandleRevokedAccess, InvalidPath, OldToken, RunOperations } from "./operations";
 import { DropboxTest } from "./types";
 
 const tests: DropboxTest[] = [
@@ -22,10 +23,14 @@ const tests: DropboxTest[] = [
     HandleRedirectRejection,
     HandleEmptyRedirectCatch,
     HandlePopupBlockerDelay,
+    BadToken,
 
     // Normal Operations
     RunOperations,
     OldToken,
+    HandleRevokedAccess,
+    HandleOffline,
+    InvalidPath,
 ];
 
 export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({

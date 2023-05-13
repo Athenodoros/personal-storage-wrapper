@@ -70,15 +70,19 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.server_modified);
 
     delete = (): Result<null> =>
-        this.fetchJSON<unknown>("https://api.dropboxapi.com/2/files/delete_v2", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ path: this.path }),
-        }).map(() => null);
+        this.fetchJSON<unknown>(
+            "https://api.dropboxapi.com/2/files/delete_v2",
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ path: this.path }),
+            },
+            { "path/not_found": null, "path_lookup/not_found": null }
+        ).map(() => null);
 
     // Serialisation
     static deserialise: Deserialiser<DropboxTarget, false> = ({ connection, user, path }) =>
-        new DropboxTarget(connection, user, path);
+        new DropboxTarget({ ...connection, expiry: new Date(connection.expiry) }, user, path);
 
     serialise = (): DropboxTargetSerialisationConfig => ({
         connection: this.connection,

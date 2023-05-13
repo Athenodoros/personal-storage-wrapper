@@ -1,7 +1,7 @@
 import * as PSW from "personal-storage-wrapper";
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { App } from "./app/App";
+import { App } from "./app";
 import "./index.css";
 
 (window as any).PSW = PSW;

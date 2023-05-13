@@ -1,10 +1,9 @@
-import { DropboxTarget, Result } from "personal-storage-wrapper";
-import { encodeToArrayBuffer } from "../../../../personal-storage-wrapper/src/utilities/buffers/encoding";
-import { DropboxTest } from "./types";
+import { DropboxTarget, Result, TargetValue } from "personal-storage-wrapper";
+import { TestConfig } from "../tests";
 
-const file = encodeToArrayBuffer("Hello, World!");
+const file = Uint8Array.from("Hello, World!", (c) => c.charCodeAt(0)).buffer;
 
-const RunOperations: DropboxTest = {
+const RunOperations: TestConfig<DropboxTarget> = {
     name: "Run Basic Operations",
     disabled: (target) => target === undefined,
     runner: async (logger, target) => {
@@ -28,7 +27,12 @@ const RunOperations: DropboxTest = {
             .flatmap(expect(r => r === null, "Writing file...", () => target!.write(file)))
             .flatmap(expect(r => r !== null, "Reading timestamp...", () => target!.timestamp()))
             .flatmap(expect(r => r !== null, "Reading file...", () => target!.read()))
-            .flatmap(expect(r => r !== null, "Deleting file...", () => target!.delete()))
+            .flatmap(expect(
+                r => String.fromCharCode(...new Uint8Array((r as TargetValue)?.buffer ?? new ArrayBuffer(0)))
+                     === String.fromCharCode(...new Uint8Array(file)),
+                "Deleting file...",
+                () => target!.delete())
+            )
             .flatmap(expect(r => r === null, "Deleting file...", () => target!.delete()))
             .flatmap(expect(r => r === null, "Reading timestamp...", () => target!.timestamp()))
             .flatmap(expect(r => r === null, "Reading file...", () => target!.read()))
@@ -43,7 +47,7 @@ const RunOperations: DropboxTest = {
     },
 };
 
-const OldToken: DropboxTest = {
+const OldToken: TestConfig<DropboxTarget> = {
     name: "Refresh Old Token",
     disabled: (target) => target === undefined || (target as any).connection.expiry >= new Date(),
     runner: async (logger, target) => {
@@ -65,7 +69,7 @@ const OldToken: DropboxTest = {
     },
 };
 
-const HandleRevokedAccess: DropboxTest = {
+const HandleRevokedAccess: TestConfig<DropboxTarget> = {
     name: "Handles Revoked Access",
     disabled: (target) => target === undefined || !window.navigator.onLine,
     runner: async (logger, target) => {
@@ -82,7 +86,7 @@ const HandleRevokedAccess: DropboxTest = {
     },
 };
 
-const HandleOffline: DropboxTest = {
+const HandleOffline: TestConfig<DropboxTarget> = {
     name: "Handles Being Offline",
     disabled: (target) => target === undefined || window.navigator.onLine,
     runner: async (logger, target) => {
@@ -99,7 +103,7 @@ const HandleOffline: DropboxTest = {
     },
 };
 
-const InvalidPath: DropboxTest = {
+const InvalidPath: TestConfig<DropboxTarget> = {
     name: "Handles Invalid Paths",
     disabled: (target) => target === undefined,
     runner: async (logger, target) => {
@@ -121,7 +125,7 @@ const InvalidPath: DropboxTest = {
     },
 };
 
-export const OperationsTests: DropboxTest[] = [
+export const OperationsTests: TestConfig<DropboxTarget>[] = [
     RunOperations,
     OldToken,
     HandleRevokedAccess,

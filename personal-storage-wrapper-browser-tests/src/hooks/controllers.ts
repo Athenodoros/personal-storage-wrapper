@@ -2,7 +2,7 @@ import { useState } from "react";
 import { TestName, TestResult } from "../components/test";
 import { getStorageManager } from "../utils/storage";
 
-type AccountTestResults = Record<TestName, TestResult | undefined>;
+export type AccountTestResults = Record<TestName, TestResult | undefined>;
 
 export interface TestResultsController {
     results: AccountTestResults;

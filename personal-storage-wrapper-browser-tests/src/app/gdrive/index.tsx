@@ -1,4 +1,4 @@
-import { TestResultsController } from "../hooks/controllers";
+import { TestResultsController } from "../../hooks/controllers";
 
 export const GDriveTests: React.FC<{ controller: TestResultsController }> = () => <div />;
 

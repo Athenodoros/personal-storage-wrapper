@@ -1,13 +1,13 @@
 import { DropboxTarget } from "personal-storage-wrapper";
 import { TestResult } from "../../components/test";
 import { getStorageManager } from "../../utils/storage";
-import { DropboxTest } from "./types";
+import { TestConfig } from "../tests";
 
 const CLIENT_ID = "sha2xamq49ewlbo";
 const POPUP_URL = window.location.origin + "/dropbox-popup";
 const REDIRECT_URL = window.location.origin + "/dropbox-redirect";
 
-const ConnectInPopup: DropboxTest = {
+const ConnectInPopup: TestConfig<DropboxTarget> = {
     name: "Connect in Popup",
     runner: async (logger, _, addTarget) => {
         logger("Opening Popup...");
@@ -28,7 +28,7 @@ const storage = getStorageManager<"approval" | "rejection" | "popup">("dropbox-l
 
 let approvalAddCache: (target: DropboxTarget) => void;
 let approvalRedirectResult: Promise<TestResult> | null = null;
-export const getConnectViaRedirect = (add: (target: DropboxTarget) => void): DropboxTest => {
+export const getConnectViaRedirect = (add: (target: DropboxTarget) => void): TestConfig<DropboxTarget> => {
     approvalAddCache = add;
 
     if (approvalRedirectResult === null) {
@@ -65,7 +65,7 @@ export const getConnectViaRedirect = (add: (target: DropboxTarget) => void): Dro
     };
 };
 
-const HandlePopupRejection: DropboxTest = {
+const HandlePopupRejection: TestConfig<DropboxTarget> = {
     name: "Handle Popup Rejection",
     runner: async (logger) => {
         logger("Opening Popup...");
@@ -88,7 +88,7 @@ const rejectionRedirectResult: Promise<TestResult> = DropboxTarget.catchRedirect
         else return { logs: "Target created!", success: false };
     }
 );
-const HandleRedirectRejection: DropboxTest = {
+const HandleRedirectRejection: TestConfig<DropboxTarget> = {
     name: "Handle Redirect Rejection",
     state:
         storage.load() === "rejection"
@@ -106,7 +106,7 @@ const HandleRedirectRejection: DropboxTest = {
     },
 };
 
-const HandleEmptyRedirectCatch: DropboxTest = {
+const HandleEmptyRedirectCatch: TestConfig<DropboxTarget> = {
     name: "Handle Empty Redirect Catch",
     disabled: () => window.location.href.startsWith(POPUP_URL),
     runner: async (logger) => {
@@ -125,7 +125,7 @@ const HandleEmptyRedirectCatch: DropboxTest = {
     },
 };
 
-const HandlePopupBlockerDelay: DropboxTest = {
+const HandlePopupBlockerDelay: TestConfig<DropboxTarget> = {
     name: "Handle Popup Blocker Delay",
     state:
         storage.load() === "popup"
@@ -151,7 +151,7 @@ const HandlePopupBlockerDelay: DropboxTest = {
     },
 };
 
-const BadToken: DropboxTest = {
+const BadToken: TestConfig<DropboxTarget> = {
     name: "Handle Bad Token",
     runner: async (logger) => {
         logger("Creating bad target...");

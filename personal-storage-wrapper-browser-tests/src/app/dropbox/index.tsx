@@ -1,42 +1,25 @@
 import { DropboxTarget, DropboxTargetType } from "personal-storage-wrapper";
 import { TargetTypeDisplay } from "../../components/targettype";
-import { TestResult } from "../../components/test";
+import { TestProps, TestResult } from "../../components/test";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
-import {
-    BadToken,
-    ConnectInPopup,
-    ConnectViaRedirect,
-    HandleEmptyRedirectCatch,
-    HandlePopupBlockerDelay,
-    HandlePopupRejection,
-    HandleRedirectRejection,
-} from "./auth";
-import { HandleOffline, HandleRevokedAccess, InvalidPath, OldToken, RunOperations } from "./operations";
+import { AuthTests, getConnectViaRedirect } from "./auth";
+import { OperationsTests } from "./operations";
 import { DropboxTest } from "./types";
-
-const tests: DropboxTest[] = [
-    // Auth
-    ConnectInPopup,
-    ConnectViaRedirect,
-    HandlePopupRejection,
-    HandleRedirectRejection,
-    HandleEmptyRedirectCatch,
-    HandlePopupBlockerDelay,
-    BadToken,
-
-    // Normal Operations
-    RunOperations,
-    OldToken,
-    HandleRevokedAccess,
-    HandleOffline,
-    InvalidPath,
-];
 
 export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
     controller: { results, update, reset },
 }) => {
     const targets = useTargetState(DropboxTargetType, DropboxTarget.deserialise);
+
+    const getTestSpec = ({ name, disabled, runner, state }: DropboxTest): TestProps => ({
+        name,
+        disabled: disabled ? disabled(targets.selected) : false,
+        result: results[name],
+        update: (result: TestResult | undefined) => update(name, result),
+        runner: runner && ((logger) => runner(logger, targets.selected, targets.add)),
+        state,
+    });
 
     return (
         <TargetTypeDisplay
@@ -56,15 +39,12 @@ export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
                     ["Path", (target as any).path],
                 ],
             }))}
-            tests={tests.map(({ name, disabled, runner }) => ({
-                name,
-                disabled: disabled ? disabled(targets.selected) : false,
-                result: results[name],
-                update: (result: TestResult | undefined) => update(name, result),
-                runner: runner && ((logger) => runner(logger, targets.selected, targets.add)),
-            }))}
+            groups={[
+                { name: "Authentication", tests: [...AuthTests, getConnectViaRedirect(targets.add)].map(getTestSpec) },
+                { name: "Operations", tests: OperationsTests.map(getTestSpec) },
+            ]}
         />
     );
 };
 
-export const DropboxTestCount = tests.length;
+export const DropboxTestCount = AuthTests.length + 1 + OperationsTests.length;

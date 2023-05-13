@@ -4,7 +4,7 @@ export interface TitleProps {
     name: string;
 }
 
-const HEIGHT = "h-16 mb-6 ";
+const HEIGHT = "h-16 mb-2 ";
 
 export const Title: React.FC<TitleProps> = ({ image, type, name }) => (
     <div className={HEIGHT + "flex"}>

@@ -1,14 +1,17 @@
 import { DropboxTarget } from "personal-storage-wrapper";
+import { TestResult } from "../../components/test";
+import { getStorageManager } from "../../utils/storage";
 import { DropboxTest } from "./types";
 
 const CLIENT_ID = "sha2xamq49ewlbo";
-const REDIRECT_URL = window.location.origin + "/dropbox-popup";
+const POPUP_URL = window.location.origin + "/dropbox-popup";
+const REDIRECT_URL = window.location.origin + "/dropbox-redirect";
 
-export const ConnectInPopup: DropboxTest = {
+const ConnectInPopup: DropboxTest = {
     name: "Connect in Popup",
     runner: async (logger, _, addTarget) => {
         logger("Opening Popup...");
-        const target = await DropboxTarget.setupInPopup(CLIENT_ID, REDIRECT_URL, "/data.json.tgz");
+        const target = await DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak");
 
         if (target === null) {
             logger("No target created!");
@@ -21,11 +24,48 @@ export const ConnectInPopup: DropboxTest = {
     },
 };
 
-export const ConnectViaRedirect: DropboxTest = {
-    name: "Connect via Redirect",
+const storage = getStorageManager<"approval" | "rejection" | "popup">("dropbox-load-behaviour");
+
+let approvalAddCache: (target: DropboxTarget) => void;
+let approvalRedirectResult: Promise<TestResult> | null = null;
+export const getConnectViaRedirect = (add: (target: DropboxTarget) => void): DropboxTest => {
+    approvalAddCache = add;
+
+    if (approvalRedirectResult === null) {
+        approvalRedirectResult = DropboxTarget.catchRedirectForAuth("/data.bak").then(
+            async (target): Promise<TestResult> => {
+                if (target === null) return { success: false, logs: "No target created!" };
+
+                const target2 = await DropboxTarget.catchRedirectForAuth("/data.bak");
+                if (target2 !== null) return { success: false, logs: "Duplicate target created!" };
+
+                storage.clear();
+                approvalAddCache(target);
+                return { success: true, logs: "Target created and added!" };
+            }
+        );
+    }
+
+    return {
+        name: "Connect via Redirect",
+        state:
+            storage.load() === "approval"
+                ? { log: "Redirecting for auth...", result: approvalRedirectResult }
+                : undefined,
+        runner: async (logger) => {
+            storage.save("approval");
+            DropboxTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL);
+
+            await new Promise<void>((resolve) => setTimeout(() => resolve(), 10000));
+
+            logger("Redirecting for auth...");
+            logger("Failed to redirect!");
+            return false;
+        },
+    };
 };
 
-export const HandlePopupRejection: DropboxTest = {
+const HandlePopupRejection: DropboxTest = {
     name: "Handle Popup Rejection",
     runner: async (logger) => {
         logger("Opening Popup...");
@@ -42,13 +82,33 @@ export const HandlePopupRejection: DropboxTest = {
     },
 };
 
-export const HandleRedirectRejection: DropboxTest = {
+const rejectionRedirectResult: Promise<TestResult> = DropboxTarget.catchRedirectForAuth("/data.back").then(
+    async (target) => {
+        if (target === null) return { logs: "No target created!", success: true };
+        else return { logs: "Target created!", success: false };
+    }
+);
+const HandleRedirectRejection: DropboxTest = {
     name: "Handle Redirect Rejection",
+    state:
+        storage.load() === "rejection"
+            ? { log: "Redirecting for auth...", result: rejectionRedirectResult }
+            : undefined,
+    runner: async (logger) => {
+        storage.save("rejection");
+        DropboxTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL);
+
+        await new Promise<void>((resolve) => setTimeout(() => resolve(), 10000));
+
+        logger("Redirecting for auth...");
+        logger("Failed to redirect!");
+        return false;
+    },
 };
 
-export const HandleEmptyRedirectCatch: DropboxTest = {
+const HandleEmptyRedirectCatch: DropboxTest = {
     name: "Handle Empty Redirect Catch",
-    disabled: () => window.location.href.startsWith(REDIRECT_URL),
+    disabled: () => window.location.href.startsWith(POPUP_URL),
     runner: async (logger) => {
         logger("Catching redirect...");
 
@@ -65,11 +125,33 @@ export const HandleEmptyRedirectCatch: DropboxTest = {
     },
 };
 
-export const HandlePopupBlockerDelay: DropboxTest = {
+const HandlePopupBlockerDelay: DropboxTest = {
     name: "Handle Popup Blocker Delay",
+    state:
+        storage.load() === "popup"
+            ? {
+                  log: "Refreshing for popup test...",
+                  result: DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak").then((target) => {
+                      storage.clear();
+
+                      if (target === null) return { logs: "No target created!", success: true };
+                      else return { logs: "Target created!", success: false };
+                  }),
+              }
+            : undefined,
+    runner: async (logger) => {
+        storage.save("popup");
+        window.location.reload();
+
+        await new Promise<void>((resolve) => setTimeout(() => resolve(), 10000));
+
+        logger("Refreshing for popup test...");
+        logger("Failed to redirect!");
+        return false;
+    },
 };
 
-export const BadToken: DropboxTest = {
+const BadToken: DropboxTest = {
     name: "Handle Bad Token",
     runner: async (logger) => {
         logger("Creating bad target...");
@@ -96,3 +178,12 @@ export const BadToken: DropboxTest = {
         return false;
     },
 };
+
+export const AuthTests = [
+    ConnectInPopup,
+    HandlePopupRejection,
+    HandleEmptyRedirectCatch,
+    HandlePopupBlockerDelay,
+    BadToken,
+    HandleRedirectRejection,
+];

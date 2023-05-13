@@ -4,7 +4,7 @@ import { DropboxTest } from "./types";
 
 const file = encodeToArrayBuffer("Hello, World!");
 
-export const RunOperations: DropboxTest = {
+const RunOperations: DropboxTest = {
     name: "Run Basic Operations",
     disabled: (target) => target === undefined,
     runner: async (logger, target) => {
@@ -43,7 +43,7 @@ export const RunOperations: DropboxTest = {
     },
 };
 
-export const OldToken: DropboxTest = {
+const OldToken: DropboxTest = {
     name: "Refresh Old Token",
     disabled: (target) => target === undefined || (target as any).connection.expiry >= new Date(),
     runner: async (logger, target) => {
@@ -65,7 +65,7 @@ export const OldToken: DropboxTest = {
     },
 };
 
-export const HandleRevokedAccess: DropboxTest = {
+const HandleRevokedAccess: DropboxTest = {
     name: "Handles Revoked Access",
     disabled: (target) => target === undefined || !window.navigator.onLine,
     runner: async (logger, target) => {
@@ -82,7 +82,7 @@ export const HandleRevokedAccess: DropboxTest = {
     },
 };
 
-export const HandleOffline: DropboxTest = {
+const HandleOffline: DropboxTest = {
     name: "Handles Being Offline",
     disabled: (target) => target === undefined || window.navigator.onLine,
     runner: async (logger, target) => {
@@ -99,7 +99,7 @@ export const HandleOffline: DropboxTest = {
     },
 };
 
-export const InvalidPath: DropboxTest = {
+const InvalidPath: DropboxTest = {
     name: "Handles Invalid Paths",
     disabled: (target) => target === undefined,
     runner: async (logger, target) => {
@@ -120,3 +120,11 @@ export const InvalidPath: DropboxTest = {
         return false;
     },
 };
+
+export const OperationsTests: DropboxTest[] = [
+    RunOperations,
+    OldToken,
+    HandleRevokedAccess,
+    HandleOffline,
+    InvalidPath,
+];

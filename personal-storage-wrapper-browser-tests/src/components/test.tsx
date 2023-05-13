@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { IconButton } from "./button";
 
 export type TestName = string;
@@ -14,14 +14,15 @@ export interface TestProps {
     result: TestResult | undefined;
     runner?: (logger: (line: string) => void) => Promise<boolean>;
     update: (result: TestResult | undefined) => void;
+    state?: { log: string; result: Promise<TestResult> };
 }
 
 const noop = (): void => void null;
 export const TestRunningContext = createContext({ increase: noop, decrease: noop });
 
-export const Test = ({ name, disabled, result, runner, update }: TestProps) => {
-    const [open, setOpen] = useState(false);
-    const [runLogs, setRunLogs] = useState<null | string>(null);
+export const Test = ({ name, disabled, result, runner, update, state }: TestProps) => {
+    const [open, setOpen] = useState(state !== undefined);
+    const [runLogs, setRunLogs] = useState<null | string>(state?.log ?? null);
 
     const running = runLogs !== null;
     useEffect(() => {
@@ -29,6 +30,18 @@ export const Test = ({ name, disabled, result, runner, update }: TestProps) => {
     }, [result]);
 
     const context = useContext(TestRunningContext);
+
+    useEffect(() => {
+        if (!state) return;
+
+        context.increase();
+        state.result.then((result) => {
+            update({ success: result.success, logs: runLogs + "\n" + result.logs });
+            context.decrease();
+            setRunLogs(null);
+            if (result.success) setOpen(false);
+        });
+    }, []);
 
     const run = async () => {
         if (running || runner === undefined) return;
@@ -62,29 +75,16 @@ export const Test = ({ name, disabled, result, runner, update }: TestProps) => {
                 >
                     {!result ? "add_circle" : result.success ? "check_circle" : "highlight_off"}
                 </span>
-                <button
+                <ActionButton
                     disabled={disabled || running || runner === undefined}
-                    onClick={(event) => {
-                        if (!disabled && !running) run();
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }}
-                    className={
-                        "bg-blue-50 flex rounded-lg pl-2 transition w-16 " +
-                        (running || runner === undefined || disabled
-                            ? "text-blue-200 justify-center"
-                            : "text-blue-600 hover:bg-blue-100 active:bg-blue-200 active:text-blue-700")
+                    name="RUN"
+                    onClick={run}
+                    contents={
+                        running ? (
+                            <span className="material-icons animate-spin pointer-events-none">autorenew</span>
+                        ) : undefined
                     }
-                >
-                    {running ? (
-                        <span className="material-icons animate-spin pointer-events-none">autorenew</span>
-                    ) : (
-                        <>
-                            <p>RUN</p>
-                            <span className="material-icons">chevron_right</span>
-                        </>
-                    )}
-                </button>
+                />
                 <h6 className={"ml-4 grow " + (runner ? "" : "font-light text-slate-400")}>{name}</h6>
                 <IconButton
                     disabled={!result?.logs && !running}
@@ -99,3 +99,32 @@ export const Test = ({ name, disabled, result, runner, update }: TestProps) => {
         </div>
     );
 };
+
+const ActionButton: React.FC<{ disabled: boolean; onClick: () => void; name: string; contents?: ReactNode }> = ({
+    disabled,
+    onClick,
+    name,
+    contents,
+}) => (
+    <button
+        disabled={disabled}
+        onClick={(event) => {
+            if (!disabled) onClick();
+            event.preventDefault();
+            event.stopPropagation();
+        }}
+        className={
+            "bg-blue-50 flex rounded-lg pl-2 transition w-16 " +
+            (disabled
+                ? "text-blue-200 justify-center"
+                : "text-blue-600 hover:bg-blue-100 active:bg-blue-200 active:text-blue-700")
+        }
+    >
+        {contents ?? (
+            <>
+                <p>{name}</p>
+                <span className="material-icons">chevron_right</span>
+            </>
+        )}
+    </button>
+);

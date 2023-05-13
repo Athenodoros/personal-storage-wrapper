@@ -39,7 +39,7 @@ export const useTargetState = <T extends DefaultTarget>(type: T["type"], deseria
 
         if (!selected) setSelected(target);
 
-        setAccounts(accounts.concat([{ timestamp: formatDateString(new Date()), target }]));
+        setAccounts([{ timestamp: formatDateString(new Date()), target }].concat(accounts));
     };
 
     const remove = (target: T) => {

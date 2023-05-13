@@ -85,7 +85,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         new DropboxTarget({ ...connection, expiry: new Date(connection.expiry) }, user, path);
 
     serialise = (): DropboxTargetSerialisationConfig => ({
-        connection: this.connection,
+        connection: { ...this.connection, expiry: this.connection.expiry.toISOString() },
         user: this.user,
         path: this.path,
     });

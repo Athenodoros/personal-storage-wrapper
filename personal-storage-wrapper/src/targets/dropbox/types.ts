@@ -16,6 +16,6 @@ export interface DropboxUserDetails {
 
 export type DropboxTargetSerialisationConfig = {
     path: string;
-    connection: DropboxConnection;
+    connection: Omit<DropboxConnection, "expiry"> & { expiry: string };
     user: DropboxUserDetails;
 };

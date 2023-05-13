@@ -20,6 +20,6 @@ export interface GDriveFileReference {
 
 export interface GDriveTargetSerialisationConfig {
     file: GDriveFileReference;
-    connection: GDriveConnection;
+    connection: Omit<GDriveConnection, "expiry"> & { expiry: string };
     user: GDriveUserDetails;
 }

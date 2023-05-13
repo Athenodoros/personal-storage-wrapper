@@ -37,7 +37,7 @@ export const getTestDropBoxSync = async ({ compressed = false }: { compressed?: 
     Sync<DropboxTarget>
 > => ({
     target: DropboxTarget.deserialise({
-        connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date() },
+        connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date().toISOString() },
         user: { id: "", email: "", name: "" },
         path: "/data.bak",
     }),

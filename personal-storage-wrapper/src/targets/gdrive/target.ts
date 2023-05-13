@@ -103,10 +103,10 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     // Serialisation
     static deserialise: Deserialiser<GDriveTarget, false> = ({ connection, user, file }) =>
-        new GDriveTarget(connection, user, file);
+        new GDriveTarget({ ...connection, expiry: new Date(connection.expiry) }, user, file);
 
     serialise = (): GDriveTargetSerialisationConfig => ({
-        connection: this.connection,
+        connection: { ...this.connection, expiry: this.connection.expiry.toISOString() },
         user: this.user,
         file: this.file,
     });

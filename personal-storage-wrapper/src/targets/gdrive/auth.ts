@@ -20,12 +20,15 @@ const getAuthRedirectURL = (clientId: string, useAppData: boolean, redirectURI: 
         : [defaultScope];
     const scope = encodeURI(definitelyScopes.join(" "));
 
-    return constructURLWithQueryParams("https://accounts.google.com/o/oauth2/v2/auth", {
-        client_id: clientId,
-        redirect_uri: uri,
-        response_type: "token",
-        scope,
-    });
+    return {
+        definitelyScopes,
+        url: constructURLWithQueryParams("https://accounts.google.com/o/oauth2/v2/auth", {
+            client_id: clientId,
+            redirect_uri: uri,
+            response_type: "token",
+            scope,
+        }),
+    };
 };
 
 const SESSION_STORAGE_KEY = "PERSONAL_STORAGE_WRAPPER_GDRIVE_CHALLENGE";
@@ -33,6 +36,7 @@ interface SessionStorageStruct {
     clientId: string;
     redirectURI: string;
     useAppData: boolean;
+    scopes: string[];
 }
 
 export const redirectForAuth = async (
@@ -42,19 +46,21 @@ export const redirectForAuth = async (
     scopes?: string[]
 ): Promise<void> => {
     const definitelyRedirectURI = redirectURI || window.location.href.split("?")[0].split("#")[0];
+    const { url, definitelyScopes } = getAuthRedirectURL(clientId, useAppData, definitelyRedirectURI, scopes);
     saveToSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY, {
         clientId,
         useAppData,
         redirectURI: definitelyRedirectURI,
+        scopes: definitelyScopes,
     });
-    window.location.href = getAuthRedirectURL(clientId, useAppData, definitelyRedirectURI, scopes);
+    window.location.href = url;
 };
 
 export const catchRedirectForAuth = async (): Promise<GDriveConnection | null> => {
     const session = loadFromSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY);
     if (session === null) return null;
 
-    const { clientId, useAppData, redirectURI } = session;
+    const { clientId, useAppData, redirectURI, scopes } = session;
     if (window.location.href.split("#")[0] !== redirectURI) return null;
 
     const search = new URLSearchParams(window.location.hash.replace("#", ""));
@@ -65,7 +71,7 @@ export const catchRedirectForAuth = async (): Promise<GDriveConnection | null> =
     const expiry = new Date(new Date().valueOf() + (Number(expiresIn) - MAX_RTT_FOR_QUERY_IN_SECONDS * 2) * 1000);
 
     // Return metadata
-    return { clientId, useAppData, accessToken, expiry };
+    return { clientId, useAppData, scopes, accessToken, expiry };
 };
 
 export const runAuthInPopup = async (
@@ -78,7 +84,7 @@ export const runAuthInPopup = async (
 
     // Open separate window for auth
     const startDate = new Date();
-    const url = getAuthRedirectURL(clientId, useAppData, definitelyRedirectURI, scopes);
+    const { url, definitelyScopes } = getAuthRedirectURL(clientId, useAppData, definitelyRedirectURI, scopes);
 
     // Wait for redirect after authing in to GDrive
     const results = await getFromPopup({ url, height: 720 }, (context) => {
@@ -99,5 +105,5 @@ export const runAuthInPopup = async (
     const { accessToken, expiry } = results;
 
     // Return metadata
-    return { clientId, useAppData, accessToken, expiry };
+    return { clientId, useAppData, scopes: definitelyScopes, accessToken, expiry };
 };

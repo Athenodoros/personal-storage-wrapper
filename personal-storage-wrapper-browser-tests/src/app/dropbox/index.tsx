@@ -3,8 +3,8 @@ import { TargetTypeDisplay } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
 import { getGetTestSpec } from "../tests";
-import { AuthTests, getConnectViaRedirect } from "./auth";
-import { OperationsTests } from "./operations";
+import { DropboxAuthTests, getDropboxConnectViaRedirect } from "./auth";
+import { DropboxOperationsTests } from "./operations";
 
 export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
     controller: { results, update, reset },
@@ -31,11 +31,14 @@ export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
                 ],
             }))}
             groups={[
-                { name: "Authentication", tests: [...AuthTests, getConnectViaRedirect(targets.add)].map(getTestSpec) },
-                { name: "Operations", tests: OperationsTests.map(getTestSpec) },
+                {
+                    name: "Authentication",
+                    tests: [...DropboxAuthTests, getDropboxConnectViaRedirect(targets.add)].map(getTestSpec),
+                },
+                { name: "Operations", tests: DropboxOperationsTests.map(getTestSpec) },
             ]}
         />
     );
 };
 
-export const DropboxTestCount = AuthTests.length + 1 + OperationsTests.length;
+export const DropboxTestCount = DropboxAuthTests.length + 1 + DropboxOperationsTests.length;

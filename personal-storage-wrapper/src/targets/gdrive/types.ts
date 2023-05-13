@@ -5,6 +5,7 @@ export interface GDriveConnection {
     clientId: string;
     useAppData: boolean;
     accessToken: string;
+    scopes: string[];
     expiry: Date;
 }
 

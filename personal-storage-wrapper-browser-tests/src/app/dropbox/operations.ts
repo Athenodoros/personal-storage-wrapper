@@ -125,7 +125,7 @@ const InvalidPath: TestConfig<DropboxTarget> = {
     },
 };
 
-export const OperationsTests: TestConfig<DropboxTarget>[] = [
+export const DropboxOperationsTests: TestConfig<DropboxTarget>[] = [
     RunOperations,
     OldToken,
     HandleRevokedAccess,

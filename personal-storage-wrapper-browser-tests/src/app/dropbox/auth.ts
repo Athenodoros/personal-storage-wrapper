@@ -28,7 +28,7 @@ const storage = getStorageManager<"approval" | "rejection" | "popup">("dropbox-l
 
 let approvalAddCache: (target: DropboxTarget) => void;
 let approvalRedirectResult: Promise<TestResult> | null = null;
-export const getConnectViaRedirect = (add: (target: DropboxTarget) => void): TestConfig<DropboxTarget> => {
+export const getDropboxConnectViaRedirect = (add: (target: DropboxTarget) => void): TestConfig<DropboxTarget> => {
     approvalAddCache = add;
 
     if (approvalRedirectResult === null) {
@@ -179,7 +179,7 @@ const BadToken: TestConfig<DropboxTarget> = {
     },
 };
 
-export const AuthTests = [
+export const DropboxAuthTests: TestConfig<DropboxTarget>[] = [
     ConnectInPopup,
     HandlePopupRejection,
     HandleEmptyRedirectCatch,

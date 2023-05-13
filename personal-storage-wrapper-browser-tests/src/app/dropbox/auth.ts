@@ -15,7 +15,8 @@ const ConnectInPopup: TestConfig<DropboxTarget> = getConnectInPopup(() =>
 export const getDropboxConnectViaRedirect = getGetConnectViaRedirect(
     "dropbox",
     () => DropboxTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
-    () => DropboxTarget.catchRedirectForAuth("/data.bak")
+    () => DropboxTarget.catchRedirectForAuth("/data.bak"),
+    false
 );
 
 const storage = getStorageManager<"approval" | "rejection" | "popup">("dropbox-load-behaviour");

@@ -3,7 +3,7 @@ import { TargetTypeDisplay } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
 import { getGetTestSpec } from "../utils/tests";
-import { GDriveAuthTests } from "./auth";
+import { GDriveAuthTests, getGDriveConnectViaRedirect } from "./auth";
 import { GDriveOperationsTests } from "./operations";
 
 export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
@@ -39,11 +39,14 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
                 ],
             }))}
             groups={[
-                { name: "Authentication", tests: GDriveAuthTests.map(getTestSpec) },
+                {
+                    name: "Authentication",
+                    tests: [...GDriveAuthTests, getGDriveConnectViaRedirect(targets.add)].map(getTestSpec),
+                },
                 { name: "Operations", tests: GDriveOperationsTests.map(getTestSpec) },
             ]}
         />
     );
 };
 
-export const GDriveTestCount = GDriveAuthTests.length + GDriveOperationsTests.length;
+export const GDriveTestCount = GDriveAuthTests.length + 1 + GDriveOperationsTests.length;

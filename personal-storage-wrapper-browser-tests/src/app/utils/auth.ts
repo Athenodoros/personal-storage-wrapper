@@ -23,7 +23,8 @@ export const getConnectInPopup = <T extends DefaultTarget>(open: () => Promise<T
 export const getGetConnectViaRedirect = <T extends DefaultTarget>(
     name: string,
     redirect: () => void,
-    handle: () => Promise<T | null>
+    handle: () => Promise<T | null>,
+    expectDupe: boolean
 ) => {
     const storage = getStorageManager<"approval">(name + "-load-behaviour-approval");
 
@@ -41,7 +42,8 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
                 if (target === null) return { success: false, logs: "No target created!" };
 
                 const target2 = await handle();
-                if (target2 !== null) return { success: false, logs: "Duplicate target created!" };
+                if (!expectDupe && target2 !== null) return { success: false, logs: "Duplicate target created!" };
+                if (expectDupe && target2 === null) return { success: false, logs: "No duplicate target created!" };
 
                 approvalAddCache(target);
                 return { success: true, logs: "Target created and added!" };

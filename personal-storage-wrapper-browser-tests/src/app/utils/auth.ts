@@ -37,7 +37,6 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
         if (approvalRedirectResult === null && storage.load() === "approval") {
             approvalRedirectResult = handle().then(async (target): Promise<TestResult> => {
                 storage.clear();
-                console.log(target);
 
                 if (target === null) return { success: false, logs: "No target created!" };
 

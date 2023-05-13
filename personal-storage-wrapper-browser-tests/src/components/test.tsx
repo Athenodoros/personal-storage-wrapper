@@ -1,3 +1,4 @@
+import { DefaultTarget } from "personal-storage-wrapper";
 import { ReactNode, createContext, useContext, useEffect, useState } from "react";
 import { IconButton } from "./button";
 
@@ -9,6 +10,7 @@ export interface TestResult {
 }
 
 export interface TestProps {
+    target: DefaultTarget["type"];
     name: TestName;
     disabled: boolean;
     result: TestResult | undefined;
@@ -17,10 +19,10 @@ export interface TestProps {
     state?: { log: string; result: Promise<TestResult> };
 }
 
-const noop = (): void => void null;
-export const TestRunningContext = createContext({ increase: noop, decrease: noop });
+const noop = (_target: string, _name: string): void => void null;
+export const TestRunningContext = createContext({ setAsRunning: noop, setAsStopped: noop });
 
-export const Test = ({ name, disabled, result, runner, update, state }: TestProps) => {
+export const Test = ({ target, name, disabled, result, runner, update, state }: TestProps) => {
     const [open, setOpen] = useState(state !== undefined);
     const [runLogs, setRunLogs] = useState<null | string>(state?.log ?? null);
 
@@ -34,10 +36,10 @@ export const Test = ({ name, disabled, result, runner, update, state }: TestProp
     useEffect(() => {
         if (!state) return;
 
-        context.increase();
+        context.setAsRunning(target, name);
         state.result.then((result) => {
             update({ success: result.success, logs: runLogs + "\n" + result.logs });
-            context.decrease();
+            context.setAsStopped(target, name);
             setRunLogs(null);
             if (result.success) setOpen(false);
         });
@@ -47,7 +49,7 @@ export const Test = ({ name, disabled, result, runner, update, state }: TestProp
         if (running || runner === undefined) return;
 
         update(undefined);
-        context.increase();
+        context.setAsRunning(target, name);
 
         let logs = "";
         setRunLogs(logs);
@@ -59,7 +61,7 @@ export const Test = ({ name, disabled, result, runner, update, state }: TestProp
         });
 
         update({ success, logs });
-        context.decrease();
+        context.setAsStopped(target, name);
         setRunLogs(null);
         if (!open) setOpen(false);
     };

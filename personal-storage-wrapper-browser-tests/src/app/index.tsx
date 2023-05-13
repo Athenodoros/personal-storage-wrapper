@@ -9,14 +9,15 @@ export const App: React.FC = () => {
     const dropbox = useTestResultsController("dropbox");
     const gdrive = useTestResultsController("gdrive");
 
-    const [running, setRunning] = useState(0);
+    const [running, setRunning] = useState(new Set<string>());
     const runningRef = useRef(running);
-    const increase = () => {
-        runningRef.current += 1;
+    const setAsRunning = (target: string, name: string) => {
+        runningRef.current = new Set([...runningRef.current.values(), target + "-" + name]);
         setRunning(runningRef.current);
     };
-    const decrease = () => {
-        runningRef.current -= 1;
+    const setAsStopped = (target: string, name: string) => {
+        runningRef.current = new Set(runningRef.current);
+        runningRef.current.delete(target + "-" + name);
         setRunning(runningRef.current);
     };
 
@@ -38,12 +39,12 @@ export const App: React.FC = () => {
             <div className="w-[800px] pb-48">
                 <Header
                     success={success}
-                    running={running}
+                    running={running.size}
                     failed={failed}
                     total={DropboxTestCount + GDriveTestCount}
                     reset={() => (dropbox.reset(), gdrive.reset())}
                 />
-                <TestRunningContext.Provider value={{ increase, decrease }}>
+                <TestRunningContext.Provider value={{ setAsRunning, setAsStopped }}>
                     <DropboxTests controller={dropbox} />
                     <GDriveTests controller={gdrive} />
                 </TestRunningContext.Provider>

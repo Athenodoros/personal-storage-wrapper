@@ -10,7 +10,7 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
     controller: { results, update, reset },
 }) => {
     const targets = useTargetState(GDriveTargetType, GDriveTarget.deserialise);
-    const getTestSpec = getGetTestSpec(targets.selected, targets.add, update, results);
+    const getTestSpec = getGetTestSpec("gdrive", targets.selected, targets.add, update, results);
 
     return (
         <TargetTypeDisplay

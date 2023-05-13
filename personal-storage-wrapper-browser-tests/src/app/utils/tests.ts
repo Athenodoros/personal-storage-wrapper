@@ -11,12 +11,14 @@ export interface TestConfig<T extends DefaultTarget> {
 
 export const getGetTestSpec =
     <T extends DefaultTarget>(
+        target: DefaultTarget["type"],
         selected: T | undefined,
         add: (target: T) => void,
         update: (name: string, result: TestResult | undefined) => void,
         results: AccountTestResults
     ) =>
     ({ name, disabled, runner, state }: TestConfig<T>): TestProps => ({
+        target,
         name,
         disabled: disabled ? disabled(selected) : false,
         result: results[name],

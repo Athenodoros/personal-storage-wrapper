@@ -1,4 +1,4 @@
 import { GDriveTarget } from "personal-storage-wrapper";
-import { TestConfig } from "../tests";
+import { TestConfig } from "../utils/tests";
 
 export const GDriveOperationsTests: TestConfig<GDriveTarget>[] = [];

@@ -1,6 +1,6 @@
 import { DefaultTarget } from "personal-storage-wrapper";
-import { TestProps, TestResult } from "../components/test";
-import { AccountTestResults } from "../hooks/controllers";
+import { TestProps, TestResult } from "../../components/test";
+import { AccountTestResults } from "../../hooks/controllers";
 
 export interface TestConfig<T extends DefaultTarget> {
     name: string;

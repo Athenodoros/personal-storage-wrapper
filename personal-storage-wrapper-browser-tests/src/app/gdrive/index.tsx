@@ -2,7 +2,7 @@ import { GDriveTarget, GDriveTargetType } from "personal-storage-wrapper";
 import { TargetTypeDisplay } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
-import { getGetTestSpec } from "../tests";
+import { getGetTestSpec } from "../utils/tests";
 import { GDriveAuthTests } from "./auth";
 import { GDriveOperationsTests } from "./operations";
 
@@ -28,7 +28,12 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
                 values: [
                     ["Token Expiry", formatDateString((target as any).connection.expiry)],
                     ["Use App Data", (target as any).connection.useAppData],
-                    ["Scopes", (target as any).connection.scopes.join(", ")],
+                    [
+                        "Scopes",
+                        (target as any).connection.scopes
+                            .map((scope: string) => scope.replace(/^https:\/\/www\.googleapis\.com\/auth\//, ""))
+                            .join(", "),
+                    ],
                     ["File", target.file.id],
                     ["MIME Type", target.file.mime],
                 ],

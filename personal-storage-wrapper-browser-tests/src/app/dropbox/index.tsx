@@ -2,7 +2,7 @@ import { DropboxTarget, DropboxTargetType } from "personal-storage-wrapper";
 import { TargetTypeDisplay } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
-import { getGetTestSpec } from "../tests";
+import { getGetTestSpec } from "../utils/tests";
 import { DropboxAuthTests, getDropboxConnectViaRedirect } from "./auth";
 import { DropboxOperationsTests } from "./operations";
 

@@ -1,5 +1,5 @@
 import { DropboxTarget, Result, TargetValue } from "personal-storage-wrapper";
-import { TestConfig } from "../tests";
+import { TestConfig } from "../utils/tests";
 
 const file = Uint8Array.from("Hello, World!", (c) => c.charCodeAt(0)).buffer;
 

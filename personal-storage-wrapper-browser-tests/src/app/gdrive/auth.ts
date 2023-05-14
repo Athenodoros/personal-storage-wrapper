@@ -85,6 +85,65 @@ const BadToken: TestConfig<GDriveTarget> = {
     },
 };
 
+const FindExistingFile: TestConfig<GDriveTarget> = {
+    name: "Finds Existing File",
+    disabled: (target) => target === undefined,
+    runner: async (logger, target) => {
+        logger("Finding existing file details...");
+        const details = await target!.getFileDetails();
+
+        if (details.type === "error") {
+            logger("Failed to get file details!");
+            return false;
+        }
+
+        logger("Creating new target from name...");
+        const created1 = await GDriveTarget.setupInPopup(CLIENT_ID, POPUP_URL, { name: details.value.name });
+        if (created1 === null) {
+            logger("Failed to create new target!");
+            return false;
+        }
+        logger("Checking file equality...");
+        if (created1.file.id !== target!.file.id) {
+            logger("Found wrong file!");
+            return false;
+        }
+
+        logger("Creating new target from name and MIME...");
+        const created2 = await GDriveTarget.setupInPopup(CLIENT_ID, POPUP_URL, {
+            name: details.value.name,
+            mime: details.value.mimeType,
+        });
+        if (created2 === null) {
+            logger("Failed to create new target!");
+            return false;
+        }
+        logger("Checking file equality...");
+        if (created2.file.id !== target!.file.id) {
+            logger("Found wrong file!");
+            return false;
+        }
+
+        logger("Creating new target from name and different MIME...");
+        const created3 = await GDriveTarget.setupInPopup(CLIENT_ID, POPUP_URL, {
+            name: details.value.name,
+            mime: "" + Math.random(),
+        });
+        if (created3 === null) {
+            logger("Failed to create new target!");
+            return false;
+        }
+        logger("Checking file equality...");
+        if (created3.file.id === target!.file.id) {
+            logger("Found correct file!");
+            return false;
+        }
+
+        logger("Correctly created new targets!");
+        return true;
+    },
+};
+
 export const GDriveAuthTests: TestConfig<GDriveTarget>[] = [
     ConnectInPopup,
     HandlePopupRejection,
@@ -92,4 +151,5 @@ export const GDriveAuthTests: TestConfig<GDriveTarget>[] = [
     HandleEmptyRedirectCatch,
     HandlePopupBlockerDelay,
     BadToken,
+    FindExistingFile,
 ];

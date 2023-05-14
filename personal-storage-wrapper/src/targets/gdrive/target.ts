@@ -71,7 +71,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     // Data handlers
     timestamp = (): Result<Date | null> =>
-        this.fetchJSON<FileDetails>(
+        this.fetchJSON<{ modifiedTime: string }>(
             `https://www.googleapis.com/drive/v3/files/${this.file.id}?fields=modifiedTime`
         ).map((file) => (file ? new Date(file.modifiedTime) : null));
     read = (): Result<TargetValue> =>
@@ -88,7 +88,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
                 })
         );
     write = (buffer: ArrayBuffer): Result<Date> =>
-        this.fetchJSON<FileDetails>(
+        this.fetchJSON<{ modifiedTime: string }>(
             `https://www.googleapis.com/upload/drive/v3/files/${this.file}?uploadType=media&fields=modifiedTime`,
             {
                 method: "PATCH",
@@ -124,10 +124,9 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runGDriveQuery(this.connection, input, init);
     fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit): Result<T> =>
         runGDriveJSONQuery(() => GDriveTarget.onRefreshNeeded(this), this.connection, input, init);
-}
 
-interface FileDetails {
-    modifiedTime: string;
+    getFileDetails = () =>
+        this.fetchJSON<{ mimeType: string; name: string }>(`https://www.googleapis.com/drive/v3/files/${this.file.id}`);
 }
 
 type FileInitDescription = { id: string; mime: string } | { name: string; mime?: string; parent?: string };

@@ -27,7 +27,7 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
                 remove: () => targets.remove(target),
                 values: [
                     ["Token Expiry", formatDateString((target as any).connection.expiry)],
-                    ["Use App Data", (target as any).connection.useAppData],
+                    ["Use App Data", "" + (target as any).connection.useAppData],
                     [
                         "Scopes",
                         (target as any).connection.scopes

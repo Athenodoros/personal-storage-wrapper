@@ -11,6 +11,8 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
 ) => {
     const storage = getStorageManager<"approval">(type + "-load-behaviour-approval");
 
+    // This indirection is so that the test is only triggered once in react strict dev mode
+    // It should start the redirect catch handler when first called, but only use the final "add" function
     let approvalAddCache: (target: T) => void;
     let approvalRedirectResult: Promise<TestResult> | null = null;
 
@@ -85,6 +87,8 @@ export const getHandleRedirectRejection = <T extends DefaultTarget>(
 ): TestConfig<T> => {
     const storage = getStorageManager<"rejection">(type + "-load-behaviour-rejection");
 
+    // This indirection is so that the test is only triggered once in react strict dev mode
+    // It should start the redirect catch handler when first called, but only run once
     const rejectionRedirectResult: Promise<TestResult> =
         storage.load() === "rejection"
             ? handle().then(async (target) => {

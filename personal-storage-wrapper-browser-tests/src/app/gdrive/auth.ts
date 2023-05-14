@@ -1,4 +1,6 @@
 import { GDriveTarget } from "personal-storage-wrapper";
+import { TestResult } from "../../components/test";
+import { getStorageManager } from "../../utils/storage";
 import {
     getGetConnectViaRedirect,
     getHandlePopupBlockerDelay,
@@ -183,6 +185,53 @@ const RefreshInPopup: TestConfig<GDriveTarget> = {
         logger("Updated connection!");
         return true;
     },
+};
+
+// This indirection is so that the test is only triggered once in react strict dev mode
+// It should start the redirect catch handler when first called, but only run once
+let refreshRedirectResult: Promise<TestResult> | undefined = undefined;
+export const getRefreshInRedirect = (targets: GDriveTarget[]): TestConfig<GDriveTarget> => {
+    const storage = getStorageManager<"refresh">("gdrive-load-behaviour-refresh");
+
+    if (storage.load() === "refresh" && refreshRedirectResult === undefined) {
+        const connections = targets.map((target) => [target, { ...(target as any).connnection }]);
+
+        refreshRedirectResult = GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }, targets).then(
+            async (result) => {
+                if (result === null) return { logs: "Failed to create new connection!", success: false };
+                if (result.type === "new") return { logs: "Failed to refresh existing target!", success: false };
+
+                const originals = connections.filter(([target]) => target === result.target);
+                if (originals.length === 0) return { logs: "Could not find original target!", success: false };
+                if (originals.length > 1) return { logs: "Found duplicate targets!", success: false };
+
+                if (originals[0][1].accessToken === (result.target as any).connection.accessToken)
+                    return { logs: "Didn't update accessToken!", success: false };
+                if (originals[0][1].expiry === (result.target as any).connection.expiry)
+                    return { logs: "Didn't update expiry!", success: false };
+
+                const timestamp = await result.target.timestamp();
+                if (timestamp.type === "error") return { logs: "Created invalid target!", success: false };
+
+                return { logs: "Updated target correctly!", success: true };
+            }
+        );
+    }
+
+    return {
+        name: "Refresh via Redirect",
+        state: refreshRedirectResult && { log: "Redirecting for auth refresh...", result: refreshRedirectResult },
+        runner: async (logger, target) => {
+            storage.save("refresh");
+            target!.redirectForAuthRefresh(REDIRECT_URL);
+
+            await new Promise<void>((resolve) => setTimeout(() => resolve(), 10000));
+
+            logger("Redirecting for auth refresh...");
+            logger("Failed to redirect!");
+            return false;
+        },
+    };
 };
 
 export const GDriveAuthTests: TestConfig<GDriveTarget>[] = [

@@ -8,6 +8,8 @@ export interface TestResultsController {
     results: AccountTestResults;
     reset: () => void;
     update: (name: TestName, result: TestResult | undefined) => void;
+    count: number | undefined;
+    setCount: (count: number) => void;
 }
 
 export const useTestResultsController = (name: string): TestResultsController => {
@@ -22,5 +24,7 @@ export const useTestResultsController = (name: string): TestResultsController =>
     const reset = () => setResults({});
     const update = (name: TestName, result: TestResult | undefined) => setResults({ ...results, [name]: result });
 
-    return { results, reset, update };
+    const [count, setCount] = useState<number | undefined>(undefined);
+
+    return { results, reset, update, count, setCount };
 };

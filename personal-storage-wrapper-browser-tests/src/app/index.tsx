@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import { Header } from "../components/header";
 import { TestRunningContext } from "../components/test";
 import { useTestResultsController } from "../hooks/controllers";
-import { DropboxTestCount, DropboxTests } from "./dropbox";
-import { GDriveTestCount, GDriveTests } from "./gdrive";
+import { DropboxTests } from "./dropbox";
+import { GDriveTests } from "./gdrive";
 
 export const App: React.FC = () => {
     const dropbox = useTestResultsController("dropbox");
@@ -37,13 +37,23 @@ export const App: React.FC = () => {
     return (
         <div className="h-screen w-screen flex flex-col items-center bg-slate-100 overflow-y-scroll">
             <div className="w-[800px] pb-48">
-                <Header
-                    success={success}
-                    running={running.size}
-                    failed={failed}
-                    total={DropboxTestCount + GDriveTestCount}
-                    reset={() => (dropbox.reset(), gdrive.reset())}
-                />
+                {dropbox.count && gdrive.count ? (
+                    <Header
+                        success={success}
+                        running={running.size}
+                        failed={failed}
+                        total={dropbox.count + gdrive.count}
+                        reset={() => (dropbox.reset(), gdrive.reset())}
+                    />
+                ) : (
+                    <Header
+                        success={0}
+                        running={1}
+                        failed={0}
+                        total={1}
+                        reset={() => (dropbox.reset(), gdrive.reset())}
+                    />
+                )}
                 <TestRunningContext.Provider value={{ setAsRunning, setAsStopped }}>
                     <DropboxTests controller={dropbox} />
                     <GDriveTests controller={gdrive} />

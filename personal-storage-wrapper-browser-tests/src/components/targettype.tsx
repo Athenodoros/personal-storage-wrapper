@@ -1,25 +1,23 @@
-import { Fragment } from "react";
 import { Account, AccountProps } from "./account";
-import { GroupName } from "./groupname";
-import { Test, TestProps } from "./test";
+import { ActionButton, Test, TestProps } from "./test";
 import { Title, TitleProps, TitleReset } from "./title";
 
-interface TargetTypeDisplayProps {
+export interface TargetTypeDisplayProps {
     title: TitleProps;
     accounts: AccountProps[];
-    groups: {
-        name: string;
-        tests: TestProps[];
-    }[];
+    tests: (
+        | { test: TestProps }
+        | { instruction: string; separate?: boolean; action?: { handler: () => void; name: string } }
+    )[];
     reset: () => void;
+    disconnect: () => void;
 }
 
-export const TargetTypeDisplay: React.FC<TargetTypeDisplayProps> = ({ title, accounts, groups, reset }) => (
+export const TargetTypeDisplay: React.FC<TargetTypeDisplayProps> = ({ title, accounts, tests, reset, disconnect }) => (
     <div className="bt-slate-200 border-t-2 flex pt-4 mt-12">
         <div className="w-72 mr-4">
             <Title {...title} />
             <div className="space-y-3">
-                <GroupName name="Accounts" />
                 {accounts.map((account, idx) => (
                     <Account {...account} key={idx} />
                 ))}
@@ -29,16 +27,28 @@ export const TargetTypeDisplay: React.FC<TargetTypeDisplayProps> = ({ title, acc
             </div>
         </div>
         <div className="grow">
-            <TitleReset reset={reset} />
-            <div className="space-y-3">
-                {groups.map(({ name, tests }) => (
-                    <Fragment key={name}>
-                        <GroupName name={name} />
-                        {tests.map((test) => (
-                            <Test {...test} key={test.name} />
-                        ))}
-                    </Fragment>
-                ))}
+            <TitleReset reset={reset} disconnect={disconnect} />
+            <div className="space-y-2">
+                {tests.map((testOrInstruction) => {
+                    if ("test" in testOrInstruction)
+                        return <Test {...testOrInstruction.test} key={testOrInstruction.test.name} />;
+
+                    return (
+                        <div
+                            className={"flex italic justify-between" + (testOrInstruction.separate ? " py-4" : " pt-3")}
+                        >
+                            <p className="text-slate-500">{testOrInstruction.instruction}</p>
+                            {testOrInstruction.action && (
+                                <ActionButton
+                                    onClick={testOrInstruction.action.handler}
+                                    name={testOrInstruction.action.name}
+                                    disabled={false}
+                                    className="w-max italic bg-blue-100"
+                                />
+                            )}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     </div>

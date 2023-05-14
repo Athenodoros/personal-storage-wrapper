@@ -13,7 +13,7 @@ const CLIENT_ID = "151346048888-a4i2hah9aqh8bm4058muuau52sfcp0ge.apps.googleuser
 const POPUP_URL = window.location.origin + "/gdrive-popup";
 const REDIRECT_URL = window.location.origin + "/gdrive-redirect";
 
-const ConnectInPopup: TestConfig<GDriveTarget> = {
+export const ConnectInPopup: TestConfig<GDriveTarget> = {
     name: "Connect in Popup",
     runner: runTargetCreation(
         () => GDriveTarget.setupInPopup(CLIENT_ID, POPUP_URL, { name: "/data.bak" }),
@@ -29,7 +29,7 @@ export const getGDriveConnectViaRedirect = getGetConnectViaRedirect(
     true
 );
 
-const HandlePopupRejection: TestConfig<GDriveTarget> = {
+export const HandlePopupRejection: TestConfig<GDriveTarget> = {
     name: "Handle Popup Rejection",
     runner: runTargetCreation(
         () => GDriveTarget.setupInPopup(CLIENT_ID, POPUP_URL, { name: "/data.bak" }),
@@ -38,13 +38,13 @@ const HandlePopupRejection: TestConfig<GDriveTarget> = {
     ),
 };
 
-const HandleRedirectRejection = getHandleRedirectRejection(
+export const HandleRedirectRejection = getHandleRedirectRejection(
     "gdrive",
     () => GDriveTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
     () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }, []).then((result) => result && result.target)
 );
 
-const HandleEmptyRedirectCatch: TestConfig<GDriveTarget> = {
+export const HandleEmptyRedirectCatch: TestConfig<GDriveTarget> = {
     name: "Handle Empty Redirect Catch",
     disabled: () => window.location.href.startsWith(POPUP_URL),
     runner: runTargetCreation(
@@ -54,11 +54,11 @@ const HandleEmptyRedirectCatch: TestConfig<GDriveTarget> = {
     ),
 };
 
-const HandlePopupBlockerDelay = getHandlePopupBlockerDelay("gdrive", () =>
+export const HandlePopupBlockerDelay = getHandlePopupBlockerDelay("gdrive", () =>
     GDriveTarget.setupInPopup(CLIENT_ID, POPUP_URL, { name: "/data.bak" })
 );
 
-const BadToken: TestConfig<GDriveTarget> = {
+export const BadToken: TestConfig<GDriveTarget> = {
     name: "Handle Bad Token",
     runner: async (logger) => {
         logger("Creating bad target...");
@@ -87,7 +87,7 @@ const BadToken: TestConfig<GDriveTarget> = {
     },
 };
 
-const FindExistingFile: TestConfig<GDriveTarget> = {
+export const FindExistingFile: TestConfig<GDriveTarget> = {
     name: "Finds Existing File",
     disabled: (target) => target === undefined,
     runner: async (logger, target) => {
@@ -146,7 +146,7 @@ const FindExistingFile: TestConfig<GDriveTarget> = {
     },
 };
 
-const RefreshInPopup: TestConfig<GDriveTarget> = {
+export const RefreshInPopup: TestConfig<GDriveTarget> = {
     name: "Refresh in Popup",
     disabled: (target) => target === undefined,
     runner: async (logger, target) => {
@@ -233,14 +233,3 @@ export const getRefreshInRedirect = (targets: GDriveTarget[]): TestConfig<GDrive
         },
     };
 };
-
-export const GDriveAuthTests: TestConfig<GDriveTarget>[] = [
-    ConnectInPopup,
-    HandlePopupRejection,
-    HandleRedirectRejection,
-    HandleEmptyRedirectCatch,
-    HandlePopupBlockerDelay,
-    BadToken,
-    FindExistingFile,
-    RefreshInPopup,
-];

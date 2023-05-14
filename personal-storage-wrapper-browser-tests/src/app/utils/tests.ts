@@ -21,20 +21,22 @@ export const getGetTestSpec =
         update: (name: string, result: TestResult | undefined) => void,
         results: AccountTestResults
     ) =>
-    ({ name, disabled, runner, state }: TestConfig<T>): TestProps => ({
-        target: targets.type,
-        name,
-        disabled: disabled ? disabled(targets.selected as T) : false,
-        result: results[name],
-        update: (result: TestResult | undefined) => update(name, result),
-        runner:
-            runner &&
-            ((logger) =>
-                runner(
-                    logger,
-                    targets.selected as T,
-                    targets.add,
-                    targets.accounts.map(({ target }) => target as T)
-                )),
-        state,
+    ({ name, disabled, runner, state }: TestConfig<T>): { test: TestProps } => ({
+        test: {
+            target: targets.type,
+            name,
+            disabled: disabled ? disabled(targets.selected as T) : false,
+            result: results[name],
+            update: (result: TestResult | undefined) => update(name, result),
+            runner:
+                runner &&
+                ((logger) =>
+                    runner(
+                        logger,
+                        targets.selected as T,
+                        targets.add,
+                        targets.accounts.map(({ target }) => target as T)
+                    )),
+            state,
+        },
     });

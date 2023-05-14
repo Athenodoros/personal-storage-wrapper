@@ -102,12 +102,13 @@ export const Test = ({ target, name, disabled, result, runner, update, state }: 
     );
 };
 
-const ActionButton: React.FC<{ disabled: boolean; onClick: () => void; name: string; contents?: ReactNode }> = ({
-    disabled,
-    onClick,
-    name,
-    contents,
-}) => (
+export const ActionButton: React.FC<{
+    disabled: boolean;
+    onClick: () => void;
+    name: string;
+    contents?: ReactNode;
+    className?: string;
+}> = ({ disabled, onClick, name, contents, className }) => (
     <button
         disabled={disabled}
         onClick={(event) => {
@@ -116,7 +117,8 @@ const ActionButton: React.FC<{ disabled: boolean; onClick: () => void; name: str
             event.stopPropagation();
         }}
         className={
-            "bg-blue-50 flex rounded-lg pl-2 transition w-16 " +
+            (className ?? "") +
+            " bg-blue-50 flex rounded-lg pl-2 transition w-16 " +
             (disabled
                 ? "text-blue-200 justify-center"
                 : "text-blue-600 hover:bg-blue-100 active:bg-blue-200 active:text-blue-700")

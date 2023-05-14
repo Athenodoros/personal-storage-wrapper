@@ -16,13 +16,26 @@ export const Title: React.FC<TitleProps> = ({ image, type, name }) => (
     </div>
 );
 
-export const TitleReset: React.FC<{ reset: () => void }> = ({ reset }) => (
-    <div className={HEIGHT + "flex justify-end items-center"}>
-        <button
-            className="bg-white border border-blue-600 text-blue-600 rounded-full py-1 px-6 transition hover:bg-blue-100 active:bg-blue-200"
-            onClick={reset}
-        >
-            RESET
-        </button>
+export const TitleReset: React.FC<{ reset: () => void; disconnect: () => void }> = ({ reset, disconnect }) => (
+    <div className={HEIGHT + "flex justify-end items-end space-x-3"}>
+        <TitleResetButton
+            onClick={() => {
+                window.history.replaceState(null, "", window.location.origin);
+                reset();
+            }}
+            name="Reset"
+            icon="published_with_changes"
+        />
+        <TitleResetButton onClick={disconnect} name="Disconnect" icon="open_in_new" />
     </div>
+);
+
+const TitleResetButton: React.FC<{ onClick: () => void; name: string; icon: string }> = ({ onClick, name, icon }) => (
+    <button
+        className="bg-white border border-blue-600 text-blue-600 rounded-full flex items-center py-1 px-4 transition hover:bg-blue-100 active:bg-blue-200"
+        onClick={onClick}
+    >
+        {name}
+        <span className="material-icons text-base ml-2">{icon}</span>
+    </button>
 );

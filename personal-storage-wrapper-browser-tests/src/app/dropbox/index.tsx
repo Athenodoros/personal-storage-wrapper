@@ -1,20 +1,73 @@
 import { DropboxTarget, DropboxTargetType } from "personal-storage-wrapper";
-import { TargetTypeDisplay } from "../../components/targettype";
+import { TargetTypeDisplay, TargetTypeDisplayProps } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
+import {
+    getHandleOffline,
+    getHandleRevokedAccess,
+    getInvalidReference,
+    getOldToken,
+    getRunOperations,
+} from "../utils/operations";
 import { getGetTestSpec } from "../utils/tests";
-import { DropboxAuthTests, getDropboxConnectViaRedirect } from "./auth";
-import { DropboxOperationsTests } from "./operations";
+import {
+    BadToken,
+    ConnectInPopup,
+    HandleEmptyRedirectCatch,
+    HandlePopupBlockerDelay,
+    HandlePopupRejection,
+    HandleRedirectRejection,
+    getDropboxConnectViaRedirect,
+} from "./auth";
+
+const disconnect = () => window.open("https://www.dropbox.com/account/connected_apps");
 
 export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
-    controller: { results, update, reset },
+    controller: { results, update, reset, setCount },
 }) => {
     const targets = useTargetState(DropboxTargetType, DropboxTarget.deserialise);
     const getTestSpec = getGetTestSpec<DropboxTarget>(targets, update, results);
 
+    const tests: TargetTypeDisplayProps["tests"] = [
+        getTestSpec(BadToken),
+        getTestSpec(HandleEmptyRedirectCatch),
+
+        { instruction: "Reject connection attempts" },
+        getTestSpec(HandlePopupRejection),
+        getTestSpec(HandleRedirectRejection),
+
+        { instruction: "Approve connection attempt" },
+        getTestSpec(ConnectInPopup),
+
+        { instruction: "Revoke access", separate: true, action: { handler: disconnect, name: "Go To" } },
+
+        getTestSpec(getHandleRevokedAccess()),
+
+        {
+            instruction: "Remove broken target",
+            separate: true,
+            action: { name: "Remove", handler: () => targets.selected && targets.remove(targets.selected) },
+        },
+        getTestSpec(getDropboxConnectViaRedirect(targets.add)),
+        getTestSpec(getRunOperations()),
+        getTestSpec(getInvalidReference((serialised) => (serialised.path = "//"), DropboxTarget.deserialise)),
+
+        { instruction: "Ensure popups are disabled", separate: true },
+        getTestSpec(HandlePopupBlockerDelay),
+
+        { instruction: "Disable internet connection", separate: true },
+        getTestSpec(getHandleOffline()),
+
+        { instruction: "Enable internet connection, and wait for disabled token", separate: true },
+        getTestSpec(getOldToken()),
+    ];
+
+    setCount(tests.filter((test) => "test" in test).length);
+
     return (
         <TargetTypeDisplay
             reset={reset}
+            disconnect={disconnect}
             title={{
                 image: "/dropbox.png",
                 type: "cloud",
@@ -30,15 +83,9 @@ export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
                     ["Path", (target as any).path],
                 ],
             }))}
-            groups={[
-                {
-                    name: "Authentication",
-                    tests: [...DropboxAuthTests, getDropboxConnectViaRedirect(targets.add)].map(getTestSpec),
-                },
-                { name: "Operations", tests: DropboxOperationsTests.map(getTestSpec) },
-            ]}
+            tests={tests}
         />
     );
 };
 
-export const DropboxTestCount = DropboxAuthTests.length + 1 + DropboxOperationsTests.length;
+export let DropboxTestCount: number | undefined = undefined;

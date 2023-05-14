@@ -11,7 +11,7 @@ const CLIENT_ID = "sha2xamq49ewlbo";
 const POPUP_URL = window.location.origin + "/dropbox-popup";
 const REDIRECT_URL = window.location.origin + "/dropbox-redirect";
 
-const ConnectInPopup: TestConfig<DropboxTarget> = {
+export const ConnectInPopup: TestConfig<DropboxTarget> = {
     name: "Connect in Popup",
     runner: runTargetCreation(
         () => DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak"),
@@ -27,7 +27,7 @@ export const getDropboxConnectViaRedirect = getGetConnectViaRedirect(
     false
 );
 
-const HandlePopupRejection: TestConfig<DropboxTarget> = {
+export const HandlePopupRejection: TestConfig<DropboxTarget> = {
     name: "Handle Popup Rejection",
     runner: runTargetCreation(
         () => DropboxTarget.setupInPopup(CLIENT_ID, REDIRECT_URL, "/data.bak"),
@@ -36,23 +36,23 @@ const HandlePopupRejection: TestConfig<DropboxTarget> = {
     ),
 };
 
-const HandleRedirectRejection = getHandleRedirectRejection(
+export const HandleRedirectRejection = getHandleRedirectRejection(
     "dropbox",
     () => DropboxTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
     () => DropboxTarget.catchRedirectForAuth("/data.back")
 );
 
-const HandleEmptyRedirectCatch: TestConfig<DropboxTarget> = {
+export const HandleEmptyRedirectCatch: TestConfig<DropboxTarget> = {
     name: "Handle Empty Redirect Catch",
     disabled: () => window.location.href.startsWith(POPUP_URL),
     runner: runTargetCreation(() => DropboxTarget.catchRedirectForAuth("/data.bak"), "Catching redirect...", false),
 };
 
-const HandlePopupBlockerDelay = getHandlePopupBlockerDelay("dropbox", () =>
+export const HandlePopupBlockerDelay = getHandlePopupBlockerDelay("dropbox", () =>
     DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak")
 );
 
-const BadToken: TestConfig<DropboxTarget> = {
+export const BadToken: TestConfig<DropboxTarget> = {
     name: "Handle Bad Token",
     runner: async (logger) => {
         logger("Creating bad target...");
@@ -79,12 +79,3 @@ const BadToken: TestConfig<DropboxTarget> = {
         return false;
     },
 };
-
-export const DropboxAuthTests: TestConfig<DropboxTarget>[] = [
-    ConnectInPopup,
-    HandlePopupRejection,
-    HandleEmptyRedirectCatch,
-    HandlePopupBlockerDelay,
-    BadToken,
-    HandleRedirectRejection,
-];

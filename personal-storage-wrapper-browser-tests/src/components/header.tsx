@@ -13,9 +13,13 @@ export const Header: React.FC<HeaderProps> = ({ success, running, failed, total,
 
     return (
         <div className="bg-slate-100 flex flex-col items-center">
-            <h1 className="text-4xl uppercase mb-6 text-slate-600 font-light text-center pt-12">
+            <h1 className="text-4xl uppercase mb-3 text-slate-600 font-light text-center pt-12">
                 PSM Browser Test Page
             </h1>
+            <div className="space-x-8 text-blue-800 mb-2">
+                <a href="https://www.dropbox.com/developers/apps/info/sha2xamq49ewlbo">Dropbox App Console</a>
+                <a href="https://console.cloud.google.com/apis/credentials?project=psm-example">Google App Console</a>
+            </div>
             <div className="w-full bg-white h-5 rounded-full overflow-hidden relative">
                 <div
                     className="bg-green-500 transition-all absolute h-full"

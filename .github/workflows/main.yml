@@ -43,7 +43,7 @@ jobs:
 
             - name: Deploy to gh-pages branch
               run: |
-                  cd dist
+                  cd personal-storage-wrapper-example/dist
                   git init -b main
                   git add -A
                   git config user.name 'GH Action'

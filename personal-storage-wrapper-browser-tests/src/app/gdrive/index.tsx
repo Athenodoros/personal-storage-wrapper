@@ -10,7 +10,7 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
     controller: { results, update, reset },
 }) => {
     const targets = useTargetState(GDriveTargetType, GDriveTarget.deserialise);
-    const getTestSpec = getGetTestSpec("gdrive", targets.selected, targets.add, update, results);
+    const getTestSpec = getGetTestSpec<GDriveTarget>(targets, update, results);
 
     return (
         <TargetTypeDisplay
@@ -41,7 +41,7 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
             groups={[
                 {
                     name: "Authentication",
-                    tests: [...GDriveAuthTests, getGDriveConnectViaRedirect(targets.add)].map(getTestSpec),
+                    tests: [getGDriveConnectViaRedirect(targets.add), ...GDriveAuthTests].map(getTestSpec),
                 },
                 { name: "Operations", tests: GDriveOperationsTests.map(getTestSpec) },
             ]}

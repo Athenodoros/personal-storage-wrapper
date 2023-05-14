@@ -23,7 +23,7 @@ const ConnectInPopup: TestConfig<GDriveTarget> = {
 export const getGDriveConnectViaRedirect = getGetConnectViaRedirect(
     "gdrive",
     () => GDriveTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
-    () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }),
+    () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }, []).then((result) => result && result.target),
     true
 );
 
@@ -39,14 +39,14 @@ const HandlePopupRejection: TestConfig<GDriveTarget> = {
 const HandleRedirectRejection = getHandleRedirectRejection(
     "gdrive",
     () => GDriveTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
-    () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" })
+    () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }, []).then((result) => result && result.target)
 );
 
 const HandleEmptyRedirectCatch: TestConfig<GDriveTarget> = {
     name: "Handle Empty Redirect Catch",
     disabled: () => window.location.href.startsWith(POPUP_URL),
     runner: runTargetCreation(
-        () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }),
+        () => GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }, []).then((result) => result && result.target),
         "Catching redirect...",
         false
     ),
@@ -144,6 +144,47 @@ const FindExistingFile: TestConfig<GDriveTarget> = {
     },
 };
 
+const RefreshInPopup: TestConfig<GDriveTarget> = {
+    name: "Refresh in Popup",
+    disabled: (target) => target === undefined,
+    runner: async (logger, target) => {
+        logger("Opening popup for auth refreshing...");
+        const { accessToken, expiry } = (target as any).connection;
+        const result = await target!.refreshAuthInPopup(POPUP_URL);
+
+        logger("Confirming update...");
+        if (result === false) {
+            if ((target as any).connection.accessToken !== accessToken) {
+                logger("Failed to update but updated accessToken!");
+                return false;
+            }
+            if ((target as any).connection.expiry !== expiry) {
+                logger("Failed to update but updated expiry!");
+                return false;
+            }
+
+            logger("Failed to update!");
+            return false;
+        }
+
+        if ((target as any).connection.accessToken === accessToken) {
+            logger("Updated but failed to update accessToken!");
+            return false;
+        }
+        if ((target as any).connection.expiry === expiry) {
+            logger("Updated but failed to update expiry!");
+            return false;
+        }
+        if ((target as any).connection.expiry < new Date()) {
+            logger("Updated but already has expired token!");
+            return false;
+        }
+
+        logger("Updated connection!");
+        return true;
+    },
+};
+
 export const GDriveAuthTests: TestConfig<GDriveTarget>[] = [
     ConnectInPopup,
     HandlePopupRejection,
@@ -152,4 +193,5 @@ export const GDriveAuthTests: TestConfig<GDriveTarget>[] = [
     HandlePopupBlockerDelay,
     BadToken,
     FindExistingFile,
+    RefreshInPopup,
 ];

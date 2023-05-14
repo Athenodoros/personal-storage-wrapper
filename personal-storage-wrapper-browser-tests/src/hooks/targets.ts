@@ -49,7 +49,7 @@ export const useTargetState = <T extends DefaultTarget>(type: T["type"], deseria
         setAccounts(updated);
     };
 
-    return { accounts, selected, set: setSelected, add, remove };
+    return { type, accounts, selected, set: setSelected, add, remove };
 };
 
 export const formatDateString = (date: Date) => {

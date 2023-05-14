@@ -30,35 +30,47 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
     // Constructors for new targets
     static redirectForAuth = redirectForAuth;
 
-    private static createFromMaybeConnection = async (
-        connection: Promise<GDriveConnection | null>,
+    private static createFromConnection = async (
+        connection: GDriveConnection,
         file: FileInitDescription
     ): Promise<GDriveTarget | null> => {
-        const result = await connection;
-        if (result === null) return null;
-
-        const user = await getUserMetadata(result);
+        const user = await getUserMetadata(connection);
         if (user.type === "error") return null;
 
-        if ("id" in file) return new GDriveTarget(result, user.value, { id: file.id, mime: file.mime });
-        const files = await queryForFile(noop, result, file.name, file.mime, file.parent);
+        if ("id" in file) return new GDriveTarget(connection, user.value, { id: file.id, mime: file.mime });
+        const files = await queryForFile(noop, connection, file.name, file.mime, file.parent);
         if (files.type === "error") return null;
 
         if (files.value.files.length > 0)
-            return new GDriveTarget(result, user.value, {
+            return new GDriveTarget(connection, user.value, {
                 id: files.value.files[0].id,
                 mime: files.value.files[0].mimeType,
             });
 
         // TODO: create new file
-        const fileRef = await createNewFile(noop, result, file.name, file.mime, file.parent);
+        const fileRef = await createNewFile(noop, connection, file.name, file.mime, file.parent);
         if (fileRef.type === "error") return null;
 
-        return new GDriveTarget(result, user.value, { id: fileRef.value.id, mime: fileRef.value.mimeType });
+        return new GDriveTarget(connection, user.value, { id: fileRef.value.id, mime: fileRef.value.mimeType });
     };
 
-    static catchRedirectForAuth = async (file: FileInitDescription): Promise<GDriveTarget | null> =>
-        this.createFromMaybeConnection(catchRedirectForAuth(), file);
+    static catchRedirectForAuth = async (
+        file: FileInitDescription,
+        targets: GDriveTarget[]
+    ): Promise<{ type: "new" | "update"; target: GDriveTarget } | null> => {
+        const maybeConnection = await catchRedirectForAuth();
+        if (maybeConnection === null) return null;
+        const { oldAccessToken, ...connection } = maybeConnection;
+
+        const updated = targets.find((target) => target.connection.accessToken === oldAccessToken);
+        if (updated) {
+            updated.connection = connection;
+            return { type: "update", target: updated };
+        }
+
+        const created = await this.createFromConnection(connection, file);
+        return created && { type: "new", target: created };
+    };
 
     static setupInPopup = async (
         clientId: string,
@@ -66,8 +78,37 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         file: FileInitDescription = { name: "data.bak" },
         useAppData: boolean = true,
         scopes?: string[]
-    ): Promise<GDriveTarget | null> =>
-        this.createFromMaybeConnection(runAuthInPopup(clientId, useAppData, redirectURI, scopes), file);
+    ): Promise<GDriveTarget | null> => {
+        const connection = await runAuthInPopup(clientId, redirectURI, useAppData, scopes);
+        return connection && this.createFromConnection(connection, file);
+    };
+
+    refreshAuthInPopup = async (redirectURI?: string): Promise<boolean> => {
+        const connection = await runAuthInPopup(
+            this.connection.clientId,
+            redirectURI,
+            this.connection.useAppData,
+            this.connection.scopes
+        );
+
+        if (connection === null) return false;
+
+        const user = await getUserMetadata(connection);
+        if (user.type === "error" || user.value.email !== this.user.email) return false;
+
+        this.connection = connection;
+        return true;
+    };
+
+    redirectForAuthRefresh = (redirectURI?: string): void => {
+        redirectForAuth(
+            this.connection.clientId,
+            redirectURI,
+            this.connection.useAppData,
+            this.connection.scopes,
+            this.connection.accessToken
+        );
+    };
 
     // Data handlers
     timestamp = (): Result<Date | null> =>

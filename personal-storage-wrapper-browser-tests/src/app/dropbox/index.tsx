@@ -10,7 +10,7 @@ export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
     controller: { results, update, reset },
 }) => {
     const targets = useTargetState(DropboxTargetType, DropboxTarget.deserialise);
-    const getTestSpec = getGetTestSpec("dropbox", targets.selected, targets.add, update, results);
+    const getTestSpec = getGetTestSpec<DropboxTarget>(targets, update, results);
 
     return (
         <TargetTypeDisplay

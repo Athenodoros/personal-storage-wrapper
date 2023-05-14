@@ -37,13 +37,15 @@ interface SessionStorageStruct {
     redirectURI: string;
     useAppData: boolean;
     scopes: string[];
+    oldAccessToken: string | undefined;
 }
 
 export const redirectForAuth = async (
     clientId: string,
     redirectURI?: string,
     useAppData: boolean = true,
-    scopes?: string[]
+    scopes?: string[],
+    oldAccessToken?: string
 ): Promise<void> => {
     const definitelyRedirectURI = redirectURI || window.location.href.split("?")[0].split("#")[0];
     const { url, definitelyScopes } = getAuthRedirectURL(clientId, useAppData, definitelyRedirectURI, scopes);
@@ -52,15 +54,16 @@ export const redirectForAuth = async (
         useAppData,
         redirectURI: definitelyRedirectURI,
         scopes: definitelyScopes,
+        oldAccessToken,
     });
     window.location.href = url;
 };
 
-export const catchRedirectForAuth = async (): Promise<GDriveConnection | null> => {
+export const catchRedirectForAuth = async (): Promise<(GDriveConnection & { oldAccessToken?: string }) | null> => {
     const session = loadFromSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY);
     if (session === null) return null;
 
-    const { clientId, useAppData, redirectURI, scopes } = session;
+    const { clientId, useAppData, redirectURI, scopes, oldAccessToken } = session;
     if (window.location.href.split("#")[0] !== redirectURI) return null;
 
     const search = new URLSearchParams(window.location.hash.replace("#", ""));
@@ -71,13 +74,13 @@ export const catchRedirectForAuth = async (): Promise<GDriveConnection | null> =
     const expiry = new Date(new Date().valueOf() + (Number(expiresIn) - MAX_RTT_FOR_QUERY_IN_SECONDS * 2) * 1000);
 
     // Return metadata
-    return { clientId, useAppData, scopes, accessToken, expiry };
+    return { clientId, useAppData, scopes, accessToken, expiry, oldAccessToken };
 };
 
 export const runAuthInPopup = async (
     clientId: string,
-    useAppData: boolean,
     redirectURI?: string,
+    useAppData: boolean = true,
     scopes?: string[]
 ): Promise<GDriveConnection | null> => {
     const definitelyRedirectURI = redirectURI || window.location.href.split("?")[0].split("#")[0];

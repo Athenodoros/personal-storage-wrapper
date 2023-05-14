@@ -48,7 +48,7 @@ export const App: React.FC = () => {
                 ) : (
                     <Header
                         success={0}
-                        running={1}
+                        running={0}
                         failed={0}
                         total={1}
                         reset={() => (dropbox.reset(), gdrive.reset())}

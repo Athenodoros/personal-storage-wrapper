@@ -3,23 +3,6 @@ import { TestResult } from "../../components/test";
 import { getStorageManager } from "../../utils/storage";
 import { TestConfig } from "./tests";
 
-export const getConnectInPopup = <T extends DefaultTarget>(open: () => Promise<T | null>): TestConfig<T> => ({
-    name: "Connect in Popup",
-    runner: async (logger, _, addTarget) => {
-        logger("Opening Popup...");
-        const target = await open();
-
-        if (target === null) {
-            logger("No target created!");
-            return false;
-        }
-
-        logger("Target created and added!");
-        addTarget(target);
-        return true;
-    },
-});
-
 export const getGetConnectViaRedirect = <T extends DefaultTarget>(
     type: T["type"],
     redirect: () => void,
@@ -38,7 +21,10 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
             approvalRedirectResult = handle().then(async (target): Promise<TestResult> => {
                 storage.clear();
 
-                if (target === null) return { success: false, logs: "No target created!" };
+                if (target === null) {
+                    window.history.replaceState(null, "", window.location.origin);
+                    return { success: false, logs: "No target created!" };
+                }
 
                 const target2 = await handle();
                 if (!expectDupe && target2 !== null) return { success: false, logs: "Duplicate target created!" };
@@ -68,5 +54,96 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
                 return false;
             },
         };
+    };
+};
+
+export const runTargetCreation =
+    <T extends DefaultTarget>(
+        open: () => Promise<T | null>,
+        log: string,
+        expectTarget: boolean
+    ): TestConfig<T>["runner"] =>
+    async (logger, _, addTarget) => {
+        logger(log);
+        const target = await open();
+
+        if (target === null) {
+            logger("No target created!");
+            return !expectTarget;
+        }
+
+        logger("Target created and added!");
+        if (expectTarget) addTarget(target);
+        else console.log(target);
+        return expectTarget;
+    };
+
+export const getHandleRedirectRejection = <T extends DefaultTarget>(
+    type: T["type"],
+    redirect: () => void,
+    handle: () => Promise<T | null>
+): TestConfig<T> => {
+    const storage = getStorageManager<"rejection">(type + "-load-behaviour-rejection");
+
+    const rejectionRedirectResult: Promise<TestResult> =
+        storage.load() === "rejection"
+            ? handle().then(async (target) => {
+                  storage.clear();
+                  window.history.replaceState(null, "", window.location.origin);
+
+                  if (target === null) return { logs: "No target created!", success: true };
+                  else return { logs: "Target created!", success: false };
+              })
+            : Promise.resolve({ logs: "", success: false });
+
+    return {
+        name: "Handle Redirect Rejection",
+        state:
+            storage.load() === "rejection"
+                ? { log: "Redirecting for auth...", result: rejectionRedirectResult }
+                : undefined,
+        runner: async (logger) => {
+            storage.save("rejection");
+            redirect();
+
+            await new Promise<void>((resolve) => setTimeout(() => resolve(), 10000));
+
+            logger("Redirecting for auth...");
+            logger("Failed to redirect!");
+            return false;
+        },
+    };
+};
+
+export const getHandlePopupBlockerDelay = <T extends DefaultTarget>(
+    type: T["type"],
+    popup: () => Promise<T | null>
+): TestConfig<T> => {
+    const storage = getStorageManager<"popup">(type + "-load-behaviour-popup");
+
+    return {
+        name: "Handle Popup Blocker Delay",
+        state:
+            storage.load() === "popup"
+                ? {
+                      log: "Refreshing for popup test...",
+                      result: popup().then((target) => {
+                          storage.clear();
+
+                          if (target === null) return { logs: "No target created!", success: true };
+                          else return { logs: "Target created!", success: false };
+                      }),
+                  }
+                : undefined,
+        runner: async (logger) => {
+            storage.save("popup");
+            window.location.reload();
+
+            await new Promise<void>((resolve) => setTimeout(() => resolve(), 10000));
+
+            logger("Refreshing for popup test...");
+            logger("Failed to redirect!");
+            return false;
+        },
     };
 };

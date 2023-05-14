@@ -127,7 +127,8 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
                         `https://www.googleapis.com/drive/v3/files/${this.file.id}?alt=media`
                     );
                     const buffer = await response.arrayBuffer();
-                    resolve({ type: "value", value: { timestamp, buffer } });
+                    if (buffer.byteLength === 0) resolve({ type: "value", value: null });
+                    else resolve({ type: "value", value: { timestamp, buffer } });
                 })
         );
     write = (buffer: ArrayBuffer): Result<Date> =>

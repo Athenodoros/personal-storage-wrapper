@@ -50,35 +50,31 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
             },
             body: buffer,
         }).flatmap((result) =>
-            result?.server_modified ? Result.value(new Date(result.server_modified)) : Result.error()
+            result?.server_modified ? Result.value(new Date(result.server_modified)) : Result.error("UNKNOWN")
         );
 
     read = (): Result<TargetValue> =>
         this.getFileMetadata().flatmap((write) => {
-            if (write === null) return Result.value(null);
+            if (write === null) return Result.value(null as TargetValue);
 
-            return new Result<TargetValue>((resolve) => {
-                this.fetch("https://content.dropboxapi.com/2/files/download", {
-                    method: "POST",
-                    headers: { "Dropbox-API-Arg": JSON.stringify({ path: "rev:" + write.rev }) },
-                })
-                    .then((response) => response.arrayBuffer())
-                    .then((buffer) => resolve({ type: "value", value: { timestamp: write.server_modified, buffer } }));
-            });
+            return this.fetch("https://content.dropboxapi.com/2/files/download", {
+                method: "POST",
+                headers: { "Dropbox-API-Arg": JSON.stringify({ path: "rev:" + write.rev }) },
+            })
+                .pmap((response) => response.arrayBuffer())
+                .map((buffer) => ({ timestamp: write.server_modified, buffer } as TargetValue));
         });
 
     timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.server_modified);
 
     delete = (): Result<null> =>
-        this.fetchJSON<unknown>(
-            "https://api.dropboxapi.com/2/files/delete_v2",
-            {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ path: this.path }),
-            },
-            { "path/not_found": null, "path_lookup/not_found": null }
-        ).map(() => null);
+        this.fetchJSON<unknown>("https://api.dropboxapi.com/2/files/delete_v2", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ path: this.path }),
+        })
+            .supress("MISSING_FILE", null)
+            .map(() => null);
 
     // Serialisation
     static deserialise: Deserialiser<DropboxTarget, false> = ({ connection, user, path }) =>
@@ -102,8 +98,8 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     // Other requests
     // This should probably track when the connection is changed and run callbacks
     fetch = (input: RequestInfo | URL, init?: RequestInit) => runDropboxQuery(this.connection, input, init);
-    fetchJSON = <T = unknown>(input: RequestInfo | URL, init?: RequestInit, errorPrefixes: Record<string, T> = {}) =>
-        runDropboxQueryForJSON<T>(this.connection, input, init, errorPrefixes);
+    fetchJSON = <T>(input: RequestInfo | URL, init?: RequestInit) =>
+        runDropboxQueryForJSON<T>(this.connection, input, init);
 
     private getFileMetadata = (): Result<FileMetadata | null> =>
         this.fetchJSON<{ server_modified?: string; rev?: string } | null>(
@@ -112,13 +108,14 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ path: this.path }),
-            },
-            { "path/not_found": null, "path_lookup/not_found": null }
-        ).map((result) =>
-            result?.server_modified && result.rev
-                ? { server_modified: new Date(result.server_modified), rev: result.rev }
-                : null
-        );
+            }
+        )
+            .supress("MISSING_FILE", null)
+            .map((result) =>
+                result?.server_modified && result.rev
+                    ? { server_modified: new Date(result.server_modified), rev: result.rev }
+                    : null
+            );
 }
 
 interface FileMetadata {

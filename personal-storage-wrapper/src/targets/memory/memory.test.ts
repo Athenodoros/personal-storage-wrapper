@@ -23,7 +23,7 @@ test("Correctly fails", async () => {
     expect(target.online()).toBe(false);
 
     const result = await target.read();
-    expect(result.type).toEqual("error");
+    expect(result).toEqual({ type: "error", error: "OFFLINE" });
 });
 
 test("Correctly handles basic storage and retrieval", async () => {

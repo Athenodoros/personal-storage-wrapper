@@ -56,7 +56,7 @@ test("Calls conflict handler if there is a conflict and writes back to available
         [
             { sync: online, result: { type: "value", value: { timestamp: new Date(), value: { val: "DEFAULT" } } } },
             update,
-            { sync: offline, result: { type: "error" } },
+            { sync: offline, result: { type: "error", error: "OFFLINE" } },
         ],
         resolver,
         () => logger

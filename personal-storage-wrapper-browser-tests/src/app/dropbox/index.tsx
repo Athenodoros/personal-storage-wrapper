@@ -1,14 +1,9 @@
 import { DropboxTarget, DropboxTargetType } from "personal-storage-wrapper";
+import { useEffect } from "react";
 import { TargetTypeDisplay, TargetTypeDisplayProps } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
-import {
-    getHandleOffline,
-    getHandleRevokedAccess,
-    getInvalidReference,
-    getOldToken,
-    getRunOperations,
-} from "../utils/operations";
+import { getHandleOffline, getHandleRevokedAccess, getInvalidReference, getRunOperations } from "../utils/operations";
 import { getGetTestSpec } from "../utils/tests";
 import {
     BadToken,
@@ -17,6 +12,7 @@ import {
     HandlePopupBlockerDelay,
     HandlePopupRejection,
     HandleRedirectRejection,
+    OldToken,
     getDropboxConnectViaRedirect,
 } from "./auth";
 
@@ -49,24 +45,28 @@ export const DropboxTests: React.FC<{ controller: TestResultsController }> = ({
             action: { name: "Remove", handler: () => targets.selected && targets.remove(targets.selected) },
         },
         getTestSpec(getDropboxConnectViaRedirect(targets.add)),
-        getTestSpec(getRunOperations()),
+        getTestSpec(getRunOperations(true)),
         getTestSpec(getInvalidReference((serialised) => (serialised.path = "//"), DropboxTarget.deserialise)),
 
         { instruction: "Ensure popups are disabled", separate: true },
         getTestSpec(HandlePopupBlockerDelay),
 
-        { instruction: "Disable internet connection", separate: true },
+        { instruction: "Disable internet connection and refresh", separate: true },
         getTestSpec(getHandleOffline()),
 
         { instruction: "Enable internet connection, and wait for disabled token", separate: true },
-        getTestSpec(getOldToken()),
+        getTestSpec(OldToken),
     ];
 
-    setCount(tests.filter((test) => "test" in test).length);
+    const testCount = tests.filter((test) => "test" in test).length;
+    useEffect(() => setCount(testCount), [setCount, testCount]);
 
     return (
         <TargetTypeDisplay
-            reset={reset}
+            reset={() => {
+                reset();
+                targets.reset();
+            }}
             disconnect={disconnect}
             title={{
                 image: "/dropbox.png",

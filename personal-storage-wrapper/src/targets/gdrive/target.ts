@@ -112,9 +112,11 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
 
     // Data handlers
     timestamp = (): Result<Date | null> =>
-        this.fetchJSON<{ modifiedTime: string }>(
+        this.fetchJSON<{ modifiedTime: string } | null>(
             `https://www.googleapis.com/drive/v3/files/${this.file.id}?fields=modifiedTime`
-        ).map((file) => (file ? new Date(file.modifiedTime) : null));
+        )
+            .supress("MISSING_FILE", null)
+            .map((file) => (file?.modifiedTime ? new Date(file.modifiedTime) : null));
     read = (): Result<TargetValue> =>
         this.timestamp().flatmap(
             (timestamp) =>
@@ -122,7 +124,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
                     if (timestamp === null) return resolve({ type: "value", value: null });
 
                     const response = await this.fetch(
-                        `https://www.googleapis.com/drive/v3/files/${this.file}?alt=media`
+                        `https://www.googleapis.com/drive/v3/files/${this.file.id}?alt=media`
                     );
                     const buffer = await response.arrayBuffer();
                     resolve({ type: "value", value: { timestamp, buffer } });
@@ -130,7 +132,7 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
         );
     write = (buffer: ArrayBuffer): Result<Date> =>
         this.fetchJSON<{ modifiedTime: string }>(
-            `https://www.googleapis.com/upload/drive/v3/files/${this.file}?uploadType=media&fields=modifiedTime`,
+            `https://www.googleapis.com/upload/drive/v3/files/${this.file.id}?uploadType=media&fields=modifiedTime`,
             {
                 method: "PATCH",
                 body: new Blob([buffer], { type: this.file.mime }),
@@ -138,9 +140,9 @@ export class GDriveTarget implements Target<GDriveTargetType, GDriveTargetSerial
             }
         ).map((file) => new Date(file.modifiedTime));
     delete = (): Result<null> =>
-        this.fetchJSON<unknown>(`https://www.googleapis.com/drive/v3/files/${this.file}`, { method: "DELETE" }).map(
-            () => null
-        );
+        this.fetchJSON<unknown>(`https://www.googleapis.com/drive/v3/files/${this.file.id}`, { method: "DELETE" })
+            .map(() => null)
+            .supress("MISSING_FILE", null);
 
     // Serialisation
     static deserialise: Deserialiser<GDriveTarget, false> = ({ connection, user, file }) =>

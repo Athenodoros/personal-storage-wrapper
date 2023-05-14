@@ -21,18 +21,20 @@ export const getGetConnectViaRedirect = <T extends DefaultTarget>(
 
         if (approvalRedirectResult === null && storage.load() === "approval") {
             approvalRedirectResult = handle().then(async (target): Promise<TestResult> => {
-                storage.clear();
-
-                if (target === null) {
+                // It's not obvious to me why the timeout is necessary
+                // I think that the vite dev server might be refreshing the page very quickly,
+                //  causing the localStorage to be cleared but the target not to be saved
+                setTimeout(() => {
+                    storage.clear();
                     window.history.replaceState(null, "", window.location.origin);
-                    return { success: false, logs: "No target created!" };
-                }
+                }, 1000);
+
+                if (target === null) return { success: false, logs: "No target created!" };
 
                 const target2 = await handle();
+
                 if (!expectDupe && target2 !== null) return { success: false, logs: "Duplicate target created!" };
                 if (expectDupe && target2 === null) return { success: false, logs: "No duplicate target created!" };
-
-                window.history.replaceState(null, "", window.location.origin);
 
                 approvalAddCache(target);
                 return { success: true, logs: "Target created and added!" };

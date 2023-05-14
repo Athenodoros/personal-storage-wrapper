@@ -94,6 +94,7 @@ export const catchRedirectForAuth = async (): Promise<DropboxConnection | null> 
     );
     expiry.setSeconds(expiry.getSeconds() + access.expires_in);
 
+    if (!access.refresh_token || !access.access_token) return null;
     return { clientId, refreshToken: access.refresh_token, accessToken: access.access_token, expiry };
 };
 

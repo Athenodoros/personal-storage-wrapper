@@ -12,7 +12,7 @@ export const runWithLogger = <S, T extends Target<any, any>>(
 ): Result<S> => {
     if (!sync.target.online()) {
         logger()({ sync, operation, stage: "OFFLINE" });
-        return Result.error();
+        return Result.error("OFFLINE");
     }
 
     logger()({ sync, operation, stage: "START" });
@@ -35,10 +35,11 @@ export const readFromSync = <V extends Value, T extends Target<any, any>>(
     runWithLogger(logger, sync, "DOWNLOAD", () =>
         sync.target.read().pmap(
             async (value) =>
-                value && {
+                value &&
+                ({
                     timestamp: value.timestamp,
                     value: await getValueFromBuffer<V>(value.buffer, sync.compressed),
-                }
+                } as MaybeValue<V>)
         )
     );
 

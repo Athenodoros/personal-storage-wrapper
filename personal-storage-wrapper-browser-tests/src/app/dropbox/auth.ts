@@ -71,11 +71,37 @@ export const BadToken: TestConfig<DropboxTarget> = {
         const result = await target.timestamp();
 
         if (result.type === "error") {
-            logger("Operation returned an error!");
+            if (result.error !== "INVALID_AUTH") {
+                logger("Operation returned incorrect error!");
+                return false;
+            }
+            logger("Operation returned correct error!");
             return true;
         }
 
         logger("Operation returned result");
         return false;
+    },
+};
+
+export const OldToken: TestConfig<DropboxTarget> = {
+    name: "Refresh Old Token",
+    disabled: (target) => target === undefined || (target as any).connection.expiry >= new Date(),
+    runner: async (logger, target) => {
+        logger("Reading timestamp with old token...");
+        const result = await target!.timestamp();
+
+        if (result.type === "error") {
+            logger("Operation returned an error!");
+            return false;
+        }
+
+        if ((target as any).connection.expiry < new Date()) {
+            logger("Target did not store renewed token!");
+            return false;
+        }
+
+        logger("Refresh successful!");
+        return true;
     },
 };

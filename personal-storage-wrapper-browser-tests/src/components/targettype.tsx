@@ -36,6 +36,7 @@ export const TargetTypeDisplay: React.FC<TargetTypeDisplayProps> = ({ title, acc
                     return (
                         <div
                             className={"flex italic justify-between" + (testOrInstruction.separate ? " py-4" : " pt-3")}
+                            key={testOrInstruction.instruction}
                         >
                             <p className="text-slate-500">{testOrInstruction.instruction}</p>
                             {testOrInstruction.action && (

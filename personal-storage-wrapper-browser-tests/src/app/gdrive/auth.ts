@@ -78,7 +78,11 @@ export const BadToken: TestConfig<GDriveTarget> = {
         const result = await target.timestamp();
 
         if (result.type === "error") {
-            logger("Operation returned an error!");
+            if (result.error !== "INVALID_AUTH") {
+                logger("Operation returned incorrect error!");
+                return false;
+            }
+            logger("Operation returned correct error!");
             return true;
         }
 
@@ -198,6 +202,14 @@ export const getRefreshInRedirect = (targets: GDriveTarget[]): TestConfig<GDrive
 
         refreshRedirectResult = GDriveTarget.catchRedirectForAuth({ name: "/data.bak" }, targets).then(
             async (result) => {
+                // It's not obvious to me why the timeout is necessary
+                // I think that the vite dev server might be refreshing the page very quickly,
+                //  causing the localStorage to be cleared but the target not to be saved
+                setTimeout(() => {
+                    storage.clear();
+                    window.history.replaceState(null, "", window.location.origin);
+                }, 1000);
+
                 if (result === null) return { logs: "Failed to create new connection!", success: false };
                 if (result.type === "new") return { logs: "Failed to refresh existing target!", success: false };
 
@@ -232,4 +244,25 @@ export const getRefreshInRedirect = (targets: GDriveTarget[]): TestConfig<GDrive
             return false;
         },
     };
+};
+
+export const OldToken: TestConfig<GDriveTarget> = {
+    name: "Handle Old Token",
+    disabled: (target) => target === undefined || (target as any).connection.expiry >= new Date(),
+    runner: async (logger, target) => {
+        logger("Reading timestamp with old token...");
+        const result = await target!.timestamp();
+
+        if (result.type === "error") {
+            if (result.error !== "EXPIRED_AUTH") {
+                logger("Operation returned incorrect error!");
+                return false;
+            }
+            logger("Operation returned correct error!");
+            return true;
+        }
+
+        logger("Operation did not return error!");
+        return false;
+    },
 };

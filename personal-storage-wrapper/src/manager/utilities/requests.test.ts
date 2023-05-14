@@ -28,7 +28,7 @@ test("Correctly logs successes", async () => {
 });
 
 test("Correctly logs failures", async () => {
-    const { logger, sync } = await runRequestTest(false, () => Result.error());
+    const { logger, sync } = await runRequestTest(false, () => Result.error("UNKNOWN"));
 
     expect(logger).toHaveBeenCalledTimes(2);
     expect(logger).toHaveBeenCalledWith({ sync, operation: "POLL", stage: "START" });

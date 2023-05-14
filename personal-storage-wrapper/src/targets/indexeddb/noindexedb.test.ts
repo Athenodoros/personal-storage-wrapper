@@ -10,5 +10,5 @@ test("Check IndexedDB correctly unavailable", async () => {
     expect(target.online()).toBe(true);
 
     const write = await target.write(encodeToArrayBuffer("TEST_VALUE"));
-    expect(write).toEqual({ type: "error" });
+    expect(write).toEqual({ type: "error", error: "OFFLINE" });
 });

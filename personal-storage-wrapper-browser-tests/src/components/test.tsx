@@ -63,7 +63,7 @@ export const Test = ({ target, name, disabled, result, runner, update, state }: 
         update({ success, logs });
         context.setAsStopped(target, name);
         setRunLogs(null);
-        if (!open) setOpen(false);
+        if (!open && success) setOpen(false);
     };
 
     return (

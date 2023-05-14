@@ -29,7 +29,7 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
 
     // Delay simulation
     private delayed = <T>(thunk: () => T) => {
-        if (this.fails) return Result.error<T>();
+        if (this.fails) return Result.error<T>("OFFLINE");
         return new Result<T>((resolve) => setTimeout(() => resolve({ type: "value", value: thunk() }), this.delay));
     };
 

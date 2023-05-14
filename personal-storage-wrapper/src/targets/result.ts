@@ -1,10 +1,20 @@
+export type ResultErrorType =
+    | "UNKNOWN"
+    | "OFFLINE"
+    | "INVALID_AUTH"
+    | "EXPIRED_AUTH"
+    | "INVALID_FILE_REFERENCE"
+    | "MISSING_FILE";
+
 export interface ValueResult<Value> {
     type: "value";
     value: Value;
+    error?: undefined;
 }
 export interface ErrorResult {
     type: "error";
     value?: undefined;
+    error: ResultErrorType;
 }
 
 export type ResultValueType<Value> = ValueResult<Value> | ErrorResult;
@@ -16,10 +26,10 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
     static flatten = flatten;
 
     static value = <Value>(value: Value) => new Result<Value>((resolve) => resolve({ type: "value", value }));
-    static error = <Value>() => new Result<Value>((resolve) => resolve({ type: "error" }));
+    static error = <Value>(error: ResultErrorType) => new Result<Value>((resolve) => resolve({ type: "error", error }));
 
     constructor(executor: (resolve: (result: ResultValueType<Value>) => void, reject: () => void) => void) {
-        super((resolve) => executor(resolve, () => resolve({ type: "error" })));
+        super((resolve) => executor(resolve, () => resolve({ type: "error", error: "UNKNOWN" })));
     }
 
     map = <T>(fn: (value: Value) => T): Result<T> => this.pmap(async (value) => fn(value));
@@ -35,21 +45,25 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
     flatmap = <T>(fn: (value: Value) => Result<T>): Result<T> =>
         new Result<T>((resolve) => {
             this.then((result) => {
-                if (result.type === "error") resolve({ type: "error" });
-                else
-                    fn(result.value).then((output) => {
-                        if (output.type === "error") resolve({ type: "error" });
-                        else resolve(output);
-                    });
+                if (result.type === "error") resolve(result);
+                else fn(result.value).then((output) => resolve(output));
             });
         });
+
+    supress = (error: ResultErrorType, fallback: Value): Result<Value> =>
+        new Result<Value>((resolve) =>
+            this.then((result) => {
+                if (result.type === "error" && result.error === error) resolve({ type: "value", value: fallback });
+                else resolve(result);
+            })
+        );
 }
 
 function all<T1, T2>(results: [Result<T1>, Result<T2>]): Result<[T1, T2]>;
 function all<T1, T2, T3>(results: [Result<T1>, Result<T2>, Result<T3>]): Result<[T1, T2, T3]>;
 function all<T1, T2, T3, T4>(results: [Result<T1>, Result<T2>, Result<T3>, Result<T4>]): Result<[T1, T2, T3, T4]>;
 function all<T>(results: Result<T>[]): Result<T[]>;
-function all(results: Result<any>[]): Result<any[]> {
+function all(results: Result<any>[]): Result<any> {
     return new Result<any>(async (resolve) => {
         results.forEach((result) => {
             result.then((value) => {
@@ -59,10 +73,12 @@ function all(results: Result<any>[]): Result<any[]> {
 
         Promise.all(results)
             .then((values) => {
-                if (values.some((value) => value.type === "error")) resolve({ type: "error" });
+                const error = values.find((value) => value.type === "error");
+
+                if (error) resolve(error);
                 else resolve({ type: "value", value: values.map((value) => value.value) });
             })
-            .catch(() => resolve({ type: "error" }));
+            .catch(() => resolve({ type: "error", error: "UNKNOWN" }));
     });
 }
 
@@ -82,7 +98,7 @@ function any<T>(results: Result<T>[]): Result<T> {
             .then((values) => {
                 if (values.every(({ type }) => type === "error")) resolve(values[0]);
             })
-            .catch(() => resolve({ type: "error" }));
+            .catch(() => resolve({ type: "error", error: "UNKNOWN" }));
     });
 }
 

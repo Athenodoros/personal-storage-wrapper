@@ -1,4 +1,5 @@
 import { GDriveTarget, GDriveTargetType } from "personal-storage-wrapper";
+import { useEffect } from "react";
 import { TargetTypeDisplay, TargetTypeDisplayProps } from "../../components/targettype";
 import { TestResultsController } from "../../hooks/controllers";
 import { formatDateString, useTargetState } from "../../hooks/targets";
@@ -9,16 +10,11 @@ import {
     HandlePopupBlockerDelay,
     HandlePopupRejection,
     HandleRedirectRejection,
+    OldToken,
     getGDriveConnectViaRedirect,
     getRefreshInRedirect,
 } from "../gdrive/auth";
-import {
-    getHandleOffline,
-    getHandleRevokedAccess,
-    getInvalidReference,
-    getOldToken,
-    getRunOperations,
-} from "../utils/operations";
+import { getHandleOffline, getHandleRevokedAccess, getInvalidReference, getRunOperations } from "../utils/operations";
 import { getGetTestSpec } from "../utils/tests";
 import { FindExistingFile, RefreshInPopup } from "./auth";
 
@@ -54,29 +50,34 @@ export const GDriveTests: React.FC<{ controller: TestResultsController }> = ({
             action: { name: "Remove", handler: () => targets.selected && targets.remove(targets.selected) },
         },
         getTestSpec(getGDriveConnectViaRedirect(targets.add)),
-        getTestSpec(getRunOperations()),
+        getTestSpec(getRunOperations(false)),
         getTestSpec(getInvalidReference((serialised) => (serialised.file.id = "BAD_FILE"), GDriveTarget.deserialise)),
         getTestSpec(RefreshInPopup),
         getTestSpec(getRefreshInRedirect(targets.accounts.map(({ target }) => target))),
 
         { instruction: "Enable popups", separate: true },
+
         getTestSpec(FindExistingFile),
 
         { instruction: "Disable popups", separate: true },
         getTestSpec(HandlePopupBlockerDelay),
 
-        { instruction: "Disable internet connection", separate: true },
+        { instruction: "Disable internet connection and refresh page", separate: true },
         getTestSpec(getHandleOffline()),
 
         { instruction: "Enable internet connection, and wait for disabled token", separate: true },
-        getTestSpec(getOldToken()),
+        getTestSpec(OldToken),
     ];
 
-    setCount(tests.filter((test) => "test" in test).length);
+    const testCount = tests.filter((test) => "test" in test).length;
+    useEffect(() => setCount(testCount), [setCount, testCount]);
 
     return (
         <TargetTypeDisplay
-            reset={reset}
+            reset={() => {
+                reset();
+                targets.reset();
+            }}
             disconnect={disconnect}
             title={{
                 image: "/gdrive.png",

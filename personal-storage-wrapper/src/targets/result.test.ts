@@ -5,20 +5,20 @@ const DELAY = 10;
 
 test("Correctly initialises for resolve and reject", async () => {
     expect(await Result.value(7)).toEqual({ type: "value", value: 7 });
-    expect(await Result.error()).toEqual({ type: "error" });
+    expect(await Result.error("OFFLINE")).toEqual({ type: "error", error: "OFFLINE" });
     expect(await new Result((resolve) => resolve({ type: "value", value: 7 }))).toEqual({ type: "value", value: 7 });
 
-    expect(await new Result((_resolve, reject) => reject())).toEqual({ type: "error" });
+    expect(await new Result((_resolve, reject) => reject())).toEqual({ type: "error", error: "UNKNOWN" });
 });
 
 test("Correctly handles maps", async () => {
     expect(await Result.value(7).map((x) => x + 1)).toEqual({ type: "value", value: 8 });
-    expect(await Result.error().map(() => 8)).toEqual({ type: "error" });
+    expect(await Result.error("OFFLINE").map(() => 8)).toEqual({ type: "error", error: "OFFLINE" });
 });
 
 test("Correctly handles flatmaps", async () => {
     expect(await Result.value(7).flatmap((x) => Result.value(x + 1))).toEqual({ type: "value", value: 8 });
-    expect(await Result.error().flatmap(() => Result.value(8))).toEqual({ type: "error" });
+    expect(await Result.error("OFFLINE").flatmap(() => Result.value(8))).toEqual({ type: "error", error: "OFFLINE" });
 });
 
 test("Result.rall waits for all results", async () => {
@@ -29,7 +29,10 @@ test("Result.rall waits for all results", async () => {
 
 test("Result.rall fails quickly given an error", async () => {
     const start = new Date();
-    expect(await Result.rall([slowValue(7, DELAY), Result.error()])).toEqual({ type: "error" });
+    expect(await Result.rall([slowValue(7, DELAY), Result.error("OFFLINE")])).toEqual({
+        type: "error",
+        error: "OFFLINE",
+    });
     expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
 });
 
@@ -41,13 +44,13 @@ test("Result.rany gives the first result without waiting ", async () => {
 
 test("Result.rall waits for first success", async () => {
     const start = new Date();
-    expect(await Result.rany([slowValue(7, DELAY), Result.error()])).toEqual({ type: "value", value: 7 });
+    expect(await Result.rany([slowValue(7, DELAY), Result.error("OFFLINE")])).toEqual({ type: "value", value: 7 });
     expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
 });
 
 test("Result.rall returns failures correctly", async () => {
     const start = new Date();
-    expect(await Result.rany([Result.error(), slowError(DELAY)])).toEqual({ type: "error" });
+    expect(await Result.rany([Result.error("OFFLINE"), slowError(DELAY)])).toEqual({ type: "error", error: "OFFLINE" });
     expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
 });
 
@@ -111,9 +114,17 @@ test("Result.flatten correctly returns", async () => {
 
 test("Result.flatten errors quickly", async () => {
     const start = new Date();
-    const test = { a: 1, b: slowValue(1, DELAY), c: { d: Result.error() } };
-    expect(await Result.flatten(test)).toEqual({ type: "error" });
+    const test = { a: 1, b: slowValue(1, DELAY), c: { d: Result.error("OFFLINE") } };
+    expect(await Result.flatten(test)).toEqual({ type: "error", error: "OFFLINE" });
     expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
+});
+
+test("Result.suppress suppresses correctly", async () => {
+    const value = Result.value(7);
+    const error = Result.error("EXPIRED_AUTH");
+    expect(await value.supress("EXPIRED_AUTH", 8)).toEqual({ type: "value", value: 7 });
+    expect(await error.supress("EXPIRED_AUTH", 8)).toEqual({ type: "value", value: 8 });
+    expect(await error.supress("UNKNOWN", 8)).toEqual({ type: "error", error: "EXPIRED_AUTH" });
 });
 
 /**
@@ -123,4 +134,5 @@ test("Result.flatten errors quickly", async () => {
 const slowValue = <T>(value: T, delay: number) =>
     new Result<T>((resolve) => setTimeout(() => resolve({ type: "value", value }), delay));
 
-const slowError = (delay: number) => new Result((resolve) => setTimeout(() => resolve({ type: "error" }), delay));
+const slowError = (delay: number) =>
+    new Result((resolve) => setTimeout(() => resolve({ type: "error", error: "OFFLINE" }), delay));

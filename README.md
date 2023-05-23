@@ -7,4 +7,4 @@ This could be useful more multiple reasons: it's better for privacy and informat
 This project was inspired by [a previous one](https://github.com/Athenodoros/TopHat), where (for all of the reasons above) I didn't want a backend server for the application.
 This package is intended as a lightweight but full-featured solution for managing that problem: it handles push and pull, local (IndexedDB) and remote (Dropbox/GDrive for now) sources, and pluggable conflict resolution where appropriate.
 
-An example application built using this package can be found at: https://athenodoros.github.io/personal-storage-wrapper/.
+An example application built using this package can be found at: https://athenodoros.github.io/personal-storage-wrapper/. As an example of the API, have a look at the main entrypoint for that application [here](https://github.com/Athenodoros/personal-storage-wrapper/blob/main/personal-storage-wrapper-example/src/application/index.tsx).

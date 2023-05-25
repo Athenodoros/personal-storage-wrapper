@@ -30,7 +30,7 @@ export function App() {
     }, []);
 
     return (
-        <div className="flex h-screen w-screen">
+        <div className="flex flex-col sm:flex-row h-screen w-screen">
             <SyncDisplay
                 syncs={syncs}
                 remove={manager?.removeSync}

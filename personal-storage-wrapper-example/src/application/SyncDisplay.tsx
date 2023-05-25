@@ -17,9 +17,9 @@ export const SyncDisplay: React.FC<{
     const hasIDBSync = syncs.some((sync) => sync.target.type === "indexeddb");
 
     return (
-        <div className="bg-violet-50 w-96 flex flex-col items-center">
+        <div className="bg-violet-50 w-full sm:w-72 md:w-80 lg:w-96 flex flex-col items-center">
             <h2 className="text-xl text-violet-500 mt-6 mb-4 font-semibold">Synced To-Do App</h2>
-            <div className="self-stretch px-4 grow">
+            <div className="w-full px-4 grow max-w-[416px]">
                 {syncs.map((sync) => (
                     <SourceTableEntry key={JSON.stringify(sync.target.serialise())} sync={sync} remove={remove} />
                 ))}

@@ -1,10 +1,37 @@
 # personal-storage-wrapper
 
-Personal Storage Wrapper is a JS library to allow users of a web app to bring their own storage solution, instead of the app developer needing to maintain a backend.
+Personal Storage Wrapper is a JS library which allows web apps to sync data with user-controlled storage like IndexedDB, Dropbox or GDrive. An example to-do application is hosted [here](https://athenodoros.github.io/personal-storage-wrapper/) (code [here](https://github.com/Athenodoros/personal-storage-wrapper/blob/main/personal-storage-wrapper-example/src/application/index.tsx)).
 
-This could be useful more multiple reasons: it's better for privacy and information security, it's easier to deploy applications, and it can transparently allow offline-first behaviour by including browser storage by default.
+#### API Usage
 
-This project was inspired by [a previous one](https://github.com/Athenodoros/TopHat), where (for all of the reasons above) I didn't want a backend server for the application.
-This package is intended as a lightweight but full-featured solution for managing that problem: it handles push and pull, local (IndexedDB) and remote (Dropbox/GDrive for now) sources, and pluggable conflict resolution where appropriate.
+```
+// Initialise manager with some default state
+const manager = await PersonalStorageManager.create(SOME_DEFAULT_STATE, { onValueUpdate: console.log });
 
-An example application built using this package can be found at: https://athenodoros.github.io/personal-storage-wrapper/. As an example of the API, have a look at the main entrypoint for that application [here](https://github.com/Athenodoros/personal-storage-wrapper/blob/main/personal-storage-wrapper-example/src/application/index.tsx).
+// Add an IndexedDB target to the target list
+manager.addTarget(await IndexedDBTarget.create())}
+
+// Add a dropbox target, with auth run through a popup window
+DropboxSetupButton.onclick = () => {
+    const dropbox: DropboxTarget | null = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
+    if (dropbox) manager.addTarget(dropbox);
+}
+
+// Write new value and sync to targets
+manager.setState(SOME_NEW_VALUE);
+```
+
+#### Why does this exist?
+
+This project was inspired by [a previous one](https://github.com/Athenodoros/TopHat), an in-browser app without a backend (both for privacy and simplicity). With that in mind, PSW is intended as a lightweight but full-featured solution for managing state synchronisation between local and cloud storage. It includes:
+- A standard and extendable sync target interface
+- Local (IndexedDB and memory) and remote (Dropbox and GDrive, for now) sync targets
+- Background polling for remote updates
+- A [load of config points](https://github.com/Athenodoros/personal-storage-wrapper/blob/main/personal-storage-wrapper/src/manager/types/config.ts), including pluggable conflict resolution handlers
+- Automatic syncing between tabs
+
+All bundled into 13kb of gzipped JS with only one dependency: [fflate](https://www.npmjs.com/package/fflate), lazily loaded in case the CompressionStream browser API is not available ([mostly older firefox](https://caniuse.com/?search=compressionstream)).
+
+#### Can I use this?
+
+You can, but probably shouldn't? I haven't uploaded it to npm because I'm scared of the maintenance obligation I'd impose on myself, but if you'd like then you're welcome to use the code :D

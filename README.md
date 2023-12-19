@@ -5,14 +5,10 @@ Personal Storage Wrapper is a JS library which allows web apps to sync data with
 #### API Usage
 
 ```
-// Initialise manager with some default state
+// Initialise manager with some default state, using the default IndexedDB sync
 const manager = await PersonalStorageManager.create(SOME_DEFAULT_STATE, { onValueUpdate: console.log });
 
-// Add an IndexedDB target to the target list
-// Note that this is generally redundant - the manager has a default storage target of IndexedDB
-manager.addTarget(await IndexedDBTarget.create())}
-
-// Add a dropbox target, with auth run through a popup window
+// Add a dropbox sync, with auth run through a popup window
 DropboxSetupButton.onclick = () => {
     const dropbox: DropboxTarget | null = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
     if (dropbox) manager.addTarget(dropbox);

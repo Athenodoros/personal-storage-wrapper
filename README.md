@@ -5,10 +5,10 @@ Personal Storage Wrapper is a JS library which allows web apps to sync data with
 #### API Usage
 
 ```
-// Initialise manager with some default state, using the default IndexedDB sync
+// Initialise manager with some default state, using the default IndexedDB sync, gzip compression, and conflict handlers
 const manager = await PersonalStorageManager.create(SOME_DEFAULT_STATE, { onValueUpdate: console.log });
 
-// Add a dropbox sync, with auth run through a popup window
+// Add a dropbox setup flow to a button, with auth run through a popup window
 DropboxSetupButton.onclick = () => {
     const dropbox: DropboxTarget | null = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
     if (dropbox) manager.addTarget(dropbox);
@@ -27,7 +27,7 @@ This project was inspired by [a previous one](https://github.com/Athenodoros/Top
 - A [load of config points](https://github.com/Athenodoros/personal-storage-wrapper/blob/main/personal-storage-wrapper/src/manager/types/config.ts), including pluggable conflict resolution handlers
 - Automatic syncing between tabs
 
-All bundled into 13kb of gzipped JS with only one dependency: [fflate](https://www.npmjs.com/package/fflate), lazily loaded in case the CompressionStream browser API is not available ([mostly older firefox](https://caniuse.com/?search=compressionstream)).
+All bundled into 13kb of gzipped JS with only one dependency: [fflate](https://www.npmjs.com/package/fflate), lazily loaded in case the storage is compressed the CompressionStream browser API is not available ([mostly older safari](https://caniuse.com/?search=compressionstream)).
 
 #### Can I use this?
 

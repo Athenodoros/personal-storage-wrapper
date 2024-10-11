@@ -2,7 +2,14 @@ import { Target } from "../../targets";
 import { deepEquals, identity, orderByAsc } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
 import { PersonalStorageManager } from "../manager";
-import { Deserialisers, InitialValue, PSMConfig, PSMCreationConfig, Value } from "../types";
+import {
+    ConflictingSyncStartupBehaviour,
+    Deserialisers,
+    InitialValue,
+    PSMConfig,
+    PSMCreationConfig,
+    Value,
+} from "../types";
 import { DefaultDeserialisers } from "../utilities/defaults";
 import { createPSM } from "./constructor";
 import { StartValue } from "./types";
@@ -22,7 +29,8 @@ export function createPSMWithCache<V extends Value, T extends Target<any, any>>(
         start: StartValue<V, T>,
         deserialisers: Deserialisers<T>,
         recents: ListBuffer<V>,
-        config: PSMConfig<V, T>
+        config: PSMConfig<V, T>,
+        resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T> | undefined
     ) => PersonalStorageManager<V, T>,
     defaultInitialValue: InitialValue<V>,
     config: Partial<PSMCreationConfig<V, T>> = {},

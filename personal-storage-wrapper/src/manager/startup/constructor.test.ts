@@ -85,7 +85,9 @@ const getPSMValue = (
     getPSMStartValue<string, DefaultTarget>(
         stores,
         initialValue,
-        handleFullyOfflineSyncsOnStartup,
-        resolveConflictingSyncValuesOnStartup,
+        () => ({
+            handleAllEmptyAndFailedSyncsOnStartup: handleFullyOfflineSyncsOnStartup,
+            resolveConflictingSyncValuesOnStartup,
+        }),
         () => noop
     );

@@ -34,16 +34,21 @@ test("Handles conflicting results correctly on startup", async () => {
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
-    const manager = await getTestManager([syncA, syncB], {
-        resolveConflictingSyncValuesOnStartup: async () => "B",
-    });
+
+    const id = "conflicting-results-update-handler-check";
+    getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup: async () => "C", id }, true);
+    const manager = await getTestManager(
+        [syncA, syncB],
+        { resolveConflictingSyncValuesOnStartup: async () => "D", id },
+        true
+    );
 
     expect(new Date().valueOf() - start).toBeLessThan(DELAY * 0.5);
     expect(manager.getValue()).toBe("A");
-    await delay(DELAY * 1.5);
-    expect(manager.getValue()).toBe("B");
+    await delay(DELAY * 3.5);
+    expect(manager.getValue()).toBe("D");
 
-    expect(await value(syncA)).toBe("B");
+    expect(await value(syncA)).toBe("D");
 });
 
 test("Handles operations during startup and returns promise to actioned result", async () => {

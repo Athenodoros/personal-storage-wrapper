@@ -1,4 +1,4 @@
-import { DefaultTarget } from "../main";
+import { DefaultTarget, resolveStartupConflictsWithRemoteStateAndLatestEdit } from "../main";
 import { Target } from "../targets";
 import { deepEquals, fromKeys, uniqEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
@@ -9,6 +9,7 @@ import { createPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
 import { StartValue } from "./startup/types";
 import {
+    ConflictingSyncStartupBehaviour,
     Deserialisers,
     InitialValue,
     PSMConfig,
@@ -52,8 +53,15 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         maybeDeserialisers?: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>> {
         return createPSMWithCache(
-            (id, start, deserialisers, recents, config) =>
-                new PersonalStorageManager(id, start, deserialisers, recents, config),
+            (id, start, deserialisers, recents, config, resolveConflictingSyncValuesOnStartup) =>
+                new PersonalStorageManager(
+                    id,
+                    start,
+                    deserialisers,
+                    recents,
+                    config,
+                    resolveConflictingSyncValuesOnStartup
+                ),
             defaultInitialValue,
             initialisationConfig,
             maybeDeserialisers
@@ -77,8 +85,15 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         maybeDeserialisers?: Deserialisers<T>
     ): Promise<PersonalStorageManager<V, T>> {
         return createPSM(
-            (id, start, deserialisers, recents, config) =>
-                new PersonalStorageManager(id, start, deserialisers, recents, config),
+            (id, start, deserialisers, recents, config, resolveConflictingSyncValuesOnStartup) =>
+                new PersonalStorageManager(
+                    id,
+                    start,
+                    deserialisers,
+                    recents,
+                    config,
+                    resolveConflictingSyncValuesOnStartup
+                ),
             defaultInitialValue,
             initialisationConfig,
             () => initialisationConfig,
@@ -91,7 +106,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         start: StartValue<V, T>,
         deserialisers: Deserialisers<T>,
         recents: ListBuffer<V>,
-        config: PSMConfig<V, T>
+        config: PSMConfig<V, T>,
+        resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T> | undefined
     ) {
         this.operations = fromKeys(this.OPERATION_RUN_ORDER, () => []);
         this.channel = new PSMBroadcastChannel(
@@ -135,7 +151,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
                     start.value,
                     () => this.value.value,
                     results,
-                    start.resolve,
+                    resolveConflictingSyncValuesOnStartup ?? resolveStartupConflictsWithRemoteStateAndLatestEdit,
                     this.logger
                 );
 

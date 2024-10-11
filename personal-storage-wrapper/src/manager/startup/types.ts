@@ -1,6 +1,6 @@
 import { Target } from "../../targets";
 import { Result, ResultValueType } from "../../targets/result";
-import { ConflictingSyncStartupBehaviour, MaybeValue, Sync, Value } from "../types";
+import { MaybeValue, Sync, Value } from "../types";
 
 export interface PSMFinalValue<V extends Value, T extends Target<any, any>> {
     type: "final";
@@ -12,7 +12,6 @@ export interface PSMProvisionalValue<V extends Value, T extends Target<any, any>
     type: "provisional";
     values: { sync: Sync<T>; value: Result<MaybeValue<V>> }[];
     value: V;
-    resolve: ConflictingSyncStartupBehaviour<V, T>;
 }
 
 export type StartValue<V extends Value, T extends Target<any, any>> = PSMFinalValue<V, T> | PSMProvisionalValue<V, T>;

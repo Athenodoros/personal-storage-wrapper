@@ -23,7 +23,10 @@ import { writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
 
 export class PersonalStorageManager<V extends Value, T extends Target<any, any> = DefaultTarget> {
+    // The manager keeps a copy of the value to diff new values against, so that it doesn't repeatedly notify on the existing value
+    // It is expected that usually this will be the same JS object as is held in application code, so the memory is not duplicated
     private value: TimestampedValue<V>;
+
     private operations: OperationState;
     private syncs: Sync<T>[];
     private channel: PSMBroadcastChannel<V, T>;

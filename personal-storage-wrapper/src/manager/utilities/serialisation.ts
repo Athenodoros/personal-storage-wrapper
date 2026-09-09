@@ -32,7 +32,15 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
             if (deserialisers[type] === undefined) return null;
 
             const sync = JSON.parse(config);
-            return { ...sync, target: await deserialisers[type](sync.target) };
+            return {
+                ...sync,
+                // JSON has no dates, so this comes back as the string it was written as
+                lastSeenWriteTime:
+                    sync.lastSeenWriteTime === undefined || sync.lastSeenWriteTime === null
+                        ? undefined
+                        : new Date(sync.lastSeenWriteTime),
+                target: await deserialisers[type](sync.target),
+            };
         })
     );
 

@@ -23,7 +23,14 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
                 failures.push(sync);
                 return;
             }
-            if (timestamp.value === sync.lastSeenWriteTime) return;
+            // Compared by time rather than by identity: targets build a fresh Date on every call,
+            // and a lastSeenWriteTime restored from storage is a string until it is revived
+            if (
+                timestamp.value !== null &&
+                sync.lastSeenWriteTime !== undefined &&
+                timestamp.value.valueOf() === new Date(sync.lastSeenWriteTime).valueOf()
+            )
+                return;
 
             if (timestamp.value === null) {
                 writes.push(sync);

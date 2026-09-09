@@ -42,4 +42,6 @@ export class PSMBroadcastChannel<V extends Value, T extends Target<any, any>> {
     sendNewValue = (value: TimestampedValue<V>) => this.channel.send({ type: "VALUE", value });
     sendUpdatedSyncs = (syncs: Sync<T>[]) =>
         this.channel.send({ type: "UPDATE_SYNCS", syncs: getConfigFromSyncs(syncs) });
+
+    close = () => this.channel.close();
 }

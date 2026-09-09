@@ -79,6 +79,9 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
 
 const managers = new Set<string>();
 
+/** Lets a closed manager's id be used again, rather than tripping the duplicate check below */
+export const deregisterPSM = (id: string) => void managers.delete(id);
+
 export async function createPSM<V extends Value, T extends Target<any, any>>(
     createPSMObject: (
         id: string,

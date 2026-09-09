@@ -29,17 +29,34 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
         const db = await new Promise<IDBDatabase | null>((resolve) => {
             if (!("indexedDB" in window)) return resolve(null);
 
-            const request: IDBOpenDBRequest = window.indexedDB.open(DB_NAME, DB_VERSION);
-            request.onerror = () => resolve(null);
-            request.onsuccess = () => resolve(request.result);
-            request.onupgradeneeded = () => {
-                const db = request.result;
-                db.createObjectStore(TABLE_NAME, { keyPath: "id" });
-                setTimeout(() => resolve(db), 1); // End upgrade transaction before further processing
-            };
+            try {
+                const request: IDBOpenDBRequest = window.indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => resolve(null);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    db.createObjectStore(TABLE_NAME, { keyPath: "id" });
+                    setTimeout(() => resolve(db), 1); // End upgrade transaction before further processing
+                };
+            } catch {
+                // Some private browsing modes define `indexedDB` but throw on any attempt to open it
+                resolve(null);
+            }
         });
 
-        return new IndexedDBTarget(db, id);
+        const target = new IndexedDBTarget(db, id);
+
+        // An open connection blocks another tab from upgrading or deleting the database for as long
+        // as it is held, so let go of it and answer OFFLINE from then on instead
+        if (db !== null) db.onversionchange = () => target.close();
+
+        return target;
+    };
+
+    /** Closes the connection, after which every operation returns OFFLINE */
+    close = () => {
+        this.db?.close();
+        this.db = null;
     };
 
     // Data Handlers

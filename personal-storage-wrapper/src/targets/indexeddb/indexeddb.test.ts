@@ -80,3 +80,38 @@ test("Correctly checks for equality", async () => {
     expect(idb1.equals(idb3)).toBe(false);
     expect(idb1.equals(memory)).toBe(false);
 });
+
+/**
+ * A held-open connection blocks another tab (or a test teardown) from deleting or upgrading the
+ * database, and the block never lifts on its own. Letting go on `versionchange` means the delete
+ * goes through, and the target answers OFFLINE from then on rather than throwing.
+ */
+test("Lets go of its connection so that another tab can delete the database", async () => {
+    const target = await IndexedDBTarget.create("version-change-id");
+    await target.write(TEST_BUFFER);
+
+    const deleted = new Promise<string>((resolve) => {
+        const request = indexedDB.deleteDatabase("personal-storage-wrapper");
+        request.onsuccess = () => resolve("deleted");
+        request.onblocked = () => resolve("blocked");
+        request.onerror = () => resolve("errored");
+    });
+
+    expect(await deleted).toBe("deleted");
+    expect(await target.write(TEST_BUFFER)).toEqual({ type: "error", error: "OFFLINE" });
+    expect(await target.read()).toEqual({ type: "error", error: "OFFLINE" });
+});
+
+test("Returns a target that is offline when the database cannot be opened at all", async () => {
+    const open = window.indexedDB.open;
+    window.indexedDB.open = () => {
+        throw new Error("Access to storage is not allowed from this context.");
+    };
+
+    try {
+        const target = await IndexedDBTarget.create("private-mode-id");
+        expect(await target.write(TEST_BUFFER)).toEqual({ type: "error", error: "OFFLINE" });
+    } finally {
+        window.indexedDB.open = open;
+    }
+});

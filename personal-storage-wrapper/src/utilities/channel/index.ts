@@ -7,4 +7,6 @@ export class TypedBroadcastChannel<T> {
     }
 
     send = (value: T) => this.channel.postMessage(value);
+
+    close = () => this.channel.close();
 }

@@ -5,7 +5,7 @@ import { ListBuffer } from "../utilities/listbuffer";
 import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
 import { OperationRunOutput } from "./operations/types";
 import { createPSMWithCache } from "./startup/cache";
-import { createPSM } from "./startup/constructor";
+import { createPSM, deregisterPSM } from "./startup/constructor";
 import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
 import { StartValue } from "./startup/types";
 import {
@@ -32,6 +32,10 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
     private syncs: Sync<T>[];
     private channel: PSMBroadcastChannel<V, T>;
     public config: PSMConfig<V, T>;
+
+    private id: string;
+    private closed: boolean = false;
+    private pollTimeout: ReturnType<typeof setTimeout> | undefined;
 
     /**
      * Manager Initialisation
@@ -109,6 +113,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         config: PSMConfig<V, T>,
         resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T> | undefined
     ) {
+        this.id = id;
         this.operations = fromKeys(this.OPERATION_RUN_ORDER, () => []);
         this.channel = new PSMBroadcastChannel(
             id,
@@ -147,6 +152,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         const originalSyncs = this.getSyncsCopy();
         Promise.all(start.values.map(({ sync, value }) => value.then((result) => ({ sync, result })))).then(
             async (results) => {
+                if (this.closed) return;
+
                 const value = await handleInitialSyncValuesAndGetResult(
                     start.value,
                     () => this.value.value,
@@ -188,8 +195,27 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 
     public getValue = (): V => this.value.value;
     public setValue = (value: V): Promise<void> => {
+        if (this.closed) return Promise.resolve();
+
         this.setNewValue(value, "LOCAL");
         return this.enqueueOperation("write", null);
+    };
+
+    /**
+     * Shutdown
+     *
+     * Lets go of everything the manager holds open - the poll timer and the broadcast channel - and
+     * makes every operation from then on a no-op. Without this a manager lives as long as the page
+     * does, which matters most in tests, where each new manager would otherwise go on receiving the
+     * broadcasts of every manager created before it.
+     */
+    public close = () => {
+        if (this.closed) return;
+
+        this.closed = true;
+        if (this.pollTimeout !== undefined) clearTimeout(this.pollTimeout);
+        this.channel.close();
+        deregisterPSM(this.id);
     };
 
     /**
@@ -197,7 +223,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
      */
 
     private onSyncsUpdate = (sendToChannel: boolean = true) => {
-        if (sendToChannel) this.channel.sendUpdatedSyncs(this.syncs);
+        if (sendToChannel && !this.closed) this.channel.sendUpdatedSyncs(this.syncs);
 
         this.config.onSyncStatesUpdate(this.getSyncsCopy());
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
@@ -207,15 +233,20 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         this.value = { value, timestamp: new Date() };
         this.config.onValueUpdate(value, origin);
 
-        if (origin !== "BROADCAST" && origin !== "CREATION") this.channel.sendNewValue(this.value);
+        if (origin !== "BROADCAST" && origin !== "CREATION" && !this.closed) this.channel.sendNewValue(this.value);
     };
 
-    private schedulePoll = () =>
-        setTimeout(() => {
+    private schedulePoll = () => {
+        if (this.closed) return;
+
+        this.pollTimeout = setTimeout(() => {
+            if (this.closed) return;
+
             // Schedule polls regardless of missing poll period, in case it's updated to a value
             if (this.config.pollPeriodInSeconds === null) this.schedulePoll();
             else this.enqueueOperation("poll", null);
         }, (this.config.pollPeriodInSeconds ?? 10) * 1000);
+    };
 
     private logger = () => this.config.handleSyncOperationLog;
 
@@ -225,6 +256,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 
     private enqueueOperation = <O extends Operation>(operation: O, argument: OperationArgument<O>) =>
         new Promise<void>((callback) => {
+            if (this.closed) return callback();
+
             this.operations[operation].push({ argument, callback } as any);
             this.resolveQueuedOperations();
         });
@@ -232,7 +265,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
     private OPERATION_RUN_ORDER = ["update", "removal", "addition", "write", "poll"] as Operation[];
     private resolveQueuedOperations = async (): Promise<void> => {
         // Handle "running state"
-        if (this.operations.running) return;
+        if (this.closed || this.operations.running) return;
 
         // Find operation to perform, in order of precedence
         const operation = this.OPERATION_RUN_ORDER.find((name) => this.operations[name].length);

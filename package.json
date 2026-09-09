@@ -1,4 +1,6 @@
 {
+    "name": "personal-storage-wrapper-repo",
+    "version": "0.0.0",
     "private": true,
     "workspaces": [
         "personal-storage-wrapper",

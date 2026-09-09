@@ -489,6 +489,49 @@ test("Handles poll soon after new value from broadcast", async () => {
 });
 
 /**
+ * Shutdown
+ */
+
+test("Stops responding to anything once closed, and frees its id for reuse", async () => {
+    const sync = await getTestSync({ value: "A" });
+    const onValueUpdate = vi.fn();
+
+    const manager = await getTestManager([sync], { id: "closed-manager", onValueUpdate });
+    await delay(DELAY);
+    onValueUpdate.mockClear();
+
+    manager.close();
+
+    await manager.setValue("B");
+    await delay(DELAY);
+    expect(onValueUpdate).not.toHaveBeenCalled();
+    expect(await value(sync)).toBe("A");
+
+    // The duplicate check no longer trips, so a fresh manager can take the same id
+    const replacement = await getTestManager([sync], { id: "closed-manager" });
+    expect(replacement.getValue()).toBe("A");
+    replacement.close();
+});
+
+test("Stops listening to other managers once closed", async () => {
+    const onValueUpdate = vi.fn();
+
+    const listener = await getTestManager([], { id: "shared-channel-id", onValueUpdate });
+    const speaker = await getTestManager([], { id: "shared-channel-id", ignoreDuplicateCheck: true });
+    await delay(DELAY);
+    onValueUpdate.mockClear();
+
+    listener.close();
+    await speaker.setValue("BROADCAST");
+    await delay(DELAY);
+
+    expect(onValueUpdate).not.toHaveBeenCalled();
+    expect(listener.getValue()).toBe(DEFAULT_VALUE);
+
+    speaker.close();
+});
+
+/**
  * Utilities
  */
 

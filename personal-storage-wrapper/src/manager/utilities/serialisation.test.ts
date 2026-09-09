@@ -36,3 +36,37 @@ test("Correctly serialises and deserialises the same syncs", async () => {
     // Don't compare with `syncs` directly because instance members will fail equality check
     expect(result).toMatchObject([{ compressed: true, target: { type: "memory" } }]);
 });
+
+/**
+ * The poll check that skips an unchanged remote compares this against a Date from the target, so a
+ * sync restored from storage has to come back with a Date rather than the string JSON left behind.
+ */
+test("Revives the last seen write time of a stored sync as a date", async () => {
+    const lastSeenWriteTime = new Date(1000);
+    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, lastSeenWriteTime }]);
+
+    const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+
+    expect(sync.lastSeenWriteTime).toBeInstanceOf(Date);
+    expect(sync.lastSeenWriteTime!.valueOf()).toBe(lastSeenWriteTime.valueOf());
+});
+
+test("Leaves a sync that has never been written to without a last seen write time", async () => {
+    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true }]);
+
+    const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+
+    expect(sync.lastSeenWriteTime).toBeUndefined();
+});
+
+/**
+ * Otherwise one failed write would stop a store being saved for good: a desynced sync is never
+ * written to again, and with polling off there is nothing left to clear the flag.
+ */
+test("Gives a stored sync another chance rather than restoring that it failed", async () => {
+    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, desynced: true }]);
+
+    const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+
+    expect(sync.desynced).toBeUndefined();
+});

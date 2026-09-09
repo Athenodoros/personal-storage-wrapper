@@ -31,8 +31,20 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
         configs.map(async ({ config, type }) => {
             if (deserialisers[type] === undefined) return null;
 
-            const sync = JSON.parse(config);
-            return { ...sync, target: await deserialisers[type](sync.target) };
+            // A sync that is desynced is never written to again, and only a poll or a conflict
+            // clears that. Remembering it would mean one failed write stopped a store saving for
+            // good, across reloads, with polling off - so a new session starts out as though it had
+            // never failed, and startup reconciles the targets anyway.
+            const { desynced: _hadFailedWrite, ...sync } = JSON.parse(config);
+            return {
+                ...sync,
+                // JSON has no dates, so this comes back as the string it was written as
+                lastSeenWriteTime:
+                    sync.lastSeenWriteTime === undefined || sync.lastSeenWriteTime === null
+                        ? undefined
+                        : new Date(sync.lastSeenWriteTime),
+                target: await deserialisers[type](sync.target),
+            };
         })
     );
 

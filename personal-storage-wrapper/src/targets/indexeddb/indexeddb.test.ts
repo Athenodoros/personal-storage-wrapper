@@ -11,15 +11,17 @@ import { IndexedDBTarget } from "./target";
 const TEST_BUFFER = await encodeTextToBuffer("Hello, World!", false);
 
 /**
- * jsdom's IDB implementation seems to take time to become available after returning the db instance
- * Without this artifical wait, otherwise the first test to run will throw an InvalidStateError
+ * `create` used to resolve out of `onupgradeneeded`, before the transaction that creates the object
+ * store had finished, so the first read of a database that did not exist yet threw an
+ * InvalidStateError - which the library turned into a promise nobody was waiting on. Every test
+ * here used to need an artificial wait before it to work around that.
  */
-await IndexedDBTarget.create();
-await new Promise<void>((resolve) => setTimeout(() => resolve(), 5));
+test("Can be read from as soon as it is created", async () => {
+    const target = await IndexedDBTarget.create("created-just-now");
 
-/**
- * Now the actual tests
- */
+    expect(await target.read()).toEqual({ type: "value", value: null });
+});
+
 test("Correctly handles empty states", async () => {
     const target = (await IndexedDBTarget.create())!;
     expect(target.online()).toBe(true);
@@ -30,7 +32,6 @@ test("Correctly handles empty states", async () => {
 
 test("Correctly handles basic storage and retrieval", async () => {
     const target = await IndexedDBTarget.create();
-    await new Promise<void>((resolve) => setTimeout(() => resolve(), 10));
     expect(target).not.toBeNull();
 
     const result = await target!.write(TEST_BUFFER);
@@ -79,4 +80,39 @@ test("Correctly checks for equality", async () => {
     expect(idb1.equals(idb2)).toBe(true);
     expect(idb1.equals(idb3)).toBe(false);
     expect(idb1.equals(memory)).toBe(false);
+});
+
+/**
+ * A held-open connection blocks another tab (or a test teardown) from deleting or upgrading the
+ * database, and the block never lifts on its own. Letting go on `versionchange` means the delete
+ * goes through, and the target answers OFFLINE from then on rather than throwing.
+ */
+test("Lets go of its connection so that another tab can delete the database", async () => {
+    const target = await IndexedDBTarget.create("version-change-id");
+    await target.write(TEST_BUFFER);
+
+    const deleted = new Promise<string>((resolve) => {
+        const request = indexedDB.deleteDatabase("personal-storage-wrapper");
+        request.onsuccess = () => resolve("deleted");
+        request.onblocked = () => resolve("blocked");
+        request.onerror = () => resolve("errored");
+    });
+
+    expect(await deleted).toBe("deleted");
+    expect(await target.write(TEST_BUFFER)).toEqual({ type: "error", error: "OFFLINE" });
+    expect(await target.read()).toEqual({ type: "error", error: "OFFLINE" });
+});
+
+test("Returns a target that is offline when the database cannot be opened at all", async () => {
+    const open = window.indexedDB.open;
+    window.indexedDB.open = () => {
+        throw new Error("Access to storage is not allowed from this context.");
+    };
+
+    try {
+        const target = await IndexedDBTarget.create("private-mode-id");
+        expect(await target.write(TEST_BUFFER)).toEqual({ type: "error", error: "OFFLINE" });
+    } finally {
+        window.indexedDB.open = open;
+    }
 });

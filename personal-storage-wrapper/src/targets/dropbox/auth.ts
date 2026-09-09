@@ -104,7 +104,7 @@ export const runAuthInPopup = async (clientId: string, redirectURI?: string): Pr
     // Open separate window for auth
     const { url, verifier } = await getAuthRedirectDetails(clientId, definiteRedirectURI);
     const code = await getFromPopup({ url, height: 800, width: 680 }, (context) => {
-        if (context.location.href.split("?")[0] !== redirectURI) return null;
+        if (context.location.href.split("?")[0] !== definiteRedirectURI) return null;
         return new URLSearchParams(context.location.search).get("code");
     });
     if (!code) return null;

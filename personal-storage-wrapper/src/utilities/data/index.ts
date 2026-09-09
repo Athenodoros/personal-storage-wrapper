@@ -60,6 +60,8 @@ export const identity = <T>(t: T) => t;
  * Deep Equality
  */
 export const deepEquals = <T>(left: T, right: T): boolean => {
+    if (left === right) return true;
+
     if (typeof left !== typeof right) return false;
 
     if (typeof left !== "object" || left === undefined || left === null || right === undefined || right === null)
@@ -67,11 +69,29 @@ export const deepEquals = <T>(left: T, right: T): boolean => {
 
     if (Array.isArray(left) !== Array.isArray(right)) return false;
 
+    if (left instanceof Date || right instanceof Date)
+        return left instanceof Date && right instanceof Date && left.valueOf() === right.valueOf();
+
+    /**
+     * Only the data structures this is meant for are walked. Anything else - a target, a database
+     * connection, a stream - is compared by identity, because walking one either says two of them
+     * are the same when they only look alike from the outside, or never finishes at all: a fake
+     * IndexedDB connection holds a reference back to itself, several objects down.
+     */
+    if (!isPlainObjectOrArray(left) || !isPlainObjectOrArray(right)) return false;
+
     if (Object.keys(left).length !== Object.keys(right as object).length) return false;
 
     for (let key in left) if (!deepEquals(left[key], right[key])) return false;
 
     return true;
+};
+
+const isPlainObjectOrArray = (value: object) => {
+    if (Array.isArray(value)) return true;
+
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
 };
 export const deepEqualsList = <T>(array: T[]): boolean => {
     if (array.length <= 1) return true;

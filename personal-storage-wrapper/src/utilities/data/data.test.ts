@@ -104,6 +104,41 @@ test("Check deepEquals", () => {
     expect(deepEquals(1, "1" as any)).toBe(false);
     expect(deepEquals(["a", "b"], { 0: "a", 1: "b" })).toBe(false);
     expect(deepEquals({}, null)).toBe(false);
+
+    expect(deepEquals(new Date(1000), new Date(1000))).toBe(true);
+    expect(deepEquals(new Date(1000), new Date(2000))).toBe(false);
+    expect(deepEquals(new Date(1000), {} as unknown as Date)).toBe(false);
+});
+
+/**
+ * Anything that is not one of the data structures this is meant for is compared by identity: two
+ * instances of a class are not the same value just because their own properties happen to line up.
+ */
+test("Check deepEquals stops at objects that are not plain", () => {
+    class Holder {
+        constructor(public value: number) {}
+    }
+
+    const holder = new Holder(1);
+    expect(deepEquals(holder, holder)).toBe(true);
+    expect(deepEquals(holder, new Holder(1))).toBe(false);
+    expect(deepEquals({ holder }, { holder })).toBe(true);
+    expect(deepEquals({ holder }, { holder: new Holder(1) })).toBe(false);
+});
+
+/** A structure that refers back to itself would otherwise be walked until the stack runs out */
+test("Check deepEquals terminates on a self-referencing object", () => {
+    const build = () => {
+        const inner: Record<string, unknown> = {};
+        const outer = new (class Cyclic {
+            inner = inner;
+        })();
+        inner.outer = outer;
+        return outer;
+    };
+
+    expect(deepEquals(build(), build())).toBe(false);
+    expect(deepEquals({ a: build() }, { a: build() })).toBe(false);
 });
 
 test("Check deepEqualsList", () => {

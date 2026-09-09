@@ -136,3 +136,11 @@ const slowValue = <T>(value: T, delay: number) =>
 
 const slowError = (delay: number) =>
     new Result((resolve) => setTimeout(() => resolve({ type: "error", error: "OFFLINE" }), delay));
+
+test("Turns a synchronous throw into an error rather than a rejection", async () => {
+    const result = await new Result(() => {
+        throw new Error("Something the browser refused to do");
+    });
+
+    expect(result).toEqual({ type: "error", error: "UNKNOWN" });
+});

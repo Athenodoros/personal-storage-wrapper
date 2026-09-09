@@ -33,11 +33,9 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
                 const request: IDBOpenDBRequest = window.indexedDB.open(DB_NAME, DB_VERSION);
                 request.onerror = () => resolve(null);
                 request.onsuccess = () => resolve(request.result);
-                request.onupgradeneeded = () => {
-                    const db = request.result;
-                    db.createObjectStore(TABLE_NAME, { keyPath: "id" });
-                    setTimeout(() => resolve(db), 1); // End upgrade transaction before further processing
-                };
+                // `onsuccess` fires once the version change transaction this runs in has finished,
+                // and only then can the database be read from - so this does not resolve itself
+                request.onupgradeneeded = () => request.result.createObjectStore(TABLE_NAME, { keyPath: "id" });
             } catch {
                 // Some private browsing modes define `indexedDB` but throw on any attempt to open it
                 resolve(null);

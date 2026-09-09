@@ -29,7 +29,17 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
     static error = <Value>(error: ResultErrorType) => new Result<Value>((resolve) => resolve({ type: "error", error }));
 
     constructor(executor: (resolve: (result: ResultValueType<Value>) => void, reject: () => void) => void) {
-        super((resolve) => executor(resolve, () => resolve({ type: "error", error: "UNKNOWN" })));
+        super((resolve) => {
+            const fail = () => resolve({ type: "error", error: "UNKNOWN" });
+
+            // A Result that rejects stops whoever is waiting on it rather than telling them the
+            // operation failed, and callers only ever handle the second of those
+            try {
+                executor(resolve, fail);
+            } catch {
+                fail();
+            }
+        });
     }
 
     map = <T>(fn: (value: Value) => T): Result<T> => this.pmap(async (value) => fn(value));

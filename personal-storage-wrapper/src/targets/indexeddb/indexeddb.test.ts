@@ -11,15 +11,17 @@ import { IndexedDBTarget } from "./target";
 const TEST_BUFFER = await encodeTextToBuffer("Hello, World!", false);
 
 /**
- * jsdom's IDB implementation seems to take time to become available after returning the db instance
- * Without this artifical wait, otherwise the first test to run will throw an InvalidStateError
+ * `create` used to resolve out of `onupgradeneeded`, before the transaction that creates the object
+ * store had finished, so the first read of a database that did not exist yet threw an
+ * InvalidStateError - which the library turned into a promise nobody was waiting on. Every test
+ * here used to need an artificial wait before it to work around that.
  */
-await IndexedDBTarget.create();
-await new Promise<void>((resolve) => setTimeout(() => resolve(), 5));
+test("Can be read from as soon as it is created", async () => {
+    const target = await IndexedDBTarget.create("created-just-now");
 
-/**
- * Now the actual tests
- */
+    expect(await target.read()).toEqual({ type: "value", value: null });
+});
+
 test("Correctly handles empty states", async () => {
     const target = (await IndexedDBTarget.create())!;
     expect(target.online()).toBe(true);
@@ -30,7 +32,6 @@ test("Correctly handles empty states", async () => {
 
 test("Correctly handles basic storage and retrieval", async () => {
     const target = await IndexedDBTarget.create();
-    await new Promise<void>((resolve) => setTimeout(() => resolve(), 10));
     expect(target).not.toBeNull();
 
     const result = await target!.write(TEST_BUFFER);

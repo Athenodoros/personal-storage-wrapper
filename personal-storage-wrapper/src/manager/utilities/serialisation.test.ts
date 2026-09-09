@@ -58,3 +58,15 @@ test("Leaves a sync that has never been written to without a last seen write tim
 
     expect(sync.lastSeenWriteTime).toBeUndefined();
 });
+
+/**
+ * Otherwise one failed write would stop a store being saved for good: a desynced sync is never
+ * written to again, and with polling off there is nothing left to clear the flag.
+ */
+test("Gives a stored sync another chance rather than restoring that it failed", async () => {
+    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, desynced: true }]);
+
+    const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+
+    expect(sync.desynced).toBeUndefined();
+});

@@ -144,3 +144,23 @@ test("Turns a synchronous throw into an error rather than a rejection", async ()
 
     expect(result).toEqual({ type: "error", error: "UNKNOWN" });
 });
+
+test("Turns a rejecting map callback into an error rather than never returning", async () => {
+    const mapped = Result.value(7).map(() => {
+        throw new Error("Not the file that was expected");
+    });
+    const pmapped = Result.value(7).pmap(async () => {
+        throw new Error("Not the file that was expected");
+    });
+    const flatmapped = Result.value(7).flatmap(() => {
+        throw new Error("Not the file that was expected");
+    });
+
+    expect(await withTimeout(mapped)).toEqual({ type: "error", error: "UNKNOWN" });
+    expect(await withTimeout(pmapped)).toEqual({ type: "error", error: "UNKNOWN" });
+    expect(await withTimeout(flatmapped)).toEqual({ type: "error", error: "UNKNOWN" });
+});
+
+/** Resolves to a marker rather than hanging the test runner, so a regression fails instead of timing out */
+const withTimeout = <T>(result: Result<T>) =>
+    Promise.race([result, new Promise((resolve) => setTimeout(() => resolve("NEVER RETURNED"), DELAY * 10))]);

@@ -34,7 +34,9 @@ const getDropboxAuthorization = (connection: DropboxConnection): Result<string> 
 export const runDropboxQuery = (
     connection: DropboxConnection,
     input: RequestInfo | URL,
-    init?: RequestInit | undefined
+    init?: RequestInit | undefined,
+    // A 401 is worth one forced token refresh, and no more - see below
+    retryOnUnauthorized: boolean = true
 ): Result<Response> =>
     new Result<Response>(async (resolve) => {
         if (!window.navigator.onLine) return resolve({ type: "error", error: "OFFLINE" });
@@ -49,8 +51,17 @@ export const runDropboxQuery = (
             });
 
             if (result.status === 401) {
+                /**
+                 * The usual reason is an access token that expired earlier than expected, which one
+                 * forced refresh fixes. It is not the only reason: an app whose grant is missing a
+                 * scope the request needs answers 401 to every attempt, however new the token is.
+                 * Retrying unconditionally then loops forever, refreshing and re-requesting, and the
+                 * caller simply never hears back - so the second 401 is reported as what it is.
+                 */
+                if (!retryOnUnauthorized) return resolve({ type: "error", error: "INVALID_AUTH" });
+
                 connection.expiry = new Date("1970-01-01");
-                return resolve(await runDropboxQuery(connection, input, init));
+                return resolve(await runDropboxQuery(connection, input, init, false));
             }
 
             return resolve({ type: "value", value: result });

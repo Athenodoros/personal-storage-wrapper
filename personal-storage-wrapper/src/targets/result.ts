@@ -44,19 +44,37 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
 
     map = <T>(fn: (value: Value) => T): Result<T> => this.pmap(async (value) => fn(value));
 
+    /**
+     * The callback is application code, and it can fail: a download that returned something other
+     * than the expected file makes `JSON.parse` throw as it is decoded. The catch matters more than
+     * it looks. Without it the rejection is delivered to the derived promise `then` builds, which is
+     * itself a Result and so turns rejections into resolved errors that nobody is waiting on, while
+     * the Result being built here is never resolved at all - and every caller waiting on it, up to
+     * and including the manager's operation queue, waits for good.
+     */
     pmap = <T>(fn: (value: Value) => Promise<T>): Result<T> =>
         new Result<T>((resolve) => {
             this.then(async (result) => {
-                if (result.type === "error") resolve(result);
-                else resolve({ type: "value", value: await fn(result.value) });
+                if (result.type === "error") return resolve(result);
+
+                try {
+                    resolve({ type: "value", value: await fn(result.value) });
+                } catch {
+                    resolve({ type: "error", error: "UNKNOWN" });
+                }
             });
         });
 
     flatmap = <T>(fn: (value: Value) => Result<T>): Result<T> =>
         new Result<T>((resolve) => {
             this.then((result) => {
-                if (result.type === "error") resolve(result);
-                else fn(result.value).then((output) => resolve(output));
+                if (result.type === "error") return resolve(result);
+
+                try {
+                    fn(result.value).then((output) => resolve(output));
+                } catch {
+                    resolve({ type: "error", error: "UNKNOWN" });
+                }
             });
         });
 

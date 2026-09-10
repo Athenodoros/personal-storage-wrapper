@@ -34,8 +34,16 @@ export const decompressStringWithFFlate = async (value: ArrayBuffer): Promise<st
 const runArrayBufferThroughStream = async (buffer: ArrayBuffer, processor: any) => {
     // Write values to stream
     const writer = (processor.writable as WritableStream).getWriter();
-    writer.write(new Uint8Array(buffer));
-    writer.close();
+
+    /**
+     * A buffer that is not what the stream expected - a file in an older format, or a download that
+     * returned something else entirely - fails both of these as well as the read below. The read is
+     * where the caller finds out, so these are swallowed rather than left to reject on their own,
+     * with nobody waiting on them, as an unhandled rejection in the middle of the page.
+     */
+    const ignoreFailure = () => undefined;
+    writer.write(new Uint8Array(buffer)).catch(ignoreFailure);
+    writer.close().catch(ignoreFailure);
 
     // Read all stream values
     const output = [];

@@ -28,6 +28,28 @@ export const timestampFromSync = <T extends Target<any, any>>(
     sync: Sync<T>
 ): Result<Date | null> => runWithLogger(logger, sync, "POLL", () => sync.target.timestamp());
 
+/**
+ * Reads a target without adding it to anything, for an application that wants to know what is
+ * already in a target before it decides whether to sync to it at all.
+ *
+ * `addTarget` reconciles the target with the value the manager is holding, and by the time the
+ * conflict handler runs the decision to sync is already made. Somewhere like a "link this account"
+ * button, the answer is sometimes that the two should not be joined up at all - and that has to be
+ * settled before anything is written anywhere.
+ */
+export const readValueFromTarget = <V extends Value, T extends Target<any, any>>(
+    target: T,
+    compressed: boolean = true
+): Result<MaybeValue<V>> =>
+    target.read().pmap(
+        async (value) =>
+            value &&
+            ({
+                timestamp: value.timestamp,
+                value: await getValueFromBuffer<V>(value.buffer, compressed),
+            } as MaybeValue<V>)
+    );
+
 export const readFromSync = <V extends Value, T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,
     sync: Sync<T>

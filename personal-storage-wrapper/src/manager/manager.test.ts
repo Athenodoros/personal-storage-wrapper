@@ -532,8 +532,44 @@ test("Stops listening to other managers once closed", async () => {
 });
 
 /**
+ * An operation runner calls into application code - a conflict handler, most obviously - and that
+ * can throw. The queue has to come back from it: before it did, `running` stayed set for the life
+ * of the page, so every later write queued behind the failure and never ran, and the promises they
+ * were handed never settled either, so nothing said anything was wrong.
+ */
+test("Hands the operation queue back when an operation fails", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(noop);
+
+    const existing = await getTestSync({ value: DEFAULT_VALUE });
+    const conflicting = await getTestSync({ value: "REMOTE" });
+    const manager = await getTestManager([existing], {
+        resolveConflictingSyncsUpdate: async () => {
+            throw new Error("The application's conflict handler failed");
+        },
+    });
+
+    await withTimeout(manager.addTarget(conflicting.target, false));
+    expect(errors).toHaveBeenCalled();
+
+    await withTimeout(manager.setValue("AFTER"));
+    await delay(DELAY);
+    expect(await value(existing)).toBe("AFTER");
+
+    errors.mockRestore();
+    manager.close();
+});
+
+/**
  * Utilities
  */
+
+const withTimeout = <T>(promise: Promise<T>) =>
+    Promise.race([
+        promise,
+        delay(DELAY * 10).then(() => {
+            throw new Error("The operation never returned");
+        }),
+    ]);
 
 let id = 0;
 const getTestManager = async (

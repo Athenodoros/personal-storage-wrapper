@@ -37,7 +37,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     static setupInPopup = async (
         clientId: string,
         redirectURI?: string,
-        path: string = "/data.bak"
+        path: string = "/data.bak",
     ): Promise<DropboxTarget | null> => this.createFromMaybeConnection(runAuthInPopup(clientId, redirectURI), path);
 
     // Data handlers
@@ -50,7 +50,9 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
             },
             body: buffer,
         }).flatmap((result) =>
-            result?.server_modified ? Result.value(new Date(result.server_modified)) : Result.error("UNKNOWN")
+            result?.server_modified
+                ? Result.value(new Date(result.server_modified))
+                : Result.error<Date>("UNKNOWN", "Dropbox accepted the upload without saying when it was saved"),
         );
 
     read = (): Result<TargetValue> =>
@@ -62,7 +64,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
                 headers: { "Dropbox-API-Arg": JSON.stringify({ path: "rev:" + write.rev }) },
             })
                 .pmap((response) => response.arrayBuffer())
-                .map((buffer) => ({ timestamp: write.server_modified, buffer } as TargetValue));
+                .map((buffer) => ({ timestamp: write.server_modified, buffer }) as TargetValue);
         });
 
     timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.server_modified);
@@ -92,7 +94,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         other instanceof DropboxTarget &&
         deepEquals(
             [other.connection.clientId, other.user.id, other.path],
-            [this.connection.clientId, this.user.id, this.path]
+            [this.connection.clientId, this.user.id, this.path],
         );
 
     // Other requests
@@ -108,13 +110,13 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ path: this.path }),
-            }
+            },
         )
             .supress("MISSING_FILE", null)
             .map((result) =>
                 result?.server_modified && result.rev
                     ? { server_modified: new Date(result.server_modified), rev: result.rev }
-                    : null
+                    : null,
             );
 }
 

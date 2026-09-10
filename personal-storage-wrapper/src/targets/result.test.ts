@@ -137,12 +137,12 @@ const slowValue = <T>(value: T, delay: number) =>
 const slowError = (delay: number) =>
     new Result((resolve) => setTimeout(() => resolve({ type: "error", error: "OFFLINE" }), delay));
 
-test("Turns a synchronous throw into an error rather than a rejection", async () => {
+test("Turns a synchronous throw into an error rather than a rejection, and says what was thrown", async () => {
     const result = await new Result(() => {
         throw new Error("Something the browser refused to do");
     });
 
-    expect(result).toEqual({ type: "error", error: "UNKNOWN" });
+    expect(result).toEqual({ type: "error", error: "UNKNOWN", detail: "Something the browser refused to do" });
 });
 
 test("Turns a rejecting map callback into an error rather than never returning", async () => {
@@ -156,9 +156,10 @@ test("Turns a rejecting map callback into an error rather than never returning",
         throw new Error("Not the file that was expected");
     });
 
-    expect(await withTimeout(mapped)).toEqual({ type: "error", error: "UNKNOWN" });
-    expect(await withTimeout(pmapped)).toEqual({ type: "error", error: "UNKNOWN" });
-    expect(await withTimeout(flatmapped)).toEqual({ type: "error", error: "UNKNOWN" });
+    const thrown = { type: "error", error: "UNKNOWN", detail: "Not the file that was expected" };
+    expect(await withTimeout(mapped)).toEqual(thrown);
+    expect(await withTimeout(pmapped)).toEqual(thrown);
+    expect(await withTimeout(flatmapped)).toEqual(thrown);
 });
 
 /** Resolves to a marker rather than hanging the test runner, so a regression fails instead of timing out */

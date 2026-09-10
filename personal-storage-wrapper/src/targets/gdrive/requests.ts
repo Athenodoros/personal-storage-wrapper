@@ -1,10 +1,10 @@
-import { Result } from "../result";
+import { getUnknownError, Result } from "../result";
 import { GDriveConnection } from "./types";
 
 export const runGDriveQuery = (
     connection: GDriveConnection,
     input: RequestInfo | URL,
-    init?: RequestInit | undefined
+    init?: RequestInit | undefined,
 ): Promise<Response> =>
     fetch(input, { ...init, headers: { ...init?.headers, authorization: "Bearer " + connection.accessToken } });
 
@@ -12,7 +12,7 @@ export const runGDriveJSONQuery = <T = unknown>(
     onRefreshNeeded: () => void,
     connection: GDriveConnection,
     input: RequestInfo | URL,
-    init?: RequestInit
+    init?: RequestInit,
 ): Result<T> =>
     new Result<T>(async (resolve) => {
         if (!window.navigator.onLine) return resolve({ type: "error", error: "OFFLINE" });
@@ -40,7 +40,8 @@ export const runGDriveJSONQuery = <T = unknown>(
             }
 
             resolve({ type: "value", value: json as T });
-        } catch {
-            return resolve({ type: "error", error: "UNKNOWN" });
+        } catch (thrown) {
+            // Usually the network, which fetch reports by throwing rather than by a status
+            return resolve(getUnknownError(thrown));
         }
     });

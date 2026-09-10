@@ -1,4 +1,4 @@
-import { Result } from "../result";
+import { getUnknownError, Result } from "../result";
 import { MAX_RTT_FOR_QUERY_IN_SECONDS } from "../utils";
 import { DropboxConnection } from "./types";
 
@@ -10,7 +10,7 @@ const getDropboxAuthorization = (connection: DropboxConnection): Result<string> 
                 {
                     headers: { "Content-Type": "application/json" },
                     method: "POST",
-                }
+                },
             );
             const access = await response.json();
 
@@ -36,7 +36,7 @@ export const runDropboxQuery = (
     input: RequestInfo | URL,
     init?: RequestInit | undefined,
     // A 401 is worth one forced token refresh, and no more - see below
-    retryOnUnauthorized: boolean = true
+    retryOnUnauthorized: boolean = true,
 ): Result<Response> =>
     new Result<Response>(async (resolve) => {
         if (!window.navigator.onLine) return resolve({ type: "error", error: "OFFLINE" });
@@ -65,15 +65,16 @@ export const runDropboxQuery = (
             }
 
             return resolve({ type: "value", value: result });
-        } catch {
-            return resolve({ type: "error", error: "UNKNOWN" });
+        } catch (thrown) {
+            // Usually the network, which fetch reports by throwing rather than by a status
+            return resolve(getUnknownError(thrown));
         }
     });
 
 export const runDropboxQueryForJSON = <T>(
     connection: DropboxConnection,
     input: RequestInfo | URL,
-    init?: RequestInit
+    init?: RequestInit,
 ): Result<T> =>
     runDropboxQuery(connection, input, init)
         .pmap((response) => response.json())
@@ -88,5 +89,6 @@ export const runDropboxQueryForJSON = <T>(
                 return Result.error("MISSING_FILE");
             if (summary.startsWith("path/malformed_path")) return Result.error("INVALID_FILE_REFERENCE");
 
-            return Result.error("UNKNOWN");
+            // Dropbox's own description of what it refused, which is the most useful thing there is
+            return Result.error<T>("UNKNOWN", summary);
         });

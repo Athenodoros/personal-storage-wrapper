@@ -93,7 +93,12 @@ test("Reports a target holding something it cannot decode, rather than never ret
     await writeToAndUpdateSync(() => noop, { target, compressed: false }, "not compressed");
 
     // Read as though it were compressed, so decoding it throws
-    expect(await readValueFromTarget(target, true)).toEqual({ type: "error", error: "UNKNOWN" });
+    const result = await readValueFromTarget(target, true);
+    expect(result.type).toBe("error");
+    expect(result.error).toBe("UNKNOWN");
+
+    // What went wrong is carried rather than swallowed, so a caller can say more than "unknown"
+    expect(result.detail).toBeTruthy();
 });
 
 const runRequestTest = async (fails: boolean, runner: (sync: Sync<MemoryTarget>) => Result<any>) => {

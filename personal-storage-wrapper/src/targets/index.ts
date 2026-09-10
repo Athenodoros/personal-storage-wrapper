@@ -7,5 +7,5 @@ export { IndexedDBTargetType } from "./indexeddb/types";
 export { MemoryTarget } from "./memory/target";
 export { MemoryTargetType } from "./memory/types";
 export { Result } from "./result";
-export type { ErrorResult, ResultValueType, ValueResult } from "./result";
+export type { ErrorResult, ResultErrorType, ResultValueType, ValueResult } from "./result";
 export type { Deserialiser, Target, TargetValue } from "./types";

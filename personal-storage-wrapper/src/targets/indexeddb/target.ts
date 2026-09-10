@@ -9,8 +9,34 @@ interface StoredIDBFile {
 }
 
 const DB_NAME = "personal-storage-wrapper";
-const DB_VERSION = 1;
 const TABLE_NAME = "stores";
+
+/**
+ * Opens whatever version the browser holds, or creates the database if there is none. There is only
+ * ever one schema here, so there is nothing to be gained by asking for a version - and asking for
+ * one that is behind what the browser holds is an error rather than an open.
+ */
+const openDatabase = (version?: number) =>
+    new Promise<IDBDatabase | null>((resolve) => {
+        if (!("indexedDB" in window)) return resolve(null);
+
+        try {
+            const request: IDBOpenDBRequest = window.indexedDB.open(DB_NAME, version);
+            request.onerror = () => resolve(null);
+            // Another tab is holding the database open against the upgrade, and will not let go
+            request.onblocked = () => resolve(null);
+            request.onsuccess = () => resolve(request.result);
+            // `onsuccess` fires once the version change transaction this runs in has finished, and
+            // only then can the database be read from - so this does not resolve itself
+            request.onupgradeneeded = () => {
+                if (!request.result.objectStoreNames.contains(TABLE_NAME))
+                    request.result.createObjectStore(TABLE_NAME, { keyPath: "id" });
+            };
+        } catch {
+            // Some private browsing modes define `indexedDB` but throw on any attempt to open it
+            resolve(null);
+        }
+    });
 
 export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTargetSerialisationConfig> {
     type: IndexedDBTargetType = IndexedDBTargetType;
@@ -26,21 +52,22 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
 
     // Async constructor
     static create = async (id?: string): Promise<IndexedDBTarget> => {
-        const db = await new Promise<IDBDatabase | null>((resolve) => {
-            if (!("indexedDB" in window)) return resolve(null);
+        let db = await openDatabase();
 
-            try {
-                const request: IDBOpenDBRequest = window.indexedDB.open(DB_NAME, DB_VERSION);
-                request.onerror = () => resolve(null);
-                request.onsuccess = () => resolve(request.result);
-                // `onsuccess` fires once the version change transaction this runs in has finished,
-                // and only then can the database be read from - so this does not resolve itself
-                request.onupgradeneeded = () => request.result.createObjectStore(TABLE_NAME, { keyPath: "id" });
-            } catch {
-                // Some private browsing modes define `indexedDB` but throw on any attempt to open it
-                resolve(null);
-            }
-        });
+        /**
+         * A database at the current version but without the store in it, which no amount of opening
+         * will repair: `onupgradeneeded` only runs for a version it has not seen, so the store is
+         * never created and every read and write fails for as long as the browser holds it.
+         *
+         * It should not happen, and it does: a version change transaction that is interrupted - the
+         * tab closed, the disk full, the browser killed - leaves the new version number behind
+         * without what it was creating. Opening at the next version up runs the upgrade again.
+         */
+        if (db !== null && !db.objectStoreNames.contains(TABLE_NAME)) {
+            const version = db.version + 1;
+            db.close();
+            db = await openDatabase(version);
+        }
 
         const target = new IndexedDBTarget(db, id);
 

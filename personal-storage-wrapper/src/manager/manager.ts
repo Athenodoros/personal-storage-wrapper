@@ -275,40 +275,50 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         const operations = this.operations[operation];
         this.operations[operation] = [];
 
-        // Perform operations
-        const originalSyncs = this.getSyncsCopy();
-        const output = (await OperationRunners[operation]({
-            args: operations.map(({ argument }) => argument as any),
-            logger: this.logger,
-            value: this.value.value,
-            recents: this.channel.recents.values(),
-            config: this.config,
-            syncs: this.syncs,
-        })) satisfies OperationRunOutput<V, T>;
+        /**
+         * Whatever happens in here, the queue has to be handed back. An operation runner that
+         * throws would otherwise leave `running` set for the life of the page: every later write,
+         * addition and poll would queue behind it and never run, and the promises they were given
+         * would never settle, so nothing would report a problem either.
+         */
+        try {
+            // Perform operations
+            const originalSyncs = this.getSyncsCopy();
+            const output = (await OperationRunners[operation]({
+                args: operations.map(({ argument }) => argument as any),
+                logger: this.logger,
+                value: this.value.value,
+                recents: this.channel.recents.values(),
+                config: this.config,
+                syncs: this.syncs,
+            })) satisfies OperationRunOutput<V, T>;
 
-        // Update syncs
-        if (output.syncs && !deepEquals(this.syncs, output.syncs)) this.syncs = output.syncs;
+            // Update syncs
+            if (output.syncs && !deepEquals(this.syncs, output.syncs)) this.syncs = output.syncs;
 
-        // Update value
-        if (output.update && !deepEquals(output.update.value, this.value.value))
-            this.setNewValue(output.update.value, output.update.origin);
+            // Update value
+            if (output.update && !deepEquals(output.update.value, this.value.value))
+                this.setNewValue(output.update.value, output.update.origin);
 
-        // Run writes
-        if (output.writes && output.writes.length)
-            await Promise.all(
-                uniqEquals(output.writes, (s1, s2) => s1.target.equals(s2.target)).map(async (sync) => {
-                    if (this.syncs.includes(sync)) await writeToAndUpdateSync(this.logger, sync, this.value.value);
-                })
-            );
+            // Run writes
+            if (output.writes && output.writes.length)
+                await Promise.all(
+                    uniqEquals(output.writes, (s1, s2) => s1.target.equals(s2.target)).map(async (sync) => {
+                        if (this.syncs.includes(sync)) await writeToAndUpdateSync(this.logger, sync, this.value.value);
+                    })
+                );
 
-        // Callback if dirty syncs
-        if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
+            // Callback if dirty syncs
+            if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
+        } catch (error) {
+            console.error("PersonalStorageManager: the " + operation + " operation failed", error);
+        } finally {
+            // Resolve promises
+            operations.forEach(({ callback }) => callback());
 
-        // Resolve promises
-        operations.forEach(({ callback }) => callback());
-
-        // Rerun new operations
-        this.operations.running = undefined;
-        this.resolveQueuedOperations();
+            // Rerun new operations
+            this.operations.running = undefined;
+            this.resolveQueuedOperations();
+        }
     };
 }

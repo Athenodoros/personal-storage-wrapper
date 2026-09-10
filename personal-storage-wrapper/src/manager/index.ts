@@ -3,6 +3,7 @@ export type {
     Sync,
     Value,
     TimestampedValue,
+    MaybeValue,
 
     // Creation
     InitialValue,
@@ -41,3 +42,6 @@ export {
 } from "./utilities/defaults";
 
 export { PersonalStorageManager } from "./manager";
+
+// Reading a target without syncing to it, for deciding whether to sync to it at all
+export { readValueFromTarget } from "./utilities/requests";

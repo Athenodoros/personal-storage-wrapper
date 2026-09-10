@@ -116,3 +116,30 @@ test("Returns a target that is offline when the database cannot be opened at all
         window.indexedDB.open = open;
     }
 });
+
+/**
+ * A version change transaction that is interrupted leaves the version number behind without the
+ * store it was creating, and `onupgradeneeded` never runs again for a version already seen - so
+ * every read and write failed from then on, for as long as the browser held the database.
+ */
+test("Repairs a database left at the current version without its store", async () => {
+    await new Promise<void>((resolve, reject) => {
+        const request = indexedDB.open("personal-storage-wrapper", 1);
+        request.onupgradeneeded = () => undefined; // The interrupted upgrade: no store created
+        request.onsuccess = () => {
+            request.result.close();
+            resolve();
+        };
+        request.onerror = () => reject(request.error);
+    });
+
+    const target = await IndexedDBTarget.create("tophat");
+
+    expect(await target.write(TEST_BUFFER)).toMatchObject({ type: "value" });
+    expect((await target.read()).value).not.toBe(null);
+    target.close();
+
+    // Repairing it moves the version on, and the next session has to open that rather than fail
+    const reopened = await IndexedDBTarget.create("tophat");
+    expect((await reopened.read()).value).not.toBe(null);
+});

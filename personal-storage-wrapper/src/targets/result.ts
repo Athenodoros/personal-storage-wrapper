@@ -1,21 +1,42 @@
 export type ResultErrorType =
-    | "UNKNOWN"
-    | "OFFLINE"
-    | "INVALID_AUTH"
-    | "EXPIRED_AUTH"
-    | "INVALID_FILE_REFERENCE"
-    | "MISSING_FILE";
+    "UNKNOWN" | "OFFLINE" | "INVALID_AUTH" | "EXPIRED_AUTH" | "INVALID_FILE_REFERENCE" | "MISSING_FILE";
 
 export interface ValueResult<Value> {
     type: "value";
     value: Value;
     error?: undefined;
+    detail?: undefined;
 }
 export interface ErrorResult {
     type: "error";
     value?: undefined;
     error: ResultErrorType;
+    /**
+     * What went wrong, when the failure was something thrown rather than a refusal the target
+     * described. `UNKNOWN` on its own says only that nobody knew, which is no use to whoever has to
+     * tell the user what happened.
+     */
+    detail?: string;
 }
+
+/** An `UNKNOWN` result that still carries what was thrown */
+export const getUnknownError = (thrown: unknown): ErrorResult => ({
+    type: "error",
+    error: "UNKNOWN",
+    detail: getDetail(thrown),
+});
+
+/**
+ * Not every failure describes itself. A stream handed a buffer it cannot read throws a `TypeError`
+ * with no message at all, so the name it stringifies to is all there is to go on and is still more
+ * than nothing.
+ */
+const getDetail = (thrown: unknown): string | undefined => {
+    if (thrown === undefined || thrown === null) return undefined;
+    if (thrown instanceof Error) return thrown.message || String(thrown) || undefined;
+
+    return String(thrown) || undefined;
+};
 
 export type ResultValueType<Value> = ValueResult<Value> | ErrorResult;
 
@@ -26,37 +47,61 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
     static flatten = flatten;
 
     static value = <Value>(value: Value) => new Result<Value>((resolve) => resolve({ type: "value", value }));
-    static error = <Value>(error: ResultErrorType) => new Result<Value>((resolve) => resolve({ type: "error", error }));
+    static error = <Value>(error: ResultErrorType, detail?: string) =>
+        new Result<Value>((resolve) => resolve({ type: "error", error, detail }));
 
-    constructor(executor: (resolve: (result: ResultValueType<Value>) => void, reject: () => void) => void) {
+    /** An `UNKNOWN` result carrying what was thrown, for a failure nothing else described */
+    static thrown = <Value>(thrown: unknown) => new Result<Value>((resolve) => resolve(getUnknownError(thrown)));
+
+    constructor(
+        executor: (resolve: (result: ResultValueType<Value>) => void, reject: (thrown?: unknown) => void) => void,
+    ) {
         super((resolve) => {
-            const fail = () => resolve({ type: "error", error: "UNKNOWN" });
+            const fail = (thrown?: unknown) => resolve(getUnknownError(thrown));
 
             // A Result that rejects stops whoever is waiting on it rather than telling them the
             // operation failed, and callers only ever handle the second of those
             try {
                 executor(resolve, fail);
-            } catch {
-                fail();
+            } catch (thrown) {
+                fail(thrown);
             }
         });
     }
 
     map = <T>(fn: (value: Value) => T): Result<T> => this.pmap(async (value) => fn(value));
 
+    /**
+     * The callback is application code, and it can fail: a download that returned something other
+     * than the expected file makes `JSON.parse` throw as it is decoded. The catch matters more than
+     * it looks. Without it the rejection is delivered to the derived promise `then` builds, which is
+     * itself a Result and so turns rejections into resolved errors that nobody is waiting on, while
+     * the Result being built here is never resolved at all - and every caller waiting on it, up to
+     * and including the manager's operation queue, waits for good.
+     */
     pmap = <T>(fn: (value: Value) => Promise<T>): Result<T> =>
         new Result<T>((resolve) => {
             this.then(async (result) => {
-                if (result.type === "error") resolve(result);
-                else resolve({ type: "value", value: await fn(result.value) });
+                if (result.type === "error") return resolve(result);
+
+                try {
+                    resolve({ type: "value", value: await fn(result.value) });
+                } catch (thrown) {
+                    resolve(getUnknownError(thrown));
+                }
             });
         });
 
     flatmap = <T>(fn: (value: Value) => Result<T>): Result<T> =>
         new Result<T>((resolve) => {
             this.then((result) => {
-                if (result.type === "error") resolve(result);
-                else fn(result.value).then((output) => resolve(output));
+                if (result.type === "error") return resolve(result);
+
+                try {
+                    fn(result.value).then((output) => resolve(output));
+                } catch (thrown) {
+                    resolve(getUnknownError(thrown));
+                }
             });
         });
 
@@ -65,7 +110,7 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
             this.then((result) => {
                 if (result.type === "error" && result.error === error) resolve({ type: "value", value: fallback });
                 else resolve(result);
-            })
+            }),
         );
 }
 
@@ -88,7 +133,7 @@ function all(results: Result<any>[]): Result<any> {
                 if (error) resolve(error);
                 else resolve({ type: "value", value: values.map((value) => value.value) });
             })
-            .catch(() => resolve({ type: "error", error: "UNKNOWN" }));
+            .catch((thrown) => resolve(getUnknownError(thrown)));
     });
 }
 
@@ -108,17 +153,18 @@ function any<T>(results: Result<T>[]): Result<T> {
             .then((values) => {
                 if (values.every(({ type }) => type === "error")) resolve(values[0]);
             })
-            .catch(() => resolve({ type: "error", error: "UNKNOWN" }));
+            .catch((thrown) => resolve(getUnknownError(thrown)));
     });
 }
 
-type FlatResult<T> = T extends Promise<infer V>
-    ? FlatResult<V>
-    : T extends object
-    ? { [K in keyof T]: T[K] extends Result<infer V> ? FlatResult<V> : FlatResult<T[K]> }
-    : T extends (infer U)[]
-    ? FlatResult<U extends Result<infer V> ? V : U>[]
-    : T;
+type FlatResult<T> =
+    T extends Promise<infer V>
+        ? FlatResult<V>
+        : T extends object
+          ? { [K in keyof T]: T[K] extends Result<infer V> ? FlatResult<V> : FlatResult<T[K]> }
+          : T extends (infer U)[]
+            ? FlatResult<U extends Result<infer V> ? V : U>[]
+            : T;
 function flatten<T>(t: T) {
     return new Result<FlatResult<T>>((resolve) => {
         // If it's a Result, flatten the value

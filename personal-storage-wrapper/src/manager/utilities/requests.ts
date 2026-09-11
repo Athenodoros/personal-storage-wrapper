@@ -1,5 +1,5 @@
 import { Target } from "../../targets";
-import { Result } from "../../targets/result";
+import { getErrorDetail, Result } from "../../targets/result";
 import { MaybeValue, Sync, SyncOperation, SyncOperationLogger, Value } from "../types";
 import { getBufferFromValue, getValueFromBuffer } from "./serialisation";
 
@@ -40,30 +40,34 @@ export const timestampFromSync = <T extends Target<any, any>>(
 export const readValueFromTarget = <V extends Value, T extends Target<any, any>>(
     target: T,
     compressed: boolean = true
-): Result<MaybeValue<V>> =>
-    target.read().pmap(
-        async (value) =>
-            value &&
-            ({
-                timestamp: value.timestamp,
-                value: await getValueFromBuffer<V>(value.buffer, compressed),
-            } as MaybeValue<V>)
-    );
+): Result<MaybeValue<V>> => decodeTargetValue(target.read(), compressed);
 
 export const readFromSync = <V extends Value, T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,
     sync: Sync<T>
 ): Result<MaybeValue<V>> =>
-    runWithLogger(logger, sync, "DOWNLOAD", () =>
-        sync.target.read().pmap(
-            async (value) =>
-                value &&
-                ({
-                    timestamp: value.timestamp,
-                    value: await getValueFromBuffer<V>(value.buffer, sync.compressed),
-                } as MaybeValue<V>)
-        )
-    );
+    runWithLogger(logger, sync, "DOWNLOAD", () => decodeTargetValue(sync.target.read(), sync.compressed));
+
+/** A successful target read and a failed decode are distinct from a target that could not be reached. */
+const decodeTargetValue = <V extends Value>(read: ReturnType<Target<any, any>["read"]>, compressed: boolean) =>
+    new Result<MaybeValue<V>>((resolve) => {
+        read.then(async (result) => {
+            if (result.type === "error") return resolve(result);
+            if (result.value === null) return resolve({ type: "value", value: null });
+
+            try {
+                resolve({
+                    type: "value",
+                    value: {
+                        timestamp: result.value.timestamp,
+                        value: await getValueFromBuffer<V>(result.value.buffer, compressed),
+                    },
+                });
+            } catch (thrown) {
+                resolve({ type: "error", error: "CORRUPT_VALUE", detail: getErrorDetail(thrown) });
+            }
+        });
+    });
 
 export const writeToAndUpdateSync = async <V extends Value, T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,

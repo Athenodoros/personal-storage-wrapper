@@ -1,5 +1,11 @@
 export type ResultErrorType =
-    "UNKNOWN" | "OFFLINE" | "INVALID_AUTH" | "EXPIRED_AUTH" | "INVALID_FILE_REFERENCE" | "MISSING_FILE";
+    | "UNKNOWN"
+    | "OFFLINE"
+    | "INVALID_AUTH"
+    | "EXPIRED_AUTH"
+    | "INVALID_FILE_REFERENCE"
+    | "MISSING_FILE"
+    | "CORRUPT_VALUE";
 
 export interface ValueResult<Value> {
     type: "value";
@@ -23,7 +29,7 @@ export interface ErrorResult {
 export const getUnknownError = (thrown: unknown): ErrorResult => ({
     type: "error",
     error: "UNKNOWN",
-    detail: getDetail(thrown),
+    detail: getErrorDetail(thrown),
 });
 
 /**
@@ -31,7 +37,7 @@ export const getUnknownError = (thrown: unknown): ErrorResult => ({
  * with no message at all, so the name it stringifies to is all there is to go on and is still more
  * than nothing.
  */
-const getDetail = (thrown: unknown): string | undefined => {
+export const getErrorDetail = (thrown: unknown): string | undefined => {
     if (thrown === undefined || thrown === null) return undefined;
     if (thrown instanceof Error) return thrown.message || String(thrown) || undefined;
 

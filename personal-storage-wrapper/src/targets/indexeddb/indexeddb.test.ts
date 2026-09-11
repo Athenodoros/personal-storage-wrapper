@@ -3,7 +3,7 @@
  */
 
 import "fake-indexeddb/auto";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { encodeTextToBuffer } from "../../utilities/buffers";
 import { MemoryTarget } from "../memory";
 import { IndexedDBTarget } from "./target";
@@ -115,6 +115,22 @@ test("Returns a target that is offline when the database cannot be opened at all
     } finally {
         window.indexedDB.open = open;
     }
+});
+
+test("Does not describe a failed request on an open database as offline", async () => {
+    const target = await IndexedDBTarget.create("failed-request-id");
+    const request = {} as IDBRequest;
+    const objectStore = { get: vi.fn(() => request), put: vi.fn(() => request) };
+    const transaction = vi.fn(() => ({ objectStore: () => objectStore }));
+    (target as unknown as { db: Pick<IDBDatabase, "transaction"> }).db = { transaction };
+
+    const read = target.read();
+    request.onerror?.(new Event("error"));
+    expect(await read).toEqual({ type: "error", error: "UNKNOWN", detail: undefined });
+
+    const write = target.write(TEST_BUFFER);
+    request.onerror?.(new Event("error"));
+    expect(await write).toEqual({ type: "error", error: "UNKNOWN", detail: undefined });
 });
 
 /**

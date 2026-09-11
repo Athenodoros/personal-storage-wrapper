@@ -95,7 +95,7 @@ test("Reports a target holding something it cannot decode, rather than never ret
     // Read as though it were compressed, so decoding it throws
     const result = await readValueFromTarget(target, true);
     expect(result.type).toBe("error");
-    expect(result.error).toBe("UNKNOWN");
+    expect(result.error).toBe("CORRUPT_VALUE");
 
     // What went wrong is carried rather than swallowed, so a caller can say more than "unknown"
     expect(result.detail).toBeTruthy();

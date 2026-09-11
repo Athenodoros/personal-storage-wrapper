@@ -122,7 +122,7 @@ test("Does not describe a failed request on an open database as offline", async 
     const request = {} as IDBRequest;
     const objectStore = { get: vi.fn(() => request), put: vi.fn(() => request) };
     const transaction = vi.fn(() => ({ objectStore: () => objectStore }));
-    (target as unknown as { db: Pick<IDBDatabase, "transaction"> }).db = { transaction };
+    (target as unknown as { db: IDBDatabase }).db = { transaction } as unknown as IDBDatabase;
 
     const read = target.read();
     request.onerror?.(new Event("error"));

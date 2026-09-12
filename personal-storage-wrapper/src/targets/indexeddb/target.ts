@@ -93,7 +93,8 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
             const file: StoredIDBFile = { id: this.id, buffer, timestamp };
             const request = this.db.transaction(["stores"], "readwrite").objectStore("stores").put(file);
             request.onsuccess = () => resolve({ type: "value", value: timestamp });
-            request.onerror = () => resolve({ type: "error", error: "OFFLINE" });
+            request.onerror = () =>
+                resolve({ type: "error", error: "UNKNOWN", detail: request.error?.message || undefined });
         });
 
     read = (): Result<TargetValue> =>
@@ -108,7 +109,8 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
                     value: result ? { timestamp: result.timestamp, buffer: result.buffer } : null,
                 });
             };
-            request.onerror = () => resolve({ type: "error", error: "OFFLINE" });
+            request.onerror = () =>
+                resolve({ type: "error", error: "UNKNOWN", detail: request.error?.message || undefined });
         });
 
     timestamp = (): Result<Date | null> => this.read().map((value) => value?.timestamp ?? null);

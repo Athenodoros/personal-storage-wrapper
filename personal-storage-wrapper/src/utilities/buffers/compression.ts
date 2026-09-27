@@ -6,15 +6,16 @@ export const compress = (value: string): Promise<ArrayBuffer> =>
 export const decompress = async (value: ArrayBuffer): Promise<string> =>
     ("CompressionStream" in window ? decompressStringWithCompressionStream : decompressStringWithFFlate)(value);
 
-export const compressStringWithCompressionStream = (value: string): Promise<ArrayBuffer> => {
-    const buffer = Uint8Array.from(value, (c) => c.charCodeAt(0));
-    return runArrayBufferThroughStream(buffer, new CompressionStream("gzip"));
-};
+// Encoded as UTF-8, which is what both decompressions decode - one byte per character would lose
+// anything outside ASCII
+export const compressStringWithCompressionStream = (value: string): Promise<ArrayBuffer> =>
+    runArrayBufferThroughStream(new TextEncoder().encode(value), new CompressionStream("gzip"));
 
 export const compressStringWithFFlate = async (value: string): Promise<ArrayBuffer> => {
     const { gzip, strToU8 } = await import("fflate");
     return new Promise((resolve, reject) =>
-        gzip(strToU8(value), (error, data) => (error ? reject(error) : resolve(data.buffer)))
+        // Copied, so that the buffer holds exactly these bytes even if `data` is a view onto a larger one
+        gzip(strToU8(value), (error, data) => (error ? reject(error) : resolve(data.slice().buffer)))
     );
 };
 
@@ -31,7 +32,7 @@ export const decompressStringWithFFlate = async (value: ArrayBuffer): Promise<st
 };
 
 // Largely copied from https://wicg.github.io/compression/#example-deflate-compress
-const runArrayBufferThroughStream = async (buffer: ArrayBuffer, processor: any) => {
+const runArrayBufferThroughStream = async (buffer: ArrayBuffer | Uint8Array, processor: any): Promise<ArrayBuffer> => {
     // Write values to stream
     const writer = (processor.writable as WritableStream).getWriter();
 
@@ -57,10 +58,11 @@ const runArrayBufferThroughStream = async (buffer: ArrayBuffer, processor: any) 
     }
 
     // Concatenate values and return
-    const concatenated = new Uint8Array(totalSize);
+    const concatenated = new ArrayBuffer(totalSize);
+    const view = new Uint8Array(concatenated);
     let offset = 0;
     for (const array of output) {
-        concatenated.set(array, offset);
+        view.set(array, offset);
         offset += array.byteLength;
     }
     return concatenated;

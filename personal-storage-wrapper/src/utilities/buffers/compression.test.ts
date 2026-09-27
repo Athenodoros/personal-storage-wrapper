@@ -6,7 +6,8 @@ import {
     decompressStringWithFFlate,
 } from "./compression";
 
-const TEST_BASE_VALUE = "Hello, Test!";
+// Not just ASCII, since that is the same in every encoding
+const TEST_BASE_VALUE = "Hello, Test! Café €5 🎩";
 
 test("All compression and decompression options are reversible", async () => {
     const fflate = await compressStringWithFFlate(TEST_BASE_VALUE);

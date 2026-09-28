@@ -25,6 +25,13 @@ export interface Sync<T extends Target<any, any> = DefaultTarget> {
 export type StartSource = "TARGET" | "INITIAL" | "FALLBACK";
 
 /**
+ * Where a manager's syncs came from when it was created: the list it saved, the defaults because
+ * nothing was saved, or the defaults because the saved list couldn't be read. That last one means any
+ * targets the list held, and whatever was needed to reach them, have been dropped.
+ */
+export type SyncsSource = "SAVED" | "DEFAULT" | "UNREADABLE";
+
+/**
  * Which syncs a value was saved to. A write is batched with any others queued alongside it, so a sync
  * listed as saved holds this value or a later one. A sync that was not written to - because a write to
  * it failed earlier, or it holds a value that couldn't be read - is listed as failed.

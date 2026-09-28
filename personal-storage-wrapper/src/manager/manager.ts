@@ -17,6 +17,7 @@ import {
     SaveResult,
     StartSource,
     Sync,
+    SyncsSource,
     TimestampedValue,
     Value,
     ValueUpdateOrigin,
@@ -33,6 +34,7 @@ import { getConfigFromSyncs } from "./utilities/serialisation";
 export interface CreatedPSM<V extends Value, T extends Target<any, any> = DefaultTarget> {
     manager: PersonalStorageManager<V, T>;
     startSource: StartSource;
+    syncsSource: SyncsSource;
 }
 
 export class PersonalStorageManager<V extends Value, T extends Target<any, any> = DefaultTarget> {

@@ -26,6 +26,7 @@ export type {
     UnreadableValueSource,
     SaveResult,
     StartSource,
+    SyncsSource,
 } from "./types";
 
 export type { DefaultTarget } from "./utilities/defaults";

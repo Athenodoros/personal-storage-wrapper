@@ -11,6 +11,7 @@ import {
     PSMCreationConfig,
     Sync,
     SyncOperationLogger,
+    SyncsSource,
     Value,
 } from "../types";
 import {
@@ -97,6 +98,28 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
         }
     });
 
+/**
+ * The saved syncs, or the defaults where nothing was saved. A saved list that can't be read - it
+ * isn't JSON, an entry is malformed, or a target won't deserialise - is replaced by the defaults as a
+ * whole, rather than repaired: a partial list could leave out the one target the data is kept in.
+ * Failing instead would fail every time, since nothing would ever replace what was saved.
+ */
+const getStartingSyncs = async <T extends Target<any, any>>(
+    getSyncData: () => string | null,
+    getDefaultSyncs: () => Promise<Sync<T>[]>,
+    deserialisers: Deserialisers<T>
+): Promise<{ syncs: Sync<T>[]; source: SyncsSource }> => {
+    try {
+        const saved = getSyncData();
+        if (saved) return { syncs: await getSyncsFromConfig<T>(saved, deserialisers), source: "SAVED" };
+    } catch (error) {
+        console.error("PersonalStorageManager: the saved syncs could not be read, so the defaults are used", error);
+        return { syncs: await getDefaultSyncs(), source: "UNREADABLE" };
+    }
+
+    return { syncs: await getDefaultSyncs(), source: "DEFAULT" };
+};
+
 const managers = new Set<string>();
 
 /** Lets a closed manager's id be used again, rather than tripping the duplicate check below */
@@ -144,9 +167,10 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
      */
     let getHandleSyncOperationLog = () => getLatestConfig().handleSyncOperationLog ?? noop;
     let start: StartValue<V, T>;
+    let syncsSource: SyncsSource;
     try {
-        const syncsConfig = getSyncData();
-        const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await getDefaultSyncs();
+        const { syncs, source } = await getStartingSyncs(getSyncData, getDefaultSyncs, deserialisers);
+        syncsSource = source;
 
         // Get initial values, including updating logger after PSM creation, and return manager
         start = await getPSMStartValue<V, T>(syncs, defaultInitialValue, getLatestConfig, () =>
@@ -183,5 +207,5 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
         latestConfig.resolveConflictingSyncValuesOnStartup
     );
     getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
-    return { manager, startSource: start.type === "provisional" ? "TARGET" : start.source };
+    return { manager, startSource: start.type === "provisional" ? "TARGET" : start.source, syncsSource };
 }

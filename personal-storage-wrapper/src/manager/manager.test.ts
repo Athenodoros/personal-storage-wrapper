@@ -864,6 +864,43 @@ test("Saves a value set during startup to every sync, alongside the write to an 
     manager.close();
 });
 
+test("Says where its syncs came from", async () => {
+    const sync = await getTestSync({ value: "A" });
+    const saved = await getTestCreation([], { getSyncData: () => getConfigFromSyncs([sync]) });
+    expect(saved.syncsSource).toBe("SAVED");
+    expect(saved.manager.getValue()).toBe("A");
+
+    const defaults = await getTestCreation([sync]);
+    expect(defaults.syncsSource).toBe("DEFAULT");
+
+    [saved, defaults].forEach(({ manager }) => manager.close());
+});
+
+test("Starts from the default syncs when the saved ones can't be read", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(noop);
+    const sync = await getTestSync({ value: "A" });
+
+    // Not JSON, an entry that isn't, and a saved list that can't be fetched at all
+    const unreadable = [
+        () => "not json",
+        () => JSON.stringify([{ type: "memory", config: "not json" }]),
+        () => {
+            throw new Error("Blocked");
+        },
+    ];
+
+    for (const getSyncData of unreadable) {
+        const { manager, syncsSource } = await withTimeout(getTestCreation([sync], { getSyncData }));
+        expect(syncsSource).toBe("UNREADABLE");
+        expect(manager.getSyncsState()).toEqual([sync]);
+        expect(manager.getValue()).toBe("A");
+        manager.close();
+    }
+
+    expect(error).toHaveBeenCalledTimes(unreadable.length);
+    error.mockRestore();
+});
+
 /**
  * Utilities
  */

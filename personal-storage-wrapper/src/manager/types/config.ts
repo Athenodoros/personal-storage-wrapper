@@ -1,4 +1,4 @@
-import { ResultValueType } from "../../targets/result";
+import { ErrorResult, ResultValueType } from "../../targets/result";
 import { Deserialiser, Target } from "../../targets/types";
 import { DefaultTarget } from "../utilities/defaults";
 import { SyncOperationLogger } from "./logs";
@@ -19,7 +19,27 @@ export interface PSMConfig<V extends Value, T extends Target<any, any> = Default
 
     // Conflict Handlers
     resolveConflictingSyncsUpdate: ConflictingRemoteBehaviour<V, T>;
+
+    // Validation
+    /**
+     * Checked against every value read from a target or sent by another context, before the manager
+     * uses it: null if the value can be used, or why it can't. A target whose value fails is treated as
+     * holding a corrupt one - it is marked `unreadable` and never written to - and a value from another
+     * context that fails is dropped. The value is untrusted, so it is typed as unknown.
+     */
+    validate: (value: unknown) => string | null;
+    /**
+     * Called whenever a value is refused, because it could not be decoded or failed `validate`: from a
+     * target, including during startup, or from another context. The error carries what there was of
+     * the value. A refused value from another context usually means that context runs a different
+     * version of the application, which is for the application to decide what to do about.
+     */
+    onUnreadableValue: (error: ErrorResult, source: UnreadableValueSource<T>) => void;
 }
+
+export type UnreadableValueSource<T extends Target<any, any> = DefaultTarget> =
+    | { type: "SYNC"; sync: Sync<T> }
+    | { type: "BROADCAST" };
 
 export interface PSMCreationConfig<V extends Value, T extends Target<any, any> = DefaultTarget>
     extends PSMConfig<V, T> {

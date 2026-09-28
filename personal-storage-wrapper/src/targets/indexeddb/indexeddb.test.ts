@@ -159,3 +159,17 @@ test("Repairs a database left at the current version without its store", async (
     const reopened = await IndexedDBTarget.create("tophat");
     expect((await reopened.read()).value).not.toBe(null);
 });
+
+test("Clears one id's value without touching another's", async () => {
+    const cleared = await IndexedDBTarget.create("to-clear");
+    const kept = await IndexedDBTarget.create("to-keep");
+    await cleared.write(TEST_BUFFER);
+    await kept.write(TEST_BUFFER);
+
+    expect(await IndexedDBTarget.clear("to-clear")).toEqual({ type: "value", value: null });
+
+    expect((await cleared.read()).value).toBeNull();
+    expect((await kept.read()).value?.buffer).toEqual(TEST_BUFFER);
+    cleared.close();
+    kept.close();
+});

@@ -7,13 +7,15 @@ test("Returns and updates cache correctly", async () => {
     const createPSMObject = vi.fn().mockImplementation((_1, _2, _3, _4, _5) => ({ config: _5 }));
 
     const createPSMStubFromCache = async (id: string, handler: () => void) =>
-        createPSMWithCache(createPSMObject, "A", {
-            id,
-            onValueUpdate: handler,
-            getDefaultSyncs: async () => [await getTestSync()],
-            getSyncData: () => null,
-            saveSyncData: noop,
-        });
+        (
+            await createPSMWithCache(createPSMObject, "A", {
+                id,
+                onValueUpdate: handler,
+                getDefaultSyncs: async () => [await getTestSync()],
+                getSyncData: () => null,
+                saveSyncData: noop,
+            })
+        ).manager;
 
     const handler1 = () => null;
     const manager1 = createPSMStubFromCache("cache-1", handler1);

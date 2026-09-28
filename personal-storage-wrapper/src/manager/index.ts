@@ -23,6 +23,9 @@ export type {
     OfflineSyncStartupHandler,
     ConflictingSyncStartupBehaviour,
     ConflictingRemoteBehaviour,
+    UnreadableValueSource,
+    SaveResult,
+    StartSource,
 } from "./types";
 
 export type { DefaultTarget } from "./utilities/defaults";
@@ -42,6 +45,7 @@ export {
 } from "./utilities/defaults";
 
 export { PersonalStorageManager } from "./manager";
+export type { CreatedPSM } from "./manager";
 
 // Reading a target without syncing to it, for deciding whether to sync to it at all
 export { readValueFromTarget } from "./utilities/requests";

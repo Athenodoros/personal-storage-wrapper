@@ -1,5 +1,5 @@
 import { Target } from "../../targets";
-import { Value } from "../types";
+import { SaveResult, Value } from "../types";
 import { AdditionOperationRunner } from "./addition";
 import { PollOperationRunner } from "./poll";
 import { RemovalOperationRunner } from "./removal";
@@ -23,5 +23,5 @@ export type OperationArgument<O extends Operation> = Parameters<
     ? S
     : never;
 export type OperationState = {
-    [Key in Operation]: { argument: OperationArgument<Key>; callback: () => void }[];
+    [Key in Operation]: { argument: OperationArgument<Key>; callback: (result: SaveResult<any>) => void }[];
 } & { running?: Operation | "startup" }; // values rather than boolean for debugging

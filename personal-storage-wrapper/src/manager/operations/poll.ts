@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, deepEqualsList } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
-import { readFromSync, timestampFromSync } from "../utilities/requests";
+import { hasMovedOn, readFromSync, timestampFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 export const PollOperationRunner = async <V extends Value, T extends Target<any, any>>({
@@ -23,21 +23,21 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
                 failures.push(sync);
                 return;
             }
-            // Compared by time rather than by identity: targets build a fresh Date on every call,
-            // and a lastSeenWriteTime restored from storage is a string until it is revived
-            if (
-                timestamp.value !== null &&
-                sync.lastSeenWriteTime !== undefined &&
-                timestamp.value.valueOf() === new Date(sync.lastSeenWriteTime).valueOf()
-            )
-                return;
-
+            // An empty target has nothing in it to lose, whatever it held before
             if (timestamp.value === null) {
+                sync.unreadable = false;
                 writes.push(sync);
                 return;
             }
 
-            const result = await readFromSync<V, T>(logger, sync);
+            // Nothing else has written to it, so it holds the last value written here - unless that
+            // write failed, in which case it is sent again
+            if (!hasMovedOn(sync, timestamp.value)) {
+                if (sync.desynced) writes.push(sync);
+                return;
+            }
+
+            const result = await readFromSync<V, T>(logger, sync, config);
             if (result.type === "error" || deepEquals(result.value?.value, value)) return;
 
             if (result.value === null || recents.some((value) => deepEquals(value, result.value?.value))) {

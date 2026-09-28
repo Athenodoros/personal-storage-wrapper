@@ -1,4 +1,4 @@
-import { Result } from "../result";
+import { getUnknownError, Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
 import { IndexedDBTargetSerialisationConfig, IndexedDBTargetType } from "./types";
 
@@ -77,6 +77,34 @@ export class IndexedDBTarget implements Target<IndexedDBTargetType, IndexedDBTar
 
         return target;
     };
+
+    /**
+     * Deletes what is stored under an id, without a target or a manager: for an application that has
+     * decided to throw away a value it could not use. Only that row goes - the database is shared by
+     * every id, and by every application on the origin.
+     */
+    static clear = (id: string): Result<null> =>
+        new Result(async (resolve) => {
+            const db = await openDatabase();
+            if (db === null) return resolve({ type: "error", error: "OFFLINE" });
+
+            // The executor is async, so anything thrown here would be lost rather than reported
+            try {
+                const tx = db.transaction([TABLE_NAME], "readwrite");
+                tx.objectStore(TABLE_NAME).delete(id);
+                tx.oncomplete = () => {
+                    db.close();
+                    resolve({ type: "value", value: null });
+                };
+                tx.onerror = tx.onabort = () => {
+                    db.close();
+                    resolve({ type: "error", error: "UNKNOWN", detail: tx.error?.message || undefined });
+                };
+            } catch (thrown) {
+                db.close();
+                resolve(getUnknownError(thrown));
+            }
+        });
 
     /** Closes the connection, after which every operation returns OFFLINE */
     close = () => {

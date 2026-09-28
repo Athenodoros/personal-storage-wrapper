@@ -12,6 +12,7 @@ test("Pulls updated value from remote", async () => {
 
     const output = await PollOperationRunner(
         getTestOperationConfig({
+            args: [null],
             value: "VALUE1",
             syncs: [syncA, syncB],
         })
@@ -27,6 +28,7 @@ test("Handles failed remotes", async () => {
 
     const output = await PollOperationRunner(
         getTestOperationConfig({
+            args: [null],
             value: "VALUE1",
             syncs: [syncA, syncB],
         })
@@ -44,6 +46,7 @@ test("Handles conflicting remotes and writes selectively", async () => {
 
     const output = await PollOperationRunner(
         getTestOperationConfig({
+            args: [null],
             value: "VALUE1",
             syncs: [syncA, syncB, syncC],
             config: { resolveConflictingSyncsUpdate: async () => "VALUEA" },
@@ -62,6 +65,7 @@ test("Handles conflicting remotes and writes everywhere", async () => {
 
     const output = await PollOperationRunner(
         getTestOperationConfig({
+            args: [null],
             value: "VALUE1",
             syncs: [syncA, syncB, syncC],
             config: { resolveConflictingSyncsUpdate: async () => "VALUEC" },
@@ -85,7 +89,7 @@ test("Recognises an unchanged remote whose timestamp is a new object each time",
     sync.target.timestamp = () => Result.value<Date | null>(new Date(written.valueOf()));
     const download = vi.spyOn(sync.target, "read");
 
-    const output = await PollOperationRunner(getTestOperationConfig({ value: "VALUE1", syncs: [sync] }));
+    const output = await PollOperationRunner(getTestOperationConfig({ args: [null], value: "VALUE1", syncs: [sync] }));
 
     expect(download).not.toHaveBeenCalled();
     expect(output).toEqual({ writes: [], update: undefined });
@@ -96,7 +100,7 @@ test("Still reads a remote whose timestamp has moved on", async () => {
     sync.lastSeenWriteTime = new Date(500);
     sync.target.write(encodeToArrayBuffer(JSON.stringify("VALUE2")));
 
-    const output = await PollOperationRunner(getTestOperationConfig({ value: "VALUE1", syncs: [sync] }));
+    const output = await PollOperationRunner(getTestOperationConfig({ args: [null], value: "VALUE1", syncs: [sync] }));
 
     expect(output).toEqual({ update: { value: "VALUE2", origin: "REMOTE" }, writes: [] });
 });

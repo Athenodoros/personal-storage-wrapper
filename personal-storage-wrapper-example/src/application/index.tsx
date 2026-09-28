@@ -23,7 +23,7 @@ export function App() {
             ...trackSyncState(setSyncs),
             onValueUpdate: setToDos,
             getDefaultSyncs: () => DEFAULT_SYNC_STATE,
-        }).then((manager) => {
+        }).then(({ manager }) => {
             (window as any).manager = manager;
             setManager(manager);
         });

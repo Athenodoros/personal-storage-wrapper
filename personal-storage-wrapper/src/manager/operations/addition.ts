@@ -22,7 +22,7 @@ export const AdditionOperationRunner = async <V extends Value, T extends Target<
     const conflicts: Parameters<ConflictingRemoteBehaviour<V, T>>[2] = [];
     await Promise.all(
         additions.map((sync) =>
-            readFromSync<V, T>(logger, sync).then(async (result) => {
+            readFromSync<V, T>(logger, sync, config).then(async (result) => {
                 if (result.type === "error") {
                     sync.desynced = true;
                 } else if (result.value === null) {

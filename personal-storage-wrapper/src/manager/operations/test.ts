@@ -4,11 +4,12 @@ import { DefaultTarget } from "../utilities/defaults";
 import { OperationRunConfig } from "./types";
 
 export const getTestOperationConfig = <S = null, V extends Value = any>(
-    config: Partial<Omit<OperationRunConfig<V, DefaultTarget, S>, "config">> & {
+    // `args` has no default: what a request looks like differs by operation, and none is sensible for all
+    config: Partial<Omit<OperationRunConfig<V, DefaultTarget, S>, "config" | "args">> & {
+        args: S[];
         config?: Partial<OperationRunConfig<V, DefaultTarget, S>["config"]>;
     }
 ): OperationRunConfig<V, DefaultTarget, S> => ({
-    args: [],
     logger: () => noop,
     value: "DEFAULT" as unknown as V,
     recents: [],
@@ -21,6 +22,8 @@ export const getTestOperationConfig = <S = null, V extends Value = any>(
         saveSyncData: noop,
         onSyncStatesUpdate: noop,
         resolveConflictingSyncsUpdate: async (value) => value,
+        validate: () => null,
+        onUnreadableValue: noop,
         ...(config.config ?? {}),
     },
 });

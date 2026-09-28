@@ -2,7 +2,7 @@ import { Target } from "../../targets";
 import { ResultValueType } from "../../targets/result";
 import { noop } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
-import { PersonalStorageManager } from "../manager";
+import type { CreatedPSM, PersonalStorageManager } from "../manager";
 import {
     ConflictingSyncStartupBehaviour,
     Deserialisers,
@@ -21,9 +21,17 @@ import {
     resolveUpdateConflictsWithRemoteStateAndLatestEdit,
     saveSyncDataToLocalStorage,
 } from "../utilities/defaults";
-import { readFromSync } from "../utilities/requests";
+import { getValidationProblem, readFromSync, ReadChecks } from "../utilities/requests";
 import { getSyncsFromConfig } from "../utilities/serialisation";
 import { StartValue } from "./types";
+
+/** Reads start with this, so that a failure to read or validate a target is reported as it happens */
+const getStartupReadChecks = <V extends Value, T extends Target<any, any>>(
+    getLatestConfig: () => Partial<PSMCreationConfig<V, T>>
+): ReadChecks<T> => ({
+    validate: (value) => getValidationProblem(value, getLatestConfig().validate),
+    onUnreadableValue: (error, source) => getLatestConfig().onUnreadableValue?.(error, source),
+});
 
 // Only exported for testing
 export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
@@ -32,48 +40,60 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
     getLatestConfig: () => Partial<PSMCreationConfig<V, T>>,
     logger: () => SyncOperationLogger<Sync<T>>
 ) =>
-    new Promise<StartValue<V, T>>(async (resolve) => {
-        // Pull values from all syncs
-        const values = syncs.map((sync) => ({ sync, value: readFromSync<V, T>(logger, sync) }));
+    new Promise<StartValue<V, T>>(async (resolve, reject) => {
+        /**
+         * The handler and the initial value are application code, and either can throw. The executor
+         * is async, so without this the error would be lost inside it and `create` would never settle.
+         * Once a value has resolved the promise, a rejection does nothing.
+         */
+        try {
+            const checks = getStartupReadChecks(getLatestConfig);
 
-        let resolved = false;
+            // Pull values from all syncs
+            const values = syncs.map((sync) => ({ sync, value: readFromSync<V, T>(logger, sync, checks) }));
 
-        // Ideally return from first returned value
-        values.forEach(async ({ value }) => {
-            const result = await value;
-            if (result.type === "value" && result.value !== null && !resolved) {
-                resolved = true;
-                resolve({
-                    type: "provisional",
-                    value: result.value.value,
-                    values,
-                });
+            let resolved = false;
+
+            // Ideally return from first returned value
+            values.forEach(async ({ value }) => {
+                const result = await value;
+                if (result.type === "value" && result.value !== null && !resolved) {
+                    resolved = true;
+                    resolve({
+                        type: "provisional",
+                        value: result.value.value,
+                        timestamp: result.value.timestamp,
+                        values,
+                    });
+                }
+            });
+
+            // Otherwise, fallback to error handlers or defaults
+            const results = await Promise.all(
+                values.map(({ sync, value: result }) => result.then((value) => ({ sync, value })))
+            );
+
+            if (results.some(({ value }) => value.type === "error") && results.every(({ value }) => !value.value)) {
+                const behaviour = await (
+                    getLatestConfig().handleAllEmptyAndFailedSyncsOnStartup ?? resetToDefaultsOnOfflineTargets
+                )(results as { sync: Sync<T>; value: ResultValueType<V> }[]);
+                if (behaviour.behaviour === "VALUE" && !resolved) {
+                    resolved = true;
+                    resolve({ type: "final", value: behaviour.value, results, source: "FALLBACK" });
+                    return;
+                }
             }
-        });
 
-        // Otherwise, fallback to error handlers or defaults
-        const results = await Promise.all(
-            values.map(({ sync, value: result }) => result.then((value) => ({ sync, value })))
-        );
-
-        if (results.some(({ value }) => value.type === "error") && results.every(({ value }) => !value.value)) {
-            const behaviour = await (
-                getLatestConfig().handleAllEmptyAndFailedSyncsOnStartup ?? resetToDefaultsOnOfflineTargets
-            )(results as { sync: Sync<T>; value: ResultValueType<V> }[]);
-            if (behaviour.behaviour === "VALUE" && !resolved) {
+            if (results.every(({ value }) => !value.value) && !resolved) {
                 resolved = true;
-                resolve({ type: "final", value: behaviour.value, results });
-                return;
+                const value =
+                    typeof defaultInitialValue !== "function"
+                        ? defaultInitialValue
+                        : await Promise.resolve(defaultInitialValue());
+                resolve({ type: "final", value, results, source: "INITIAL" });
             }
-        }
-
-        if (results.every(({ value }) => !value.value) && !resolved) {
-            resolved = true;
-            const value =
-                typeof defaultInitialValue !== "function"
-                    ? defaultInitialValue
-                    : await Promise.resolve(defaultInitialValue());
-            resolve({ type: "final", value, results });
+        } catch (error) {
+            reject(error);
         }
     });
 
@@ -95,7 +115,7 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
     initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
     getLatestConfig: () => Partial<PSMCreationConfig<V, T>> = () => ({}),
     maybeDeserialisers?: Deserialisers<T>
-): Promise<PersonalStorageManager<V, T>> {
+): Promise<CreatedPSM<V, T>> {
     /**
      * Parse defaults
      */
@@ -106,7 +126,7 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
         getDefaultSyncs = (maybeDeserialisers ? () => Promise.resolve([]) : getDefaultSyncStates) as () => Promise<
             Sync<T>[]
         >,
-        getSyncData = getSyncDataFromLocalStorage,
+        getSyncData = () => getSyncDataFromLocalStorage(id),
     } = initialisationConfig;
 
     /**
@@ -119,26 +139,35 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
     managers.add(id);
 
     /**
-     * Get initialisation values
+     * Get initialisation values. A manager that fails to start never existed, so its id is freed for
+     * the retry that the application may well make.
      */
-    const syncsConfig = getSyncData();
-    const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await getDefaultSyncs();
-
-    // Get initial values, including updating logger after PSM creation, and return manager
     let getHandleSyncOperationLog = () => getLatestConfig().handleSyncOperationLog ?? noop;
-    const start = await getPSMStartValue<V, T>(syncs, defaultInitialValue, getLatestConfig, () =>
-        getHandleSyncOperationLog()
-    );
+    let start: StartValue<V, T>;
+    try {
+        const syncsConfig = getSyncData();
+        const syncs = syncsConfig ? await getSyncsFromConfig<T>(syncsConfig, deserialisers) : await getDefaultSyncs();
+
+        // Get initial values, including updating logger after PSM creation, and return manager
+        start = await getPSMStartValue<V, T>(syncs, defaultInitialValue, getLatestConfig, () =>
+            getHandleSyncOperationLog()
+        );
+    } catch (error) {
+        deregisterPSM(id);
+        throw error;
+    }
 
     const latestConfig = getLatestConfig();
     const config: PSMConfig<V, T> = {
         pollPeriodInSeconds: latestConfig.pollPeriodInSeconds === undefined ? 10 : latestConfig.pollPeriodInSeconds,
         onValueUpdate: latestConfig.onValueUpdate ?? noop,
-        saveSyncData: latestConfig.saveSyncData ?? saveSyncDataToLocalStorage,
+        saveSyncData: latestConfig.saveSyncData ?? ((data) => saveSyncDataToLocalStorage(data, id)),
         onSyncStatesUpdate: latestConfig.onSyncStatesUpdate ?? noop,
         resolveConflictingSyncsUpdate:
             latestConfig.resolveConflictingSyncsUpdate ?? resolveUpdateConflictsWithRemoteStateAndLatestEdit,
         handleSyncOperationLog: getHandleSyncOperationLog(),
+        validate: latestConfig.validate ?? (() => null),
+        onUnreadableValue: latestConfig.onUnreadableValue ?? noop,
     };
     const buffer = new ListBuffer<V>([], {
         maxLength: latestConfig.valueCacheCount,
@@ -154,5 +183,5 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
         latestConfig.resolveConflictingSyncValuesOnStartup
     );
     getHandleSyncOperationLog = () => manager.config.handleSyncOperationLog;
-    return manager;
+    return { manager, startSource: start.type === "provisional" ? "TARGET" : start.source };
 }

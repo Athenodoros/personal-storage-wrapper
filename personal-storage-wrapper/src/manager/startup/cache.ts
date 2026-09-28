@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, identity, orderByAsc } from "../../utilities/data";
 import { ListBuffer } from "../../utilities/listbuffer";
-import { PersonalStorageManager } from "../manager";
+import type { CreatedPSM, PersonalStorageManager } from "../manager";
 import {
     ConflictingSyncStartupBehaviour,
     Deserialisers,
@@ -17,7 +17,7 @@ import { StartValue } from "./types";
 const anyCache: Record<
     string,
     {
-        manager: Promise<PersonalStorageManager<any>>;
+        manager: Promise<CreatedPSM<any>>;
         types: string[];
         config: Partial<PSMCreationConfig<any, any>>;
     }
@@ -35,11 +35,11 @@ export function createPSMWithCache<V extends Value, T extends Target<any, any>>(
     defaultInitialValue: InitialValue<V>,
     config: Partial<PSMCreationConfig<V, T>> = {},
     maybeDeserialisers?: Deserialisers<T>
-): Promise<PersonalStorageManager<V, T>> {
+): Promise<CreatedPSM<V, T>> {
     const typedCache = anyCache as any as Record<
         string,
         {
-            manager: Promise<PersonalStorageManager<V, T>>;
+            manager: Promise<CreatedPSM<V, T>>;
             types: string[];
             config: Partial<PSMCreationConfig<V, T>>;
         }
@@ -56,7 +56,8 @@ export function createPSMWithCache<V extends Value, T extends Target<any, any>>(
         typedCache[id].config = config;
 
         // This is kept in case the manager has already been created when createPSMWithCache is called
-        typedCache[id].manager = value.manager.then((manager) => {
+        typedCache[id].manager = value.manager.then((created) => {
+            const { manager } = created;
             if (config.pollPeriodInSeconds !== undefined)
                 manager.config.pollPeriodInSeconds = config.pollPeriodInSeconds;
             if (config.onValueUpdate !== undefined) manager.config.onValueUpdate = config.onValueUpdate;
@@ -66,21 +67,25 @@ export function createPSMWithCache<V extends Value, T extends Target<any, any>>(
             if (config.onSyncStatesUpdate !== undefined) manager.config.onSyncStatesUpdate = config.onSyncStatesUpdate;
             if (config.resolveConflictingSyncsUpdate !== undefined)
                 manager.config.resolveConflictingSyncsUpdate = config.resolveConflictingSyncsUpdate;
+            if (config.validate !== undefined) manager.config.validate = config.validate;
+            if (config.onUnreadableValue !== undefined) manager.config.onUnreadableValue = config.onUnreadableValue;
 
-            return manager;
+            return created;
         });
     } else {
-        typedCache[id] = {
-            types,
-            manager: createPSM<V, T>(
-                createPSMObject,
-                defaultInitialValue,
-                config,
-                () => typedCache[id].config,
-                maybeDeserialisers
-            ),
+        const manager = createPSM<V, T>(
+            createPSMObject,
+            defaultInitialValue,
             config,
-        };
+            () => typedCache[id].config,
+            maybeDeserialisers
+        );
+        typedCache[id] = { types, manager, config };
+
+        // A creation that failed is forgotten, so that the next call tries again rather than failing too
+        manager.catch(() => {
+            if (typedCache[id]?.manager === manager) delete typedCache[id];
+        });
     }
 
     return typedCache[id].manager;

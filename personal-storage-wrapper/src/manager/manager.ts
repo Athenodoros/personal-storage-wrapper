@@ -1,6 +1,6 @@
 import { DefaultTarget, resolveStartupConflictsWithRemoteStateAndLatestEdit } from "../main";
 import { Target } from "../targets";
-import { deepEquals, fromKeys, uniqEquals } from "../utilities/data";
+import { deepEquals, fromKeys, noop, uniqEquals } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { Operation, OperationArgument, OperationRunners, OperationState } from "./operations";
 import { OperationRunOutput } from "./operations/types";
@@ -14,14 +14,26 @@ import {
     InitialValue,
     PSMConfig,
     PSMCreationConfig,
+    SaveResult,
+    StartSource,
     Sync,
     TimestampedValue,
     Value,
     ValueUpdateOrigin,
 } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
-import { writeToAndUpdateSync } from "./utilities/requests";
+import { clearSyncDataFromLocalStorage } from "./utilities/defaults";
+import { getValidationProblem, reportUnreadableValue, writeToAndUpdateSync } from "./utilities/requests";
 import { getConfigFromSyncs } from "./utilities/serialisation";
+
+/**
+ * A new manager, and where the value it was created with came from - which matters once, to the code
+ * that created it, and so is returned with it rather than kept on the manager
+ */
+export interface CreatedPSM<V extends Value, T extends Target<any, any> = DefaultTarget> {
+    manager: PersonalStorageManager<V, T>;
+    startSource: StartSource;
+}
 
 export class PersonalStorageManager<V extends Value, T extends Target<any, any> = DefaultTarget> {
     // The manager keeps a copy of the value to diff new values against, so that it doesn't repeatedly notify on the existing value
@@ -38,24 +50,31 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
     private pollTimeout: ReturnType<typeof setTimeout> | undefined;
 
     /**
+     * Removes the list of syncs a manager with this id keeps in localStorage by default, so that the
+     * next manager created with it starts from its default syncs. It does nothing to the targets, and
+     * nothing for a manager given its own `getSyncData` and `saveSyncData`.
+     */
+    static clearSyncData = (id?: string) => clearSyncDataFromLocalStorage(id);
+
+    /**
      * Manager Initialisation
      */
     static createWithCache<V extends Value>(
         defaultInitialValue: InitialValue<V>,
         config?: Partial<PSMCreationConfig<V, DefaultTarget>>
-    ): Promise<PersonalStorageManager<V, DefaultTarget>>;
+    ): Promise<CreatedPSM<V, DefaultTarget>>;
 
     static createWithCache<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         config: Partial<PSMCreationConfig<V, T>>,
         deserialisers: Deserialisers<T>
-    ): Promise<PersonalStorageManager<V, T>>;
+    ): Promise<CreatedPSM<V, T>>;
 
     static createWithCache<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
         maybeDeserialisers?: Deserialisers<T>
-    ): Promise<PersonalStorageManager<V, T>> {
+    ): Promise<CreatedPSM<V, T>> {
         return createPSMWithCache(
             (id, start, deserialisers, recents, config, resolveConflictingSyncValuesOnStartup) =>
                 new PersonalStorageManager(
@@ -75,19 +94,19 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
     static create<V extends Value>(
         defaultInitialValue: InitialValue<V>,
         config?: Partial<PSMCreationConfig<V, DefaultTarget>>
-    ): Promise<PersonalStorageManager<V, DefaultTarget>>;
+    ): Promise<CreatedPSM<V, DefaultTarget>>;
 
     static create<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         config: Partial<PSMCreationConfig<V, T>>,
         deserialisers: Deserialisers<T>
-    ): Promise<PersonalStorageManager<V, T>>;
+    ): Promise<CreatedPSM<V, T>>;
 
     static create<V extends Value, T extends Target<any, any>>(
         defaultInitialValue: InitialValue<V>,
         initialisationConfig: Partial<PSMCreationConfig<V, T>> = {},
         maybeDeserialisers?: Deserialisers<T>
-    ): Promise<PersonalStorageManager<V, T>> {
+    ): Promise<CreatedPSM<V, T>> {
         return createPSM(
             (id, start, deserialisers, recents, config, resolveConflictingSyncValuesOnStartup) =>
                 new PersonalStorageManager(
@@ -120,6 +139,14 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             recents,
             deserialisers,
             (value: TimestampedValue<V>) => {
+                // Another context may run a different version of the application, and send a value
+                // this one can't use: it is refused, and the application told
+                const problem = getValidationProblem(value.value, this.config.validate);
+                if (problem !== null) {
+                    const error = { type: "error", error: "CORRUPT_VALUE", detail: problem, decoded: value.value } as const;
+                    return reportUnreadableValue(this.config.onUnreadableValue, error, { type: "BROADCAST" });
+                }
+
                 if (
                     value.timestamp > this.value.timestamp ||
                     (value.timestamp.valueOf() === this.value.timestamp.valueOf() &&
@@ -130,7 +157,14 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             (syncs: Sync<T>[]) => this.enqueueOperation("update", syncs)
         );
         this.config = config;
-        this.value = { value: start.value, timestamp: new Date() };
+
+        /**
+         * Stamped with when it was saved, not when it was read. Another context's newer value is only
+         * taken if it is stamped later than this one, and a value that was being saved while this one
+         * was read would otherwise lose to it and be dropped. A value that no target held is older than
+         * anything that has been saved.
+         */
+        this.value = { value: start.value, timestamp: start.type === "provisional" ? start.timestamp : new Date(0) };
         this.config.onValueUpdate(start.value, "CREATION");
 
         if (start.type === "final") {
@@ -184,21 +218,22 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
     private getSyncsCopy = (): Sync<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
     public getSyncsState = this.getSyncsCopy;
     public addTarget = (target: T, compressed: boolean = true): Promise<void> =>
-        this.enqueueOperation("addition", { target, compressed });
-    public addSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("addition", sync);
-    public removeSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("removal", sync);
-    public poll = (): Promise<void> => this.enqueueOperation("poll", null);
+        this.enqueueOperation("addition", { target, compressed }).then(ignoreResult);
+    public addSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("addition", sync).then(ignoreResult);
+    public removeSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("removal", sync).then(ignoreResult);
+    public poll = (): Promise<void> => this.enqueueOperation("poll", null).then(ignoreResult);
 
     /**
      * Value Interactions
      */
 
     public getValue = (): V => this.value.value;
-    public setValue = (value: V): Promise<void> => {
-        if (this.closed) return Promise.resolve();
+    /** Resolves once the value, or a later one, has been written, with which syncs saved it */
+    public setValue = (value: V): Promise<SaveResult<T>> => {
+        if (this.closed) return Promise.resolve({ saved: [], failed: this.getSyncsCopy() });
 
         this.setNewValue(value, "LOCAL");
-        return this.enqueueOperation("write", null);
+        return this.enqueueOperation("write", "ALL");
     };
 
     /**
@@ -255,8 +290,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
      */
 
     private enqueueOperation = <O extends Operation>(operation: O, argument: OperationArgument<O>) =>
-        new Promise<void>((callback) => {
-            if (this.closed) return callback();
+        new Promise<SaveResult<T>>((callback) => {
+            if (this.closed) return callback({ saved: [], failed: this.getSyncsCopy() });
 
             this.operations[operation].push({ argument, callback } as any);
             this.resolveQueuedOperations();
@@ -274,6 +309,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         this.operations.running = operation;
         const operations = this.operations[operation];
         this.operations[operation] = [];
+        const saved: Sync<T>[] = [];
 
         /**
          * Whatever happens in here, the queue has to be handed back. An operation runner that
@@ -304,17 +340,27 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             if (output.writes && output.writes.length)
                 await Promise.all(
                     uniqEquals(output.writes, (s1, s2) => s1.target.equals(s2.target)).map(async (sync) => {
-                        if (this.syncs.includes(sync)) await writeToAndUpdateSync(this.logger, sync, this.value.value);
+                        if (this.syncs.includes(sync) && (await writeToAndUpdateSync(this.logger, sync, this.value.value)))
+                            saved.push(sync);
                     })
                 );
 
             // Callback if dirty syncs
             if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
+
+            // Runs once this operation hands back the queue, in the finally below
+            if (output.poll && !this.operations.poll.length) this.operations.poll.push({ argument: null, callback: noop });
         } catch (error) {
             console.error("PersonalStorageManager: the " + operation + " operation failed", error);
         } finally {
             // Resolve promises
-            operations.forEach(({ callback }) => callback());
+            // In the order the syncs are held, rather than the order the writes happened to finish in,
+            // and copied, like `getSyncsState`, so that the caller can't change the manager's own
+            const result = {
+                saved: this.syncs.filter((sync) => saved.includes(sync)).map((sync) => ({ ...sync })),
+                failed: this.syncs.filter((sync) => !saved.includes(sync)).map((sync) => ({ ...sync })),
+            };
+            operations.forEach(({ callback }) => callback(result));
 
             // Rerun new operations
             this.operations.running = undefined;
@@ -322,3 +368,5 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         }
     };
 }
+
+const ignoreResult = () => undefined;

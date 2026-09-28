@@ -18,6 +18,8 @@ export interface OperationRunOutput<V extends Value, T extends Target<any, any>>
     writes?: Sync<T>[];
     syncs?: Sync<T>[];
     skipChannel?: boolean;
+    /** A sync needs reconciling before it can be written to, so a poll is queued after this operation */
+    poll?: boolean;
 }
 
 export type OperationRunner<S> = <V extends Value = Value, T extends Target<any, any> = Target<any, any>>(

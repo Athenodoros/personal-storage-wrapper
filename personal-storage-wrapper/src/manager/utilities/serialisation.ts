@@ -35,7 +35,8 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
             // clears that. Remembering it would mean one failed write stopped a store saving for
             // good, across reloads, with polling off - so a new session starts out as though it had
             // never failed, and startup reconciles the targets anyway.
-            const { desynced: _hadFailedWrite, ...sync } = JSON.parse(config);
+            // `unreadable` is never saved, but an older version of this library may have saved it.
+            const { desynced: _hadFailedWrite, unreadable: _heldUnreadableValue, ...sync } = JSON.parse(config);
             return {
                 ...sync,
                 // JSON has no dates, so this comes back as the string it was written as
@@ -62,7 +63,8 @@ export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: Sync<T>[])
     const config: SyncSerialisedConfig<T>[] = syncs.map((sync) => {
         return {
             type: sync.target.type,
-            config: JSON.stringify({ ...sync, target: sync.target.serialise() }),
+            // Whether a target's value can be read is found again on each startup, rather than remembered
+            config: JSON.stringify({ ...sync, unreadable: undefined, target: sync.target.serialise() }),
         };
     });
     return JSON.stringify(config);

@@ -22,8 +22,40 @@ export const DefaultDeserialisers: Deserialisers<DefaultTarget> = {
  * Sync state storage
  */
 const LOCAL_STORAGE_KEY = "personal-storage-manager-state";
-export const getSyncDataFromLocalStorage = () => localStorage.getItem(LOCAL_STORAGE_KEY);
-export const saveSyncDataToLocalStorage = (data: string) => localStorage.setItem(LOCAL_STORAGE_KEY, data);
+const DEFAULT_IDS = [undefined, "psm-default-id", "psm-default-cache-id"];
+
+/**
+ * Each manager keeps its syncs under a key of its own, so that two on one origin do not share a list of
+ * targets. A manager without an id of its own keeps the key that every manager used to share.
+ */
+const getSyncDataKey = (id?: string) =>
+    DEFAULT_IDS.includes(id) ? LOCAL_STORAGE_KEY : LOCAL_STORAGE_KEY + "-" + id;
+
+/**
+ * A browser can refuse localStorage altogether, and throw on any use of it. The syncs then come from the
+ * defaults on every load, and nothing is remembered - which is no worse than a first load.
+ */
+export const getSyncDataFromLocalStorage = (id?: string) => {
+    try {
+        return localStorage.getItem(getSyncDataKey(id));
+    } catch {
+        return null;
+    }
+};
+export const saveSyncDataToLocalStorage = (data: string, id?: string) => {
+    try {
+        localStorage.setItem(getSyncDataKey(id), data);
+    } catch {
+        // See above
+    }
+};
+export const clearSyncDataFromLocalStorage = (id?: string) => {
+    try {
+        localStorage.removeItem(getSyncDataKey(id));
+    } catch {
+        // See above
+    }
+};
 
 export const getDefaultSyncStates = async (): Promise<[Sync<IndexedDBTarget>]> => {
     const target = await IndexedDBTarget.create();

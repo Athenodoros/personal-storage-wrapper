@@ -214,16 +214,40 @@ test("Successfully polls on schedule and writes to remotes", async () => {
     expect(await value(syncB)).toEqual("UPDATE");
 });
 
-test("Successfully writes only to synced syncs", async () => {
+test("Writes again to a desynced sync that nothing else has written to", async () => {
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB]);
     syncB.desynced = true;
 
-    await manager.setValue("B");
+    const result = await manager.setValue("B");
 
-    expect(await value(syncA)).toEqual("B");
-    expect(await value(syncB)).toEqual("A");
+    expect(result.saved).toEqual([syncA, syncB]);
+    expect(await value(syncB)).toEqual("B");
+    expect(manager.getSyncsState()[1].desynced).toBe(false);
+});
+
+test("Reconciles a desynced sync that has moved on before writing to it", async () => {
+    const resolveConflictingSyncsUpdate = vi.fn(async (local: string) => local);
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
+
+    // Its write failed, and since then something else has written to it
+    syncB.desynced = true;
+    await delay(1);
+    await writeToAndUpdateSync(() => noop, { ...syncB }, "OTHER");
+
+    const result = await manager.setValue("B");
+    expect(result.saved).toEqual([syncA]);
+    expect(result.failed).toEqual([syncB]);
+
+    // A poll is run for it straight away, even with polling off, and the conflict handler decides
+    await delay(DELAY);
+    expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith("B", expect.anything(), [
+        { sync: syncB, value: expect.objectContaining({ value: "OTHER" }) },
+    ]);
+    expect(await value(syncB)).toEqual("B");
 });
 
 test("Updates callbacks in real time on cached creation", async () => {
@@ -560,6 +584,287 @@ test("Hands the operation queue back when an operation fails", async () => {
 });
 
 /**
+ * Values that can't be used, start values and save results
+ */
+
+/** A sync whose target holds bytes that don't decode to anything */
+const getCorruptSync = (): Sync<MemoryTarget> => ({
+    target: new MemoryTarget({
+        value: { timestamp: new Date(), buffer: new Uint8Array([1, 2, 3]).buffer },
+        preserveValueOnSave: true,
+    }),
+    compressed: true,
+});
+
+const rawBuffer = async (sync: Sync<MemoryTarget>) => (await sync.target.read()).value?.buffer;
+
+test("Takes a value another context saved while this one was reading", async () => {
+    // Saved a second ago, and read just now
+    const id = "saved-while-reading";
+    const sync = await getTestSync({ value: "A", timestamp: new Date().valueOf() - 1000 });
+    const manager = await getTestManager([sync], { id });
+
+    // The other context's save landed after that one, but before this manager was created
+    const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
+    channel.sendNewValue({ value: "B", timestamp: new Date(new Date().valueOf() - 500) });
+    await delay(DELAY);
+
+    expect(manager.getValue()).toBe("B");
+    channel.close();
+    manager.close();
+});
+
+test("Rejects creation when the initial value can't be made, and lets the id be used again", async () => {
+    const config = { getDefaultSyncs: async () => [await getTestSync()], getSyncData: () => null, id: "failed-start" };
+
+    await expect(
+        withTimeout(
+            PersonalStorageManager.create<string>(() => {
+                throw new Error("No initial value");
+            }, config)
+        )
+    ).rejects.toThrow("No initial value");
+
+    const { manager } = await withTimeout(PersonalStorageManager.create("AFTER", config));
+    expect(manager.getValue()).toBe("AFTER");
+    manager.close();
+});
+
+test("Rejects creation when the handler for failed targets throws", async () => {
+    await expect(
+        withTimeout(
+            getTestManager([await getTestSync({ fails: true })], {
+                handleAllEmptyAndFailedSyncsOnStartup: async () => {
+                    throw new Error("Handler failed");
+                },
+            })
+        )
+    ).rejects.toThrow("Handler failed");
+});
+
+test("Tries a cached creation again after one fails", async () => {
+    const config = { getDefaultSyncs: async () => [await getTestSync()], getSyncData: () => null, id: "failed-cache" };
+
+    await expect(
+        withTimeout(
+            PersonalStorageManager.createWithCache<string>(async () => {
+                throw new Error("No initial value");
+            }, config)
+        )
+    ).rejects.toThrow();
+
+    const { manager } = await withTimeout(PersonalStorageManager.createWithCache("AFTER", config));
+    expect(manager.getValue()).toBe("AFTER");
+    manager.close();
+});
+
+test("Never writes over a value that won't decode, and says so", async () => {
+    const onUnreadableValue = vi.fn();
+    const corrupt = getCorruptSync();
+    const before = await rawBuffer(corrupt);
+    const working = await getTestSync({ value: "A" });
+
+    const manager = await getTestManager([corrupt, working], { onUnreadableValue });
+    await delay(DELAY);
+
+    expect(manager.getValue()).toBe("A");
+    expect(onUnreadableValue).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "CORRUPT_VALUE", buffer: before }),
+        { type: "SYNC", sync: corrupt }
+    );
+    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+
+    const result = await manager.setValue("B");
+    expect(result.saved).toEqual([working]);
+    expect(result.failed).toEqual([corrupt]);
+    expect(await rawBuffer(corrupt)).toBe(before);
+    expect(await value(working)).toBe("B");
+
+    manager.close();
+});
+
+test("Treats a value that fails validation like one that won't decode", async () => {
+    const onUnreadableValue = vi.fn();
+    const handleAllEmptyAndFailedSyncsOnStartup = vi.fn(async () => ({ behaviour: "DEFAULT" as const }));
+    const newer = await getTestSync({ value: "FROM A NEWER VERSION" });
+    const before = await rawBuffer(newer);
+
+    const manager = await getTestManager([newer], {
+        validate: (value) => (value === "FROM A NEWER VERSION" ? "Too new" : null),
+        onUnreadableValue,
+        handleAllEmptyAndFailedSyncsOnStartup,
+    });
+
+    // Nothing usable was found, so the manager starts on its initial value without writing it anywhere
+    expect(manager.getValue()).toBe(DEFAULT_VALUE);
+    expect(handleAllEmptyAndFailedSyncsOnStartup).toHaveBeenCalledWith([
+        { sync: newer, value: expect.objectContaining({ error: "CORRUPT_VALUE", detail: "Too new" }) },
+    ]);
+    expect(onUnreadableValue).toHaveBeenCalledWith(
+        expect.objectContaining({ detail: "Too new", decoded: "FROM A NEWER VERSION", buffer: before }),
+        { type: "SYNC", sync: newer }
+    );
+
+    await manager.setValue("B");
+    expect(await rawBuffer(newer)).toBe(before);
+
+    manager.close();
+});
+
+test("Refuses a value from another context that fails validation", async () => {
+    const id = "invalid-broadcast";
+    const onUnreadableValue = vi.fn();
+    const onValueUpdate = vi.fn();
+    const manager = await getTestManager([], {
+        id,
+        validate: (value) => (value === "INVALID" ? "Not allowed" : null),
+        onUnreadableValue,
+        onValueUpdate,
+    });
+
+    const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
+    channel.sendNewValue({ value: "INVALID", timestamp: new Date() });
+    await delay(DELAY);
+
+    expect(manager.getValue()).toBe(DEFAULT_VALUE);
+    expect(onValueUpdate).not.toHaveBeenCalledWith("INVALID", expect.anything());
+    expect(onUnreadableValue).toHaveBeenCalledWith(
+        expect.objectContaining({ error: "CORRUPT_VALUE", detail: "Not allowed", decoded: "INVALID" }),
+        { type: "BROADCAST" }
+    );
+
+    channel.close();
+    manager.close();
+});
+
+test("Never saves whether a target was unreadable", async () => {
+    const manager = await getTestManager([getCorruptSync()]);
+
+    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+    expect(getConfigFromSyncs(manager.getSyncsState())).not.toContain("unreadable");
+    manager.close();
+});
+
+test("Writes to a target again once a poll finds it empty", async () => {
+    const corrupt = getCorruptSync();
+    const manager = await getTestManager([corrupt]);
+    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+
+    corrupt.target.value = null;
+    await manager.poll();
+
+    expect(manager.getSyncsState()[0].unreadable).toBe(false);
+    expect(await value(corrupt)).toBe(DEFAULT_VALUE);
+    manager.close();
+});
+
+test("Says where its starting value came from", async () => {
+    const fromTarget = await getTestCreation([await getTestSync({ value: "A" })]);
+    expect(fromTarget.startSource).toBe("TARGET");
+
+    const fromInitial = await getTestCreation([await getTestSync()]);
+    expect(fromInitial.startSource).toBe("INITIAL");
+
+    const fromFallback = await getTestCreation([await getTestSync({ fails: true })], {
+        handleAllEmptyAndFailedSyncsOnStartup: async () => ({ behaviour: "VALUE", value: "FALLBACK" }),
+    });
+    expect(fromFallback.startSource).toBe("FALLBACK");
+    expect(fromFallback.manager.getValue()).toBe("FALLBACK");
+
+    [fromTarget, fromInitial, fromFallback].forEach(({ manager }) => manager.close());
+});
+
+test("Says which syncs a value was saved to", async () => {
+    const working = await getTestSync({ value: "A" });
+    const failing = await getTestSync({ value: "A" });
+    const manager = await getTestManager([working, failing]);
+    await delay(DELAY);
+
+    failing.target.fails = true;
+    const result = await manager.setValue("B");
+
+    expect(result.saved).toEqual([working]);
+    expect(result.failed).toEqual([failing]);
+    manager.close();
+});
+
+test("Hands out copies of its syncs with a save result", async () => {
+    const manager = await getTestManager([await getTestSync({ value: "A" })]);
+    await delay(DELAY);
+
+    const result = await manager.setValue("B");
+    result.saved[0].desynced = true;
+
+    expect(manager.getSyncsState()[0].desynced).toBe(false);
+    manager.close();
+});
+
+test("Starts, and keeps taking values, when onUnreadableValue throws", async () => {
+    const id = "throwing-unreadable-handler";
+    const onUnreadableValue = vi.fn(() => {
+        throw new Error("Application bug");
+    });
+    const error = vi.spyOn(console, "error").mockImplementation(noop);
+
+    const manager = await withTimeout(
+        getTestManager([getCorruptSync()], {
+            id,
+            onUnreadableValue,
+            validate: (value) => (value === "INVALID" ? "Not allowed" : null),
+        })
+    );
+    expect(onUnreadableValue).toHaveBeenCalledOnce();
+
+    const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
+    channel.sendNewValue({ value: "INVALID", timestamp: new Date() });
+    await delay(DELAY);
+    expect(onUnreadableValue).toHaveBeenCalledTimes(2);
+
+    channel.sendNewValue({ value: "VALID", timestamp: new Date() });
+    await delay(DELAY);
+    expect(manager.getValue()).toBe("VALID");
+    await withTimeout(manager.poll());
+
+    channel.close();
+    manager.close();
+    error.mockRestore();
+});
+
+test("Reports an unreadable value once, until something writes over it", async () => {
+    const onUnreadableValue = vi.fn();
+    const corrupt = getCorruptSync();
+    const manager = await getTestManager([corrupt, await getTestSync({ value: "A" })], { onUnreadableValue });
+    await delay(DELAY);
+    expect(onUnreadableValue).toHaveBeenCalledOnce();
+
+    await manager.poll();
+    await manager.poll();
+    expect(onUnreadableValue).toHaveBeenCalledOnce();
+
+    // Something else writes another value it can't use
+    corrupt.target.value = { timestamp: new Date(Date.now() + 1000), buffer: new Uint8Array([4, 5, 6]).buffer };
+    await manager.poll();
+    expect(onUnreadableValue).toHaveBeenCalledTimes(2);
+    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+
+    manager.close();
+});
+
+test("Saves a value set during startup to every sync, alongside the write to an empty one", async () => {
+    const full = await getTestSync({ value: "A" });
+    const empty = await getTestSync({ delay: DELAY });
+    const manager = await getTestManager([full, empty]);
+
+    // Set while startup still waits on the empty sync, which it then queues a write to
+    const result = await manager.setValue("B");
+
+    expect(result.saved).toEqual([full, empty]);
+    expect(await value(full)).toBe("B");
+    expect(await value(empty)).toBe("B");
+    manager.close();
+});
+
+/**
  * Utilities
  */
 
@@ -572,7 +877,7 @@ const withTimeout = <T>(promise: Promise<T>) =>
     ]);
 
 let id = 0;
-const getTestManager = async (
+const getTestCreation = async (
     syncs: Sync<DefaultTarget>[],
     config?: Partial<PSMCreationConfig<string, DefaultTarget>>,
     cache?: boolean
@@ -585,5 +890,8 @@ const getTestManager = async (
         pollPeriodInSeconds: null,
         ...config,
     });
+
+const getTestManager = async (...args: Parameters<typeof getTestCreation>) =>
+    (await getTestCreation(...args)).manager;
 
 const value = async (sync: Sync<MemoryTarget>) => (await readFromSync(() => noop, sync)).value?.value;

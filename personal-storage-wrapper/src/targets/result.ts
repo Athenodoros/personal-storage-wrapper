@@ -23,6 +23,12 @@ export interface ErrorResult {
      * tell the user what happened.
      */
     detail?: string;
+    /** For `CORRUPT_VALUE`: the bytes the target held, so that the application can still offer them to the user */
+    buffer?: ArrayBuffer;
+    /** For `CORRUPT_VALUE` from a value that decoded but failed validation: what it decoded to */
+    decoded?: unknown;
+    /** For `CORRUPT_VALUE` from a target: when the value it holds was written */
+    timestamp?: Date;
 }
 
 /** An `UNKNOWN` result that still carries what was thrown */

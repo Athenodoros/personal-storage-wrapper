@@ -1,6 +1,6 @@
 import { Result } from "../result";
 import { constructURLWithQueryParams, getFromPopup, loadFromSessionStorage, saveToSessionStorage } from "../utils";
-import { runDropboxQueryForJSON } from "./requests";
+import { getDropboxErrorDetail, runDropboxQueryForJSON } from "./requests";
 import { DropboxConnection, DropboxUserDetails } from "./types";
 
 // The dropbox API uses an alternate base64 encoding to stop URL encoding issues
@@ -50,19 +50,49 @@ const getAuthRedirectDetails = async (clientId: string, redirectURI: string) => 
     };
 };
 
-const getAccessTokenForAuthCode = (client_id: string, redirect_uri: string, code_verifier: string, code: string) =>
-    fetch(
-        constructURLWithQueryParams("https://api.dropboxapi.com/oauth2/token", {
-            grant_type: "authorization_code",
-            client_id,
-            redirect_uri,
-            code_verifier,
-            code,
-        }),
-        { method: "POST" }
-    ).then(
-        (response) => response.json() as Promise<{ expires_in: number; refresh_token: string; access_token: string }>
-    );
+/**
+ * Exchanges an authorisation code for a connection. Dropbox answers a code it won't take - expired,
+ * used already, or for another redirect URI - with an error rather than tokens, and that is reported
+ * with Dropbox's own description of it, rather than as a connection whose tokens are `undefined`.
+ */
+const getConnectionForAuthCode = (
+    clientId: string,
+    redirectURI: string,
+    verifier: string,
+    code: string,
+): Result<DropboxConnection> =>
+    new Result(async (resolve) => {
+        const expiry = new Date();
+        const response = await fetch(
+            constructURLWithQueryParams("https://api.dropboxapi.com/oauth2/token", {
+                grant_type: "authorization_code",
+                client_id: clientId,
+                redirect_uri: redirectURI,
+                code_verifier: verifier,
+                code,
+            }),
+            { method: "POST" },
+        );
+        const access = await response.json().catch(() => ({}));
+
+        if (
+            typeof access?.access_token !== "string" ||
+            typeof access?.refresh_token !== "string" ||
+            typeof access?.expires_in !== "number"
+        )
+            return resolve({
+                type: "error",
+                error: access?.error === "invalid_grant" ? "INVALID_AUTH" : "UNKNOWN",
+                detail:
+                    getDropboxErrorDetail(access ?? {}) ?? `Dropbox did not sign in the account (${response.status})`,
+            });
+
+        expiry.setSeconds(expiry.getSeconds() + access.expires_in);
+        resolve({
+            type: "value",
+            value: { clientId, refreshToken: access.refresh_token, accessToken: access.access_token, expiry },
+        });
+    });
 
 export const redirectForAuth = async (clientId: string, redirectURI?: string): Promise<void> => {
     const definiteRedirectURI = redirectURI || window.location.href.split("?")[0];
@@ -75,53 +105,40 @@ export const redirectForAuth = async (clientId: string, redirectURI?: string): P
     window.location.href = url;
 };
 
-export const catchRedirectForAuth = async (): Promise<DropboxConnection | null> => {
-    const session = loadFromSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY);
-    if (session === null) return null;
+/** A connection from the redirect back from Dropbox, or null if this page load isn't one */
+export const catchRedirectForAuth = (): Result<DropboxConnection | null> =>
+    new Result(async (resolve) => {
+        const session = loadFromSessionStorage<SessionStorageStruct>(SESSION_STORAGE_KEY);
+        if (session === null) return resolve({ type: "value", value: null });
 
-    const { verifier, redirectURI, clientId } = session;
-    if (window.location.href.split("?")[0] !== redirectURI) return null;
+        const { verifier, redirectURI, clientId } = session;
+        if (window.location.href.split("?")[0] !== redirectURI) return resolve({ type: "value", value: null });
 
-    const code = new URLSearchParams(window.location.search).get("code");
-    if (!code) return null;
+        const code = new URLSearchParams(window.location.search).get("code");
+        if (!code) return resolve({ type: "value", value: null });
 
-    const expiry = new Date();
-    const access = await getAccessTokenForAuthCode(
-        clientId,
-        redirectURI ?? window.location.href.split("?")[0],
-        verifier,
-        code
-    );
-    expiry.setSeconds(expiry.getSeconds() + access.expires_in);
-
-    if (!access.refresh_token || !access.access_token) return null;
-    return { clientId, refreshToken: access.refresh_token, accessToken: access.access_token, expiry };
-};
-
-export const runAuthInPopup = async (clientId: string, redirectURI?: string): Promise<DropboxConnection | null> => {
-    const definiteRedirectURI = redirectURI || window.location.href.split("?")[0];
-
-    // Open separate window for auth
-    const { url, verifier } = await getAuthRedirectDetails(clientId, definiteRedirectURI);
-    const code = await getFromPopup({ url, height: 800, width: 680 }, (context) => {
-        if (context.location.href.split("?")[0] !== definiteRedirectURI) return null;
-        return new URLSearchParams(context.location.search).get("code");
+        resolve(await getConnectionForAuthCode(clientId, redirectURI, verifier, code));
     });
-    if (!code) return null;
 
-    // Get access token
-    const expiry = new Date();
-    const access = await getAccessTokenForAuthCode(clientId, definiteRedirectURI, verifier, code);
-    expiry.setSeconds(expiry.getSeconds() + access.expires_in);
+/**
+ * A connection from signing in in a popup, or null if the user didn't: the popup was blocked or
+ * closed, or came back without a code because the user turned the app down. Anything that goes wrong
+ * once Dropbox has given a code is an error, so that it can be told apart from the user changing their mind.
+ */
+export const runAuthInPopup = (clientId: string, redirectURI?: string): Result<DropboxConnection | null> =>
+    new Result(async (resolve) => {
+        const definiteRedirectURI = redirectURI || window.location.href.split("?")[0];
 
-    // Return final result
-    return {
-        clientId,
-        refreshToken: access.refresh_token,
-        accessToken: access.access_token,
-        expiry,
-    };
-};
+        // Open separate window for auth
+        const { url, verifier } = await getAuthRedirectDetails(clientId, definiteRedirectURI);
+        const code = await getFromPopup({ url, height: 800, width: 680 }, (context) => {
+            if (context.location.href.split("?")[0] !== definiteRedirectURI) return null;
+            return new URLSearchParams(context.location.search).get("code");
+        });
+        if (!code) return resolve({ type: "value", value: null });
+
+        resolve(await getConnectionForAuthCode(clientId, definiteRedirectURI, verifier, code));
+    });
 
 interface DropboxUserMetadata {
     account_id: string;

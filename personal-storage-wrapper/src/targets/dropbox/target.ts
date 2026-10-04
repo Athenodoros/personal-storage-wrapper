@@ -22,24 +22,28 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     static redirectForAuth = (clientId: string, redirectURI?: string): Promise<void> =>
         redirectForAuth(clientId, redirectURI);
 
-    private static createFromMaybeConnection = async (connection: Promise<DropboxConnection | null>, path: string) => {
-        const result = await connection;
-        if (result === null) return null;
+    /**
+     * A target for a connection, once Dropbox has said whose account it is. Null, with no connection,
+     * means the user didn't sign in; anything that went wrong once they had is an error.
+     */
+    private static createFromMaybeConnection = (
+        connection: Result<DropboxConnection | null>,
+        path: string,
+    ): Result<DropboxTarget | null> =>
+        connection.flatmap((result) =>
+            result === null
+                ? Result.value<DropboxTarget | null>(null)
+                : getUserMetadata(result).map<DropboxTarget | null>((user) => new DropboxTarget(result, user, path)),
+        );
 
-        const user = await getUserMetadata(result);
-        if (user.type === "error") return null;
-
-        return new DropboxTarget(result, user.value, path);
-    };
-
-    static catchRedirectForAuth = async (path: string = "/data.bak"): Promise<DropboxTarget | null> =>
+    static catchRedirectForAuth = (path: string = "/data.bak"): Result<DropboxTarget | null> =>
         this.createFromMaybeConnection(catchRedirectForAuth(), path);
 
-    static setupInPopup = async (
+    static setupInPopup = (
         clientId: string,
         redirectURI?: string,
         path: string = "/data.bak",
-    ): Promise<DropboxTarget | null> => this.createFromMaybeConnection(runAuthInPopup(clientId, redirectURI), path);
+    ): Result<DropboxTarget | null> => this.createFromMaybeConnection(runAuthInPopup(clientId, redirectURI), path);
 
     // Data handlers
     write = (buffer: ArrayBuffer): Result<Date> =>

@@ -145,6 +145,20 @@ test("Turns a synchronous throw into an error rather than a rejection, and says 
     expect(result).toEqual({ type: "error", error: "UNKNOWN", detail: "Something the browser refused to do" });
 });
 
+/**
+ * An async executor's throw rejects the promise the executor returns, not the Result, so it used to
+ * be lost: a `fetch` that failed while a Dropbox token was refreshed left every request behind it,
+ * and the manager's whole operation queue, waiting for good.
+ */
+test("Turns a throw in an async executor into an error rather than never returning", async () => {
+    const result = new Result(async () => {
+        await Promise.resolve();
+        throw new TypeError("Failed to fetch");
+    });
+
+    expect(await withTimeout(result)).toEqual({ type: "error", error: "UNKNOWN", detail: "Failed to fetch" });
+});
+
 test("Turns a rejecting map callback into an error rather than never returning", async () => {
     const mapped = Result.value(7).map(() => {
         throw new Error("Not the file that was expected");

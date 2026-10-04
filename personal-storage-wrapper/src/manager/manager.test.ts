@@ -284,27 +284,29 @@ test("Successfully polls on schedule and writes to remotes", async () => {
     expect(await value(syncB)).toEqual("UPDATE");
 });
 
-test("Writes again to a desynced sync that nothing else has written to", async () => {
+test("Writes again to a sync that missed a write, if nothing else has written to it", async () => {
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB]);
-    syncB.desynced = true;
+    await delay(1); // Startup finds the manager's value in it, and records it as in step
+    syncB.missedWrite = true;
 
     const result = await manager.setValue("B");
 
     expect(result.saved).toEqual([syncA, syncB]);
     expect(await value(syncB)).toEqual("B");
-    expect(manager.getSyncsState()[1].desynced).toBe(false);
+    expect(manager.getSyncsState()[1].missedWrite).toBe(false);
 });
 
-test("Reconciles a desynced sync that has moved on before writing to it", async () => {
+test("Reconciles a sync that missed a write and has moved on before writing to it", async () => {
     const resolveConflictingSyncsUpdate = vi.fn(async (local: string) => local);
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
+    await delay(1); // Startup finds the manager's value in it, and records it as in step
 
     // Its write failed, and since then something else has written to it
-    syncB.desynced = true;
+    syncB.missedWrite = true;
     await delay(1);
     await writeToAndUpdateSync(() => noop, { ...syncB }, "OTHER");
 
@@ -402,16 +404,16 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     (syncB.target as MemoryTarget).fails = true;
 
     await manager.setValue("C");
-    expect(syncA.desynced).toBe(true);
-    expect(syncB.desynced).toBe(true);
+    expect(syncA.missedWrite).toBe(true);
+    expect(syncB.missedWrite).toBe(true);
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
     (syncB.target as MemoryTarget).fails = false;
     await manager.poll();
 
-    expect(syncA.desynced).toBe(false);
-    expect(syncB.desynced).toBe(false);
+    expect(syncA.missedWrite).toBe(false);
+    expect(syncB.missedWrite).toBe(false);
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
         Parameters<ConflictingRemoteBehaviour<string, DefaultTarget>>
@@ -440,13 +442,13 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     (syncA.target as MemoryTarget).fails = true;
 
     await manager.setValue("B");
-    expect(syncA.desynced).toBe(true);
+    expect(syncA.missedWrite).toBe(true);
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
     await manager.poll();
 
-    expect(syncA.desynced).toBe(false);
+    expect(syncA.missedWrite).toBe(false);
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     expect(manager.getValue()).toBe("B");
     expect(await value(syncA)).toEqual("B");
@@ -863,9 +865,9 @@ test("Hands out copies of its syncs with a save result", async () => {
     await delay(DELAY);
 
     const result = await manager.setValue("B");
-    result.saved[0].desynced = true;
+    result.saved[0].missedWrite = true;
 
-    expect(manager.getSyncsState()[0].desynced).toBe(false);
+    expect(manager.getSyncsState()[0].missedWrite).toBe(false);
     manager.close();
 });
 
@@ -1002,3 +1004,38 @@ const getTestManager = async (...args: Parameters<typeof getTestCreation>) =>
     (await getTestCreation(...args)).manager;
 
 const value = async (sync: Sync<MemoryTarget>) => (await readFromSync(() => noop, sync)).value?.value;
+
+test("Says on a later startup which target missed a write", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "A" });
+    const first = await getTestManager([syncA, syncB]);
+    await delay(1);
+
+    // Saved while one target could be reached and the other couldn't
+    (syncB.target as MemoryTarget).fails = true;
+    await first.setValue("B");
+    (syncB.target as MemoryTarget).fails = false;
+    const saved = getConfigFromSyncs(first.getSyncsState());
+    first.close();
+
+    // Copied as the handler sees them, since startup goes on to write to the syncs it is given
+    let seen: [string, boolean][] = [];
+    const resolveConflictingSyncValuesOnStartup = async (
+        original: string,
+        _: () => string,
+        syncs: { sync: Sync; value: { value: string } }[]
+    ) => {
+        seen = syncs.map(({ sync, value }) => [value.value, sync.missedWrite ?? false]);
+        return original;
+    };
+    const second = await getTestManager([], { getSyncData: () => saved, resolveConflictingSyncValuesOnStartup });
+    await delay(DELAY);
+
+    expect(seen).toEqual([
+        ["B", false],
+        ["A", true],
+    ]);
+
+    // Once it has the value, it no longer says so
+    expect(second.getSyncsState().map(({ missedWrite }) => missedWrite)).toEqual([false, false]);
+});

@@ -9,7 +9,7 @@ import {
     TimestampedValue,
     Value,
 } from "../types";
-import { writeToAndUpdateSync } from "../utilities/requests";
+import { markInStep, writeToAndUpdateSync } from "../utilities/requests";
 
 interface StartupResult<V extends Value, T extends Target<any, any>> {
     sync: Sync<T>;
@@ -47,7 +47,7 @@ export const writeInitialSyncValues = <V extends Value, T extends Target<any, an
             if (result.type === "value" && !deepEquals(result.value?.value, value)) {
                 await writeToAndUpdateSync(logger, sync, value);
             } else if (result.type === "value" && result.value) {
-                sync.lastSeenWriteTime = result.value.timestamp;
+                markInStep(sync, result.value.timestamp);
             }
         })
     );

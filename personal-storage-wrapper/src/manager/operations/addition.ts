@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, uniqEquals } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
-import { readFromSync } from "../utilities/requests";
+import { markInStep, readFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 export const AdditionOperationRunner = async <V extends Value, T extends Target<any, any>>({
@@ -24,13 +24,14 @@ export const AdditionOperationRunner = async <V extends Value, T extends Target<
         additions.map((sync) =>
             readFromSync<V, T>(logger, sync, config).then(async (result) => {
                 if (result.type === "error") {
-                    sync.desynced = true;
+                    sync.missedWrite = true;
                 } else if (result.value === null) {
                     writes.push(sync);
                 } else if (!deepEquals(result.value.value, value)) {
                     conflicts.push({ sync, value: result.value });
+                } else {
+                    markInStep(sync, result.value.timestamp);
                 }
-                // else - sync already has correct value
             })
         )
     );
@@ -43,9 +44,8 @@ export const AdditionOperationRunner = async <V extends Value, T extends Target<
         }
 
         conflicts.forEach((conflict) => {
-            if (!deepEquals(conflict.value.value, newValue)) {
-                writes.push(conflict.sync);
-            }
+            if (!deepEquals(conflict.value.value, newValue)) writes.push(conflict.sync);
+            else markInStep(conflict.sync, conflict.value.timestamp);
         });
     }
 

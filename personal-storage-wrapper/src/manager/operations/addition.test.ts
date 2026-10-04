@@ -102,5 +102,5 @@ test("Handles failed network with remote sync", async () => {
     const output = await AdditionOperationRunner(getTestOperationConfig({ syncs: [syncA], args: [syncB] }));
 
     expect(output).toEqual({ syncs: [syncA, syncB], update: undefined, writes: [] });
-    expect(syncB.desynced).toBe(true);
+    expect(syncB.missedWrite).toBe(true);
 });

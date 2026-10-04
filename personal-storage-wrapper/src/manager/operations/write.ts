@@ -11,12 +11,12 @@ import { OperationRunConfig, OperationRunOutput } from "./types";
 export type WriteRequest<T extends Target<any, any>> = "ALL" | Sync<T>[];
 
 /**
- * A desynced sync missed a write, so something else - another context, or another device - may have
- * written to it since. It is checked before being written again, whatever kind of target it is: one
- * that nobody else has written to takes the value straight away, and one that has moved on is left
- * for a poll to reconcile, which is asked for here rather than left to the poll timer, since polling
- * may be off. Targets holding a value that couldn't be read are never written to, which
- * `writeToAndUpdateSync` enforces for every kind of write.
+ * A sync that missed a write - in this session or an earlier one - may have been written to by
+ * something else since: another context, or another device. It is checked before being written again,
+ * whatever kind of target it is: one that nobody else has written to takes the value straight away,
+ * and one that has moved on is left for a poll to reconcile, which is asked for here rather than left
+ * to the poll timer, since polling may be off. Targets holding a value that couldn't be read are never
+ * written to, which `writeToAndUpdateSync` enforces for every kind of write, so they aren't checked.
  */
 export const WriteOperationRunner = async <V extends Value, T extends Target<any, any>>({
     args,
@@ -26,11 +26,12 @@ export const WriteOperationRunner = async <V extends Value, T extends Target<any
     // Writes queued together are run as one, so it covers every sync any of them asked for: a new value
     // goes to all of them, and must not be narrowed to the few that another request named
     const targets = syncs.filter((sync) => args.some((arg) => arg === "ALL" || arg.includes(sync)));
-    if (!targets.some((sync) => sync.desynced)) return { writes: targets };
+    const needsCheck = (sync: Sync<T>) => sync.missedWrite === true && !sync.unreadable;
+    if (!targets.some(needsCheck)) return { writes: targets };
 
     const decisions = await Promise.all(
         targets.map(async (sync): Promise<"WRITE" | "POLL" | "SKIP"> => {
-            if (sync.desynced !== true) return "WRITE";
+            if (!needsCheck(sync)) return "WRITE";
 
             const timestamp = await timestampFromSync(logger, sync);
             if (timestamp.type === "error") return "SKIP";

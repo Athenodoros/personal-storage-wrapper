@@ -30,23 +30,18 @@ test("Can create a PSM correctly", async () => {
  */
 
 test("Handles conflicting results correctly on startup", async () => {
-    const start = new Date().valueOf();
-
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
 
     const id = "conflicting-results-update-handler-check";
+    const resolveConflictingSyncValuesOnStartup = vi.fn(async () => "D");
     getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup: async () => "C", id }, true);
-    const manager = await getTestManager(
-        [syncA, syncB],
-        { resolveConflictingSyncValuesOnStartup: async () => "D", id },
-        true
-    );
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup, id }, true);
 
-    expect(new Date().valueOf() - start).toBeLessThan(DELAY * 0.5);
+    // Created from the first value read, without waiting for the slower sync, so nothing is resolved yet
+    expect(resolveConflictingSyncValuesOnStartup).not.toHaveBeenCalled();
     expect(manager.getValue()).toBe("A");
-    await delay(DELAY * 3.5);
-    expect(manager.getValue()).toBe("D");
+    await until(() => manager.getValue() === "D");
 
     expect(await value(syncA)).toBe("D");
 });
@@ -279,9 +274,8 @@ test("Successfully polls on schedule and writes to remotes", async () => {
     await writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE");
     expect(manager.getValue()).toEqual("A");
 
-    await delay(DELAY * 1.5);
+    await until(async () => (await value(syncB)) === "UPDATE");
     expect(manager.getValue()).toEqual("UPDATE");
-    expect(await value(syncB)).toEqual("UPDATE");
 });
 
 test("Writes again to a sync that missed a write, if nothing else has written to it", async () => {
@@ -906,7 +900,7 @@ test("Reports an unreadable value once, until something writes over it", async (
     const onUnreadableValue = vi.fn();
     const corrupt = getCorruptSync();
     const manager = await getTestManager([corrupt, await getTestSync({ value: "A" })], { onUnreadableValue });
-    await delay(DELAY);
+    await until(() => onUnreadableValue.mock.calls.length > 0);
     expect(onUnreadableValue).toHaveBeenCalledOnce();
 
     await manager.poll();
@@ -976,6 +970,18 @@ test("Starts from the default syncs when the saved ones can't be read", async ()
 /**
  * Utilities
  */
+
+/**
+ * Waits until the check passes. For what depends on how busy the machine is rather than on the code -
+ * a poll timer, or decoding - where a fixed wait long enough for a loaded machine would slow every run.
+ */
+const until = async (check: () => boolean | Promise<boolean>) => {
+    const end = Date.now() + DELAY * 25;
+    while (!(await check())) {
+        if (Date.now() > end) throw new Error("The condition was never met");
+        await delay(1);
+    }
+};
 
 const withTimeout = <T>(promise: Promise<T>) =>
     Promise.race([

@@ -37,8 +37,9 @@ export function App() {
                 memory={() => manager?.addTarget(new MemoryTarget({ delay: 1000 }))}
                 indexeddb={async () => manager?.addTarget(await IndexedDBTarget.create())}
                 dropbox={async () => {
-                    const target = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
-                    if (target) manager?.addTarget(target);
+                    const created = await DropboxTarget.setupInPopup(DROPBOX_CLIENT_ID, DROPBOX_REDIRECT_URI);
+                    if (created.type === "error") console.error("Dropbox sign-in failed", created);
+                    else if (created.value) manager?.addTarget(created.value);
                 }}
                 gdrive={async () => {
                     const target = await GDriveTarget.setupInPopup(GDRIVE_CLIENT_ID, GDRIVE_REDIRECT_URI);

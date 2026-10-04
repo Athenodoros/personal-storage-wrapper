@@ -52,7 +52,11 @@ export const HandleRedirectRejection = getHandleRedirectRejection(
 export const HandleEmptyRedirectCatch: TestConfig<DropboxTarget> = {
     name: "Handle Empty Redirect Catch",
     disabled: () => window.location.href.startsWith(POPUP_URL),
-    runner: runTargetCreation(() => orNull(DropboxTarget.catchRedirectForAuth("/data.bak")), "Catching redirect...", false),
+    runner: runTargetCreation(
+        () => orNull(DropboxTarget.catchRedirectForAuth("/data.bak")),
+        "Catching redirect...",
+        false
+    ),
 };
 
 export const HandlePopupBlockerDelay = getHandlePopupBlockerDelay("dropbox", () =>

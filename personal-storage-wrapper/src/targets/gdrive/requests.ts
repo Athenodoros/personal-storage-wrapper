@@ -4,7 +4,7 @@ import { GDriveConnection } from "./types";
 export const runGDriveQuery = (
     connection: GDriveConnection,
     input: RequestInfo | URL,
-    init?: RequestInit | undefined,
+    init?: RequestInit | undefined
 ): Promise<Response> =>
     fetch(input, { ...init, headers: { ...init?.headers, authorization: "Bearer " + connection.accessToken } });
 
@@ -12,7 +12,7 @@ export const runGDriveJSONQuery = <T = unknown>(
     onRefreshNeeded: () => void,
     connection: GDriveConnection,
     input: RequestInfo | URL,
-    init?: RequestInit,
+    init?: RequestInit
 ): Result<T> =>
     new Result<T>(async (resolve) => {
         if (!window.navigator.onLine) return resolve({ type: "error", error: "OFFLINE" });

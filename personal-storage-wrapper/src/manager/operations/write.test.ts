@@ -47,8 +47,12 @@ test("Writes to every sync that any of a batch of writes asked for", async () =>
     const syncs = [full, empty, other];
 
     // A new value goes everywhere, even when it is batched with a write to one empty sync, either way round
-    expect(await WriteOperationRunner(getTestOperationConfig({ syncs, args: ["ALL", [empty]] }))).toEqual({ writes: syncs });
-    expect(await WriteOperationRunner(getTestOperationConfig({ syncs, args: [[empty], "ALL"] }))).toEqual({ writes: syncs });
+    expect(await WriteOperationRunner(getTestOperationConfig({ syncs, args: ["ALL", [empty]] }))).toEqual({
+        writes: syncs,
+    });
+    expect(await WriteOperationRunner(getTestOperationConfig({ syncs, args: [[empty], "ALL"] }))).toEqual({
+        writes: syncs,
+    });
 
     // Writes that each name syncs cover all of them, and nothing else
     expect(await WriteOperationRunner(getTestOperationConfig({ syncs, args: [[empty], [full]] }))).toEqual({

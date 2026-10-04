@@ -28,8 +28,7 @@ const DEFAULT_IDS = [undefined, "psm-default-id", "psm-default-cache-id"];
  * Each manager keeps its syncs under a key of its own, so that two on one origin do not share a list of
  * targets. A manager without an id of its own keeps the key that every manager used to share.
  */
-const getSyncDataKey = (id?: string) =>
-    DEFAULT_IDS.includes(id) ? LOCAL_STORAGE_KEY : LOCAL_STORAGE_KEY + "-" + id;
+const getSyncDataKey = (id?: string) => (DEFAULT_IDS.includes(id) ? LOCAL_STORAGE_KEY : LOCAL_STORAGE_KEY + "-" + id);
 
 /**
  * A browser can refuse localStorage altogether, and throw on any use of it. The syncs then come from the

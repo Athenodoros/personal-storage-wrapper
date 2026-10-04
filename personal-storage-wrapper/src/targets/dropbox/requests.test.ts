@@ -106,8 +106,11 @@ test("Reports a refresh token that Dropbox has revoked, with what Dropbox said, 
         async () =>
             ({
                 status: 400,
-                json: async () => ({ error: "invalid_grant", error_description: "refresh token is invalid or revoked" }),
-            }) as Response,
+                json: async () => ({
+                    error: "invalid_grant",
+                    error_description: "refresh token is invalid or revoked",
+                }),
+            } as Response)
     );
 
     const result = await runDropboxQuery(getConnection(), "https://api.dropboxapi.com/2/files/get_metadata");
@@ -125,7 +128,9 @@ test("Reports a refresh that fails on the way, rather than never returning", asy
         throw new TypeError("Failed to fetch");
     });
 
-    const result = await withTimeout(runDropboxQuery(getConnection(), "https://api.dropboxapi.com/2/files/get_metadata"));
+    const result = await withTimeout(
+        runDropboxQuery(getConnection(), "https://api.dropboxapi.com/2/files/get_metadata")
+    );
 
     expect(result).toEqual({ type: "error", error: "UNKNOWN", detail: "Failed to fetch" });
 });
@@ -133,7 +138,10 @@ test("Reports a refresh that fails on the way, rather than never returning", asy
 test("Reports a refresh that comes back without a token, and doesn't send `undefined` as one", async () => {
     const calls = stubRefresh(
         async () =>
-            ({ status: 503, json: async () => Promise.reject(new SyntaxError("Unexpected token <")) }) as unknown as Response,
+            ({
+                status: 503,
+                json: async () => Promise.reject(new SyntaxError("Unexpected token <")),
+            } as unknown as Response)
     );
     const connection = getConnection();
 

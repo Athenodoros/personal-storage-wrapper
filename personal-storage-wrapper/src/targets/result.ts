@@ -66,10 +66,7 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
     static thrown = <Value>(thrown: unknown) => new Result<Value>((resolve) => resolve(getUnknownError(thrown)));
 
     constructor(
-        executor: (
-            resolve: (result: ResultValueType<Value>) => void,
-            reject: (thrown?: unknown) => void,
-        ) => unknown,
+        executor: (resolve: (result: ResultValueType<Value>) => void, reject: (thrown?: unknown) => void) => unknown
     ) {
         super((resolve) => {
             const fail = (thrown?: unknown) => resolve(getUnknownError(thrown));
@@ -129,7 +126,7 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
             this.then((result) => {
                 if (result.type === "error" && result.error === error) resolve({ type: "value", value: fallback });
                 else resolve(result);
-            }),
+            })
         );
 }
 
@@ -176,14 +173,13 @@ function any<T>(results: Result<T>[]): Result<T> {
     });
 }
 
-type FlatResult<T> =
-    T extends Promise<infer V>
-        ? FlatResult<V>
-        : T extends object
-          ? { [K in keyof T]: T[K] extends Result<infer V> ? FlatResult<V> : FlatResult<T[K]> }
-          : T extends (infer U)[]
-            ? FlatResult<U extends Result<infer V> ? V : U>[]
-            : T;
+type FlatResult<T> = T extends Promise<infer V>
+    ? FlatResult<V>
+    : T extends object
+    ? { [K in keyof T]: T[K] extends Result<infer V> ? FlatResult<V> : FlatResult<T[K]> }
+    : T extends (infer U)[]
+    ? FlatResult<U extends Result<infer V> ? V : U>[]
+    : T;
 function flatten<T>(t: T) {
     return new Result<FlatResult<T>>((resolve) => {
         // If it's a Result, flatten the value

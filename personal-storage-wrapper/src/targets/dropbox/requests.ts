@@ -17,7 +17,7 @@ const getDropboxAuthorization = (connection: DropboxConnection): Result<string> 
                 {
                     headers: { "Content-Type": "application/json" },
                     method: "POST",
-                },
+                }
             );
             const access = await readJSON(response);
 
@@ -49,7 +49,7 @@ const getDropboxAuthorization = (connection: DropboxConnection): Result<string> 
 const readJSON = (response: Response): Promise<Record<string, any>> =>
     response.json().then(
         (json) => (json !== null && typeof json === "object" ? json : {}),
-        () => ({}),
+        () => ({})
     );
 
 /**
@@ -67,7 +67,7 @@ export const runDropboxQuery = (
     input: RequestInfo | URL,
     init?: RequestInit | undefined,
     // A 401 is worth one forced token refresh, and no more - see below
-    retryOnUnauthorized: boolean = true,
+    retryOnUnauthorized: boolean = true
 ): Result<Response> =>
     new Result<Response>(async (resolve) => {
         if (!window.navigator.onLine) return resolve({ type: "error", error: "OFFLINE" });
@@ -110,7 +110,7 @@ export const runDropboxQuery = (
 export const runDropboxQueryForJSON = <T>(
     connection: DropboxConnection,
     input: RequestInfo | URL,
-    init?: RequestInit,
+    init?: RequestInit
 ): Result<T> =>
     runDropboxQuery(connection, input, init)
         .pmap((response) => response.json())

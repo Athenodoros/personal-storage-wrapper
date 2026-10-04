@@ -59,7 +59,7 @@ const getConnectionForAuthCode = (
     clientId: string,
     redirectURI: string,
     verifier: string,
-    code: string,
+    code: string
 ): Result<DropboxConnection> =>
     new Result(async (resolve) => {
         const expiry = new Date();
@@ -71,7 +71,7 @@ const getConnectionForAuthCode = (
                 code_verifier: verifier,
                 code,
             }),
-            { method: "POST" },
+            { method: "POST" }
         );
         const access = await response.json().catch(() => ({}));
 

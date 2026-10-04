@@ -28,12 +28,12 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
      */
     private static createFromMaybeConnection = (
         connection: Result<DropboxConnection | null>,
-        path: string,
+        path: string
     ): Result<DropboxTarget | null> =>
         connection.flatmap((result) =>
             result === null
                 ? Result.value<DropboxTarget | null>(null)
-                : getUserMetadata(result).map<DropboxTarget | null>((user) => new DropboxTarget(result, user, path)),
+                : getUserMetadata(result).map<DropboxTarget | null>((user) => new DropboxTarget(result, user, path))
         );
 
     static catchRedirectForAuth = (path: string = "/data.bak"): Result<DropboxTarget | null> =>
@@ -42,7 +42,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     static setupInPopup = (
         clientId: string,
         redirectURI?: string,
-        path: string = "/data.bak",
+        path: string = "/data.bak"
     ): Result<DropboxTarget | null> => this.createFromMaybeConnection(runAuthInPopup(clientId, redirectURI), path);
 
     // Data handlers
@@ -57,7 +57,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         }).flatmap((result) =>
             result?.server_modified
                 ? Result.value(getRevisionTime(new Date(result.server_modified), result.rev))
-                : Result.error<Date>("UNKNOWN", "Dropbox accepted the upload without saying when it was saved"),
+                : Result.error<Date>("UNKNOWN", "Dropbox accepted the upload without saying when it was saved")
         );
 
     read = (): Result<TargetValue> =>
@@ -69,7 +69,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
                 headers: { "Dropbox-API-Arg": JSON.stringify({ path: "rev:" + write.rev }) },
             })
                 .pmap((response) => response.arrayBuffer())
-                .map((buffer) => ({ timestamp: write.timestamp, buffer }) as TargetValue);
+                .map((buffer) => ({ timestamp: write.timestamp, buffer } as TargetValue));
         });
 
     timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.timestamp);
@@ -99,7 +99,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
         other instanceof DropboxTarget &&
         deepEquals(
             [other.connection.clientId, other.user.id, other.path],
-            [this.connection.clientId, this.user.id, this.path],
+            [this.connection.clientId, this.user.id, this.path]
         );
 
     // Other requests
@@ -115,13 +115,13 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ path: this.path }),
-            },
+            }
         )
             .supress("MISSING_FILE", null)
             .map((result) =>
                 result?.server_modified && result.rev
                     ? { timestamp: getRevisionTime(new Date(result.server_modified), result.rev), rev: result.rev }
-                    : null,
+                    : null
             );
 }
 

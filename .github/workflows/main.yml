@@ -36,6 +36,11 @@ jobs:
                   npm install yarn
                   yarn
 
+            - name: Check formatting
+              run: |
+                  cd $GITHUB_WORKSPACE
+                  yarn format:check
+
             - name: Build from source
               run: |
                   cd personal-storage-wrapper-example

@@ -18,7 +18,7 @@ export const OperationRunners = {
 
 export type Operation = keyof typeof OperationRunners;
 export type OperationArgument<O extends Operation> = Parameters<
-    typeof OperationRunners[O]
+    (typeof OperationRunners)[O]
 >[0] extends OperationRunConfig<Value, Target<any, any>, infer S>
     ? S
     : never;

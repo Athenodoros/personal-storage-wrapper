@@ -86,7 +86,10 @@ test("Reports an exchange that fails on the way, rather than never returning", a
 const TOKENS = { access_token: "test-access-token", refresh_token: "test-refresh-token", expires_in: 14400 };
 
 /** A popup that has already come back to the given URL with an authorisation code on it */
-const stubPopupLandingOn = (url: string, exchange: { status: number; body: unknown } = { status: 200, body: TOKENS }) => {
+const stubPopupLandingOn = (
+    url: string,
+    exchange: { status: number; body: unknown } = { status: 200, body: TOKENS }
+) => {
     const context = {
         closed: false,
         close: vi.fn(),

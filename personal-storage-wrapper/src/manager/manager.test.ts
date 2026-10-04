@@ -1040,8 +1040,7 @@ const getTestCreation = async (
         ...config,
     });
 
-const getTestManager = async (...args: Parameters<typeof getTestCreation>) =>
-    (await getTestCreation(...args)).manager;
+const getTestManager = async (...args: Parameters<typeof getTestCreation>) => (await getTestCreation(...args)).manager;
 
 const value = async (sync: Sync<MemoryTarget>) => (await readFromSync(() => noop, sync)).value?.value;
 

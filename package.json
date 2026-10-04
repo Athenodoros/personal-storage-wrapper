@@ -10,6 +10,11 @@
     "scripts": {
         "dev": "yarn workspace personal-storage-wrapper-example dev",
         "test": "yarn workspace personal-storage-wrapper test",
-        "coverage": "yarn workspace personal-storage-wrapper coverage"
+        "coverage": "yarn workspace personal-storage-wrapper coverage",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "devDependencies": {
+        "prettier": "^2.8.4"
     }
 }

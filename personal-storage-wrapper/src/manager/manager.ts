@@ -145,7 +145,12 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
                 // this one can't use: it is refused, and the application told
                 const problem = getValidationProblem(value.value, this.config.validate);
                 if (problem !== null) {
-                    const error = { type: "error", error: "CORRUPT_VALUE", detail: problem, decoded: value.value } as const;
+                    const error = {
+                        type: "error",
+                        error: "CORRUPT_VALUE",
+                        detail: problem,
+                        decoded: value.value,
+                    } as const;
                     return reportUnreadableValue(this.config.onUnreadableValue, error, { type: "BROADCAST" });
                 }
 
@@ -348,7 +353,10 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             if (output.writes && output.writes.length)
                 await Promise.all(
                     uniqEquals(output.writes, (s1, s2) => s1.target.equals(s2.target)).map(async (sync) => {
-                        if (this.syncs.includes(sync) && (await writeToAndUpdateSync(this.logger, sync, this.value.value)))
+                        if (
+                            this.syncs.includes(sync) &&
+                            (await writeToAndUpdateSync(this.logger, sync, this.value.value))
+                        )
                             saved.push(sync);
                     })
                 );
@@ -357,7 +365,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
 
             // Runs once this operation hands back the queue, in the finally below
-            if (output.poll && !this.operations.poll.length) this.operations.poll.push({ argument: null, callback: noop });
+            if (output.poll && !this.operations.poll.length)
+                this.operations.poll.push({ argument: null, callback: noop });
         } catch (error) {
             console.error("PersonalStorageManager: the " + operation + " operation failed", error);
         } finally {

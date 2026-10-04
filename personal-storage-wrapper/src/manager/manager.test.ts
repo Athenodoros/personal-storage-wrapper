@@ -97,8 +97,11 @@ test("Updates state and broadcasts to channel immediately in callback but pushes
 });
 
 test("Provides newest value to startup conflict handler", async () => {
-    const handler = vi.fn();
-    handler.mockImplementation(async () => "A");
+    let current: string | undefined;
+    const handler = vi.fn(async (original: string, getCurrentValue: () => string) => {
+        current = getCurrentValue();
+        return original;
+    });
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
@@ -112,10 +115,77 @@ test("Provides newest value to startup conflict handler", async () => {
     await delay(DELAY * 1.5);
 
     expect(handler).toHaveBeenCalledOnce();
-    expect(handler).toHaveBeenCalledWith("A", "C", [
+    expect(handler).toHaveBeenCalledWith("A", expect.any(Function), [
         { sync: syncA, value: valueA },
         { sync: syncB, value: valueB },
     ]);
+    expect(current).toBe("C");
+});
+
+test("Keeps edits made while the startup conflict handler runs, if it keeps the current value", async () => {
+    const onValueUpdate = vi.fn();
+    let decide = noop;
+    const resolveConflictingSyncValuesOnStartup = (_: string, getCurrentValue: () => string) =>
+        new Promise<string>((resolve) => (decide = () => resolve(getCurrentValue())));
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "B", delay: DELAY });
+    const manager = await getTestManager([syncA, syncB], { onValueUpdate, resolveConflictingSyncValuesOnStartup });
+
+    // The handler might be waiting on the user, who goes on editing
+    await delay(DELAY * 1.5);
+    manager.setValue("C");
+    decide();
+    await delay(DELAY * 2.5);
+
+    expect(manager.getValue()).toBe("C");
+    expect(await value(syncA)).toBe("C");
+    expect(await value(syncB)).toBe("C");
+
+    // The application already holds it, so it isn't told of it again as though it were new
+    expect(onValueUpdate).not.toHaveBeenCalledWith("C", "CONFLICT");
+});
+
+test("Takes the value the startup conflict handler returns, over edits made while it ran", async () => {
+    let decide = noop;
+    const resolveConflictingSyncValuesOnStartup = (original: string) =>
+        new Promise<string>((resolve) => (decide = () => resolve(original)));
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "B", delay: DELAY });
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup });
+
+    await delay(DELAY * 1.5);
+    manager.setValue("C");
+    decide();
+    await delay(DELAY * 2.5);
+
+    expect(manager.getValue()).toBe("A");
+    expect(await value(syncA)).toBe("A");
+    expect(await value(syncB)).toBe("A");
+});
+
+test("Keeps an edit made while the result of a startup conflict is written", async () => {
+    let decided = noop;
+    const handled = new Promise<void>((resolve) => (decided = resolve));
+    const resolveConflictingSyncValuesOnStartup = async () => {
+        decided();
+        return "X";
+    };
+
+    const syncA = await getTestSync({ value: "A" });
+    const syncB = await getTestSync({ value: "B", delay: DELAY });
+    const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup });
+
+    // The slower target is still being written when the user edits
+    await handled;
+    await delay(DELAY * 0.5);
+    manager.setValue("D");
+    await delay(DELAY * 3);
+
+    expect(manager.getValue()).toBe("D");
+    expect(await value(syncA)).toBe("D");
+    expect(await value(syncB)).toBe("D");
 });
 
 test("Successfully adds a sync and pushes to channel", async () => {

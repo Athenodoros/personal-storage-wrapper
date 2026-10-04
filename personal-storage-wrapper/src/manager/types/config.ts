@@ -71,9 +71,16 @@ export type OfflineSyncStartupHandler<V extends Value, T extends Target<any, any
     }[]
 ) => Promise<OfflineSyncStartupBehaviour<V>>;
 
+/**
+ * Settles targets that disagree on startup. `originalValue` is the value the manager started with, and
+ * `getCurrentValue` gives the value it holds now: the application can go on changing it while this runs,
+ * which may be for as long as it waits on the user. The manager takes on exactly the value returned, so
+ * a handler that keeps the manager's copy returns `getCurrentValue()` once it has decided, to keep any
+ * changes made meanwhile.
+ */
 export type ConflictingSyncStartupBehaviour<V extends Value, T extends Target<any, any> = DefaultTarget> = (
     originalValue: V,
-    currentValue: V,
+    getCurrentValue: () => V,
     syncs: {
         sync: Sync<T>;
         value: TimestampedValue<V>;

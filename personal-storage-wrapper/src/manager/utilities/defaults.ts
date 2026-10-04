@@ -69,8 +69,8 @@ export const resetToDefaultsOnOfflineTargets = <V extends Value>(): Promise<Offl
     Promise.resolve({ behaviour: "DEFAULT" });
 
 export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Target<any, any>, V extends Value>(
-    _originalValue: V,
-    _currentValue: V,
+    originalValue: V,
+    getCurrentValue: () => V,
     syncs: {
         sync: Sync<T>;
         value: TimestampedValue<V>;
@@ -85,7 +85,7 @@ export const resolveStartupConflictsWithRemoteStateAndLatestEdit = <T extends Ta
 
     if (!priority.value.value) throw Error("Invalid state: no available target values");
 
-    if (deepEquals(priority.value.value, _originalValue)) return Promise.resolve(_currentValue);
+    if (deepEquals(priority.value.value, originalValue)) return Promise.resolve(getCurrentValue());
     return Promise.resolve(priority.value.value);
 };
 

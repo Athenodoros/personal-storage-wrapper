@@ -28,7 +28,7 @@ jobs:
             - name: Add node to environment
               uses: actions/setup-node@v2
               with:
-                  node-version: "16"
+                  node-version: "24"
 
             - name: Populate environment
               run: |

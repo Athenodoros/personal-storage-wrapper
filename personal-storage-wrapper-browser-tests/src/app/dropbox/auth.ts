@@ -1,4 +1,4 @@
-import { DropboxTarget } from "personal-storage-wrapper";
+import { DropboxTarget, Result } from "personal-storage-wrapper";
 import {
     getGetConnectViaRedirect,
     getHandlePopupBlockerDelay,
@@ -11,10 +11,17 @@ const CLIENT_ID = "sha2xamq49ewlbo";
 const POPUP_URL = window.location.origin + "/dropbox-popup";
 const REDIRECT_URL = window.location.origin + "/dropbox-redirect";
 
+/** Signing in reports a failure as an error, which these tests treat as no target, as they did before */
+const orNull = (result: Result<DropboxTarget | null>) =>
+    result.then((created) => {
+        if (created.type === "error") console.error("Dropbox sign-in failed", created);
+        return created.value ?? null;
+    });
+
 export const ConnectInPopup: TestConfig<DropboxTarget> = {
     name: "Connect in Popup",
     runner: runTargetCreation(
-        () => DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak"),
+        () => orNull(DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak")),
         "Opening Popup...",
         true
     ),
@@ -23,14 +30,14 @@ export const ConnectInPopup: TestConfig<DropboxTarget> = {
 export const getDropboxConnectViaRedirect = getGetConnectViaRedirect(
     "dropbox",
     () => DropboxTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
-    () => DropboxTarget.catchRedirectForAuth("/data.bak"),
+    () => orNull(DropboxTarget.catchRedirectForAuth("/data.bak")),
     false
 );
 
 export const HandlePopupRejection: TestConfig<DropboxTarget> = {
     name: "Handle Popup Rejection",
     runner: runTargetCreation(
-        () => DropboxTarget.setupInPopup(CLIENT_ID, REDIRECT_URL, "/data.bak"),
+        () => orNull(DropboxTarget.setupInPopup(CLIENT_ID, REDIRECT_URL, "/data.bak")),
         "Opening Popup...",
         false
     ),
@@ -39,17 +46,17 @@ export const HandlePopupRejection: TestConfig<DropboxTarget> = {
 export const HandleRedirectRejection = getHandleRedirectRejection(
     "dropbox",
     () => DropboxTarget.redirectForAuth(CLIENT_ID, REDIRECT_URL),
-    () => DropboxTarget.catchRedirectForAuth("/data.back")
+    () => orNull(DropboxTarget.catchRedirectForAuth("/data.back"))
 );
 
 export const HandleEmptyRedirectCatch: TestConfig<DropboxTarget> = {
     name: "Handle Empty Redirect Catch",
     disabled: () => window.location.href.startsWith(POPUP_URL),
-    runner: runTargetCreation(() => DropboxTarget.catchRedirectForAuth("/data.bak"), "Catching redirect...", false),
+    runner: runTargetCreation(() => orNull(DropboxTarget.catchRedirectForAuth("/data.bak")), "Catching redirect...", false),
 };
 
 export const HandlePopupBlockerDelay = getHandlePopupBlockerDelay("dropbox", () =>
-    DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak")
+    orNull(DropboxTarget.setupInPopup(CLIENT_ID, POPUP_URL, "/data.bak"))
 );
 
 export const BadToken: TestConfig<DropboxTarget> = {

@@ -12,7 +12,7 @@ import { ConflictingRemoteBehaviour, PSMCreationConfig, Sync } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { DefaultTarget } from "./utilities/defaults";
 import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
-import { getConfigFromSyncs } from "./utilities/serialisation";
+import { getBufferFromValue, getConfigFromSyncs } from "./utilities/serialisation";
 import { delay, getTestSync } from "./utilities/test";
 
 const DELAY = 20;
@@ -335,7 +335,8 @@ test("Updates callbacks in real time on cached creation", async () => {
         true
     );
 
-    await delay(DELAY * 1.5);
+    // The read, and then the check and the write of the empty sync
+    await until(() => logger2.mock.calls.length >= 6);
 
     (sync.target as MemoryTarget).fails = true;
     const logger3 = vi.fn();
@@ -349,9 +350,11 @@ test("Updates callbacks in real time on cached creation", async () => {
     expect(handler1).not.toHaveBeenCalled();
     expect(handler2).toHaveBeenCalled();
     expect(logger1).not.toHaveBeenCalled();
-    expect(logger2).toHaveBeenCalledTimes(4);
+    expect(logger2).toHaveBeenCalledTimes(6);
     expect(logger2).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "START", sync });
     expect(logger2).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync });
+    expect(logger2).toHaveBeenCalledWith({ operation: "POLL", stage: "START", sync });
+    expect(logger2).toHaveBeenCalledWith({ operation: "POLL", stage: "SUCCESS", sync });
     expect(logger2).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync });
     expect(logger2).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "SUCCESS", sync });
     expect(logger3).toHaveBeenCalledOnce();
@@ -476,7 +479,12 @@ test("Correctly logs during read/write cycle", async () => {
 
     await manager.setValue("B");
 
-    expect(logger).toHaveBeenCalledTimes(4);
+    // Each sync is checked before it is written to
+    expect(logger).toHaveBeenCalledTimes(8);
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "START", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "SUCCESS", sync: syncA });
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "START", sync: syncB });
+    expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "SUCCESS", sync: syncB });
     expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync: syncA });
     expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "SUCCESS", sync: syncA });
     expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "START", sync: syncB });
@@ -502,6 +510,7 @@ test("Writes to empty syncs with fallback values", async () => {
     const syncA = await getTestSync();
     const syncB = await getTestSync({ fails: true });
     await getTestManager([syncA, syncB]);
+    await delay(DELAY); // The write is queued once the manager exists, and checks the sync first
 
     expect(await value(syncA)).toBe("DEFAULT_VALUE");
 });
@@ -1044,4 +1053,37 @@ test("Says on a later startup which target missed a write", async () => {
 
     // Once it has the value, it no longer says so
     expect(second.getSyncsState().map(({ missedWrite }) => missedWrite)).toEqual([false, false]);
+});
+
+/**
+ * Another device saves to a shared target while this manager is running with polling off. Its next
+ * save used to go straight over that value, and the device's change was lost without anything ever
+ * having read it. The target is checked first: the save goes to the targets nobody else has written
+ * to, and the one that has moved on goes to the conflict handler, recorded as having missed this
+ * manager's value - so that both copies are known to have changed.
+ */
+test("Doesn't write over a value saved elsewhere since, even with polling off", async () => {
+    const local = await getTestSync({ value: "A", timestamp: 1000 });
+    const shared = await getTestSync({ value: "A", timestamp: 1000 });
+
+    let seen: { value: string; missedWrite: boolean }[] = [];
+    const resolveConflictingSyncsUpdate: ConflictingRemoteBehaviour<string, DefaultTarget> = async (
+        value,
+        _,
+        conflicts
+    ) => {
+        seen = conflicts.map(({ sync, value }) => ({ value: value.value, missedWrite: sync.missedWrite === true }));
+        return value;
+    };
+    const manager = await getTestManager([local, shared], { resolveConflictingSyncsUpdate });
+    await delay(1);
+
+    // Another device's save, which nothing here has read
+    await shared.target.write(await getBufferFromValue("OTHER", false));
+
+    await manager.setValue("B");
+    await until(() => seen.length > 0);
+
+    expect(seen).toEqual([{ value: "OTHER", missedWrite: true }]);
+    expect(await value(local)).toBe("B");
 });

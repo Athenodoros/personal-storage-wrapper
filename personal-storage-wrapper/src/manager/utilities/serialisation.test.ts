@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { MemoryTarget } from "../../targets/memory";
 import { encodeTextToBuffer } from "../../utilities/buffers";
 import { compress } from "../../utilities/buffers/compression";
+import { Sync } from "../types";
 import { DefaultDeserialisers } from "./defaults";
 import { getBufferFromValue, getConfigFromSyncs, getSyncsFromConfig, getValueFromBuffer } from "./serialisation";
 
@@ -60,13 +61,18 @@ test("Leaves a sync that has never been written to without a last seen write tim
 });
 
 /**
- * Otherwise one failed write would stop a store being saved for good: a desynced sync is never
- * written to again, and with polling off there is nothing left to clear the flag.
+ * It is what tells a later startup that this target fell behind the others. The `desynced` that older
+ * versions saved meant something looser, so it is dropped rather than read as a missed write.
  */
-test("Gives a stored sync another chance rather than restoring that it failed", async () => {
-    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, desynced: true }]);
+test("Remembers that a stored sync missed a write, but not an older version's desynced", async () => {
+    const storage = getConfigFromSyncs([
+        { target: new MemoryTarget(), compressed: true, missedWrite: true },
+        { target: new MemoryTarget(), compressed: true, desynced: true } as Sync<MemoryTarget>,
+    ]);
 
-    const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+    const [missed, desynced] = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
-    expect(sync.desynced).toBeUndefined();
+    expect(missed.missedWrite).toBe(true);
+    expect(desynced).not.toHaveProperty("desynced");
+    expect(desynced.missedWrite).toBeUndefined();
 });

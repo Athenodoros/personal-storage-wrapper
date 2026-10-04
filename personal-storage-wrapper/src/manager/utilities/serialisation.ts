@@ -31,12 +31,11 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
         configs.map(async ({ config, type }) => {
             if (deserialisers[type] === undefined) return null;
 
-            // A sync that is desynced is never written to again, and only a poll or a conflict
-            // clears that. Remembering it would mean one failed write stopped a store saving for
-            // good, across reloads, with polling off - so a new session starts out as though it had
-            // never failed, and startup reconciles the targets anyway.
-            // `unreadable` is never saved, but an older version of this library may have saved it.
-            const { desynced: _hadFailedWrite, unreadable: _heldUnreadableValue, ...sync } = JSON.parse(config);
+            // `missedWrite` is kept, so that a later startup knows the target fell behind.
+            // `unreadable` is never saved, but an older version of this library may have saved it, and
+            // `desynced`, which older versions also saved, is what `missedWrite` replaced. It was
+            // cleared by any poll that reached the target, so it can't be relied on to mean the same.
+            const { desynced: _replacedByMissedWrite, unreadable: _heldUnreadableValue, ...sync } = JSON.parse(config);
             return {
                 ...sync,
                 // JSON has no dates, so this comes back as the string it was written as

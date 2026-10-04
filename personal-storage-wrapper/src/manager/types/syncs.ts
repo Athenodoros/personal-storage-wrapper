@@ -7,12 +7,20 @@ export interface Sync<T extends Target<any, any> = DefaultTarget> {
     compressed: boolean;
 
     // Sync Status
-    desynced?: boolean; // Flag for failed writes
+    /**
+     * The target may not hold the manager's latest value: a write to it failed, or was refused because
+     * it holds a value that couldn't be read, or it couldn't be reached when it was added. It is checked
+     * before it is written again, in case something else has written to it since. Unlike `unreadable`,
+     * this is remembered between sessions, so that a later startup can tell a target that fell behind
+     * from one that is up to date. A write that works, or a read that finds the manager's value there,
+     * clears it.
+     */
+    missedWrite?: boolean;
     /**
      * The target holds a value that could not be decoded, or that failed the manager's `validate`.
      * Nothing is written to it while this is set, so that whatever is there is never lost to a write
-     * that did not know about it. A later read of a usable value clears it. Like `desynced`, it is
-     * not remembered between sessions: each startup reads every target again.
+     * that did not know about it. A later read of a usable value clears it. It is not remembered
+     * between sessions: each startup reads every target again.
      */
     unreadable?: boolean;
     lastSeenWriteTime?: Date; // Last remote timestamp, to detect remote updates

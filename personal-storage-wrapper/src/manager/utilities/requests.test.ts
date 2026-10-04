@@ -114,3 +114,20 @@ const runRequestTest = async (fails: boolean, runner: (sync: Sync<MemoryTarget>)
 
     return { logger, sync };
 };
+
+test("Records a value that didn't reach a sync, until one does", async () => {
+    const sync = await getTestSync({ value: "A" });
+
+    (sync.target as MemoryTarget).fails = true;
+    expect(await writeToAndUpdateSync(() => noop, sync, "B")).toBe(false);
+    expect(sync.missedWrite).toBe(true);
+
+    (sync.target as MemoryTarget).fails = false;
+    expect(await writeToAndUpdateSync(() => noop, sync, "C")).toBe(true);
+    expect(sync.missedWrite).toBe(false);
+
+    // A sync holding a value that couldn't be read is never written to, so it misses the value too
+    sync.unreadable = true;
+    expect(await writeToAndUpdateSync(() => noop, sync, "D")).toBe(false);
+    expect(sync.missedWrite).toBe(true);
+});

@@ -3,28 +3,28 @@ import { getTestSync } from "../utilities/test";
 import { getTestOperationConfig } from "./test";
 import { WriteOperationRunner } from "./write";
 
-test("Writes to a desynced sync only if nothing else has written to it, and asks for a poll if something has", async () => {
+test("Writes to a sync that missed a write only if nothing else has written to it, and asks for a poll if something has", async () => {
     const synced = await getTestSync({ value: "A" });
 
     // Its write failed, but it still holds what was last written to it from here
     const untouched = await getTestSync({ value: "A", timestamp: 1000 });
     untouched.lastSeenWriteTime = new Date(1000);
-    untouched.desynced = true;
+    untouched.missedWrite = true;
 
     // Its write failed, and something else has written to it since
     const movedOn = await getTestSync({ value: "OTHER", timestamp: 2000 });
     movedOn.lastSeenWriteTime = new Date(1000);
-    movedOn.desynced = true;
+    movedOn.missedWrite = true;
 
     const syncs = [synced, untouched, movedOn];
     const output = await WriteOperationRunner(getTestOperationConfig({ syncs, args: ["ALL"] }));
     expect(output).toEqual({ writes: [synced, untouched], poll: true });
 });
 
-test("Leaves a desynced sync that can't be reached, without a poll", async () => {
+test("Leaves a sync that missed a write and can't be reached, without a poll", async () => {
     const synced = await getTestSync();
     const unreachable = await getTestSync({ fails: true });
-    unreachable.desynced = true;
+    unreachable.missedWrite = true;
 
     const output = await WriteOperationRunner(getTestOperationConfig({ syncs: [synced, unreachable], args: ["ALL"] }));
     expect(output).toEqual({ writes: [synced] });
@@ -44,4 +44,15 @@ test("Writes to every sync that any of a batch of writes asked for", async () =>
     expect(await WriteOperationRunner(getTestOperationConfig({ syncs, args: [[empty], [full]] }))).toEqual({
         writes: [full, empty],
     });
+});
+
+test("Doesn't check a sync holding a value that couldn't be read, since it is never written to", async () => {
+    const unreadable = await getTestSync({ value: "A", timestamp: 2000 });
+    unreadable.lastSeenWriteTime = new Date(1000);
+    unreadable.missedWrite = true;
+    unreadable.unreadable = true;
+
+    // Checking would find that it has moved on, and ask for a poll
+    const output = await WriteOperationRunner(getTestOperationConfig({ syncs: [unreadable], args: ["ALL"] }));
+    expect(output).toEqual({ writes: [unreadable] });
 });

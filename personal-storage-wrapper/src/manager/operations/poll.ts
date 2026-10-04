@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, deepEqualsList } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
-import { hasMovedOn, readFromSync, timestampFromSync } from "../utilities/requests";
+import { hasMovedOn, markInStep, readFromSync, timestampFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 export const PollOperationRunner = async <V extends Value, T extends Target<any, any>>({
@@ -33,12 +33,14 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
             // Nothing else has written to it, so it holds the last value written here - unless that
             // write failed, in which case it is sent again
             if (!hasMovedOn(sync, timestamp.value)) {
-                if (sync.desynced) writes.push(sync);
+                if (sync.missedWrite) writes.push(sync);
                 return;
             }
 
             const result = await readFromSync<V, T>(logger, sync, config);
-            if (result.type === "error" || deepEquals(result.value?.value, value)) return;
+            if (result.type === "error") return;
+            if (result.value !== null && deepEquals(result.value.value, value))
+                return markInStep(sync, result.value.timestamp);
 
             if (result.value === null || recents.some((value) => deepEquals(value, result.value?.value))) {
                 writes.push(sync);
@@ -48,8 +50,9 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
         })
     );
 
-    if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.desynced)) {
+    if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.missedWrite)) {
         update = { value: conflicts[0].value.value, origin: "REMOTE" };
+        conflicts.forEach(({ sync, value }) => markInStep(sync, value.timestamp));
         writes = syncs.filter(
             (sync) =>
                 !conflicts.some((conflict) => conflict.sync.target.equals(sync.target)) && !failures.includes(sync)
@@ -66,10 +69,9 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
 
             const conflict = conflicts.find((conflict) => conflict.sync.target.equals(sync.target));
             if (conflict === undefined || !deepEquals(conflict.value.value, newValue)) writes.push(sync);
+            else markInStep(sync, conflict.value.timestamp);
         });
     }
-
-    syncs.filter((sync) => !failures.includes(sync)).forEach((sync) => (sync.desynced = false));
 
     return { writes, update };
 };

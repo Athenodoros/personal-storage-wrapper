@@ -104,3 +104,17 @@ test("Still reads a remote whose timestamp has moved on", async () => {
 
     expect(output).toEqual({ update: { value: "VALUE2", origin: "REMOTE" }, writes: [] });
 });
+
+test("Marks a sync in step when a poll finds the manager's value in it", async () => {
+    const sync = await getTestSync({ value: "VALUE1" });
+    sync.lastSeenWriteTime = new Date(0);
+    sync.missedWrite = true;
+
+    // Something else wrote the value this manager holds
+    await sync.target.write(encodeToArrayBuffer(JSON.stringify("VALUE2")));
+    const output = await PollOperationRunner(getTestOperationConfig({ args: [null], value: "VALUE2", syncs: [sync] }));
+
+    expect(output).toEqual({ writes: [], update: undefined });
+    expect(sync.lastSeenWriteTime).toEqual((await sync.target.timestamp()).value);
+    expect(sync.missedWrite).toBe(false);
+});

@@ -603,6 +603,31 @@ test("Stops responding to anything once closed, and frees its id for reuse", asy
     replacement.close();
 });
 
+/**
+ * An operation that was already running when the manager closed still finishes. It used to save the
+ * syncs it ended with, and could so put back a list the application had just cleared - a sync the
+ * user had removed along with the rest of their data, say.
+ */
+test("Saves nothing about its syncs once closed, even from an operation that was running", async () => {
+    const sync = await getTestSync({ value: "A", delay: DELAY });
+    const saveSyncData = vi.fn();
+    const onSyncStatesUpdate = vi.fn();
+
+    const manager = await getTestManager([sync], { saveSyncData, onSyncStatesUpdate });
+    await delay(DELAY * 3);
+    saveSyncData.mockClear();
+    onSyncStatesUpdate.mockClear();
+
+    const saving = manager.setValue("B");
+    await delay(DELAY * 0.5);
+    manager.close();
+    await saving;
+    await delay(DELAY * 3);
+
+    expect(saveSyncData).not.toHaveBeenCalled();
+    expect(onSyncStatesUpdate).not.toHaveBeenCalled();
+});
+
 test("Stops listening to other managers once closed", async () => {
     const onValueUpdate = vi.fn();
 

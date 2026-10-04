@@ -66,7 +66,10 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
     static thrown = <Value>(thrown: unknown) => new Result<Value>((resolve) => resolve(getUnknownError(thrown)));
 
     constructor(
-        executor: (resolve: (result: ResultValueType<Value>) => void, reject: (thrown?: unknown) => void) => void,
+        executor: (
+            resolve: (result: ResultValueType<Value>) => void,
+            reject: (thrown?: unknown) => void,
+        ) => unknown,
     ) {
         super((resolve) => {
             const fail = (thrown?: unknown) => resolve(getUnknownError(thrown));
@@ -74,7 +77,11 @@ export class Result<Value> extends Promise<ResultValueType<Value>> {
             // A Result that rejects stops whoever is waiting on it rather than telling them the
             // operation failed, and callers only ever handle the second of those
             try {
-                executor(resolve, fail);
+                const running = executor(resolve, fail);
+
+                // An async executor reports what it throws by rejecting the promise it returns, which
+                // nothing else is waiting on: without this the Result would simply never settle
+                if (running instanceof Promise) running.catch(fail);
             } catch (thrown) {
                 fail(thrown);
             }

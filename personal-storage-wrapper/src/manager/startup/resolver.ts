@@ -9,30 +9,40 @@ import {
     TimestampedValue,
     Value,
 } from "../types";
-import {} from "../utilities/defaults";
 import { writeToAndUpdateSync } from "../utilities/requests";
 
-export const handleInitialSyncValuesAndGetResult = async <V extends Value, T extends Target<any, any>>(
+interface StartupResult<V extends Value, T extends Target<any, any>> {
+    sync: Sync<T>;
+    result: ResultValueType<MaybeValue<V>>;
+}
+
+/**
+ * The value to hold once every target has been read. If a target disagrees with the value the manager
+ * started with, the handler decides; otherwise it is the value the manager holds now, which may have been
+ * changed while the targets were read.
+ */
+export const resolveInitialSyncValues = async <V extends Value, T extends Target<any, any>>(
     value: V,
     getValue: () => V,
-    results: {
-        sync: Sync<T>;
-        result: ResultValueType<MaybeValue<V>>;
-    }[],
-    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T>,
-    logger: () => SyncOperationLogger<Sync<T>>
+    results: StartupResult<V, T>[],
+    resolveConflictingSyncValuesOnStartup: ConflictingSyncStartupBehaviour<V, T>
 ): Promise<V> => {
-    // If conflict or out of date sync, update value using callback
-    if (results.some(({ result }) => result.value && !deepEquals(result.value?.value, value))) {
-        const syncsWithValues = results
-            .filter(({ result }) => result.type === "value" && result.value !== null)
-            .map(({ sync, result }) => ({ sync, value: result.value as TimestampedValue<V> }));
+    if (!results.some(({ result }) => result.value && !deepEquals(result.value?.value, value))) return getValue();
 
-        value = await resolveConflictingSyncValuesOnStartup(value, getValue(), syncsWithValues);
-    }
+    const syncsWithValues = results
+        .filter(({ result }) => result.type === "value" && result.value !== null)
+        .map(({ sync, result }) => ({ sync, value: result.value as TimestampedValue<V> }));
 
-    // If any missing or updated, write back
-    await Promise.all(
+    return resolveConflictingSyncValuesOnStartup(value, getValue, syncsWithValues);
+};
+
+/** Writes the value to every target that was read and holds something else, or nothing */
+export const writeInitialSyncValues = <V extends Value, T extends Target<any, any>>(
+    value: V,
+    results: StartupResult<V, T>[],
+    logger: () => SyncOperationLogger<Sync<T>>
+) =>
+    Promise.all(
         results.map(async ({ sync, result }) => {
             if (result.type === "value" && !deepEquals(result.value?.value, value)) {
                 await writeToAndUpdateSync(logger, sync, value);
@@ -41,7 +51,3 @@ export const handleInitialSyncValuesAndGetResult = async <V extends Value, T ext
             }
         })
     );
-
-    // Return result
-    return value;
-};

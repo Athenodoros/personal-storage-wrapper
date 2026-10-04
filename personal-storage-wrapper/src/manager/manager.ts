@@ -6,7 +6,7 @@ import { Operation, OperationArgument, OperationRunners, OperationState } from "
 import { OperationRunOutput } from "./operations/types";
 import { createPSMWithCache } from "./startup/cache";
 import { createPSM, deregisterPSM } from "./startup/constructor";
-import { handleInitialSyncValuesAndGetResult } from "./startup/resolver";
+import { resolveInitialSyncValues, writeInitialSyncValues } from "./startup/resolver";
 import { StartValue } from "./startup/types";
 import {
     ConflictingSyncStartupBehaviour,
@@ -190,15 +190,17 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             async (results) => {
                 if (this.closed) return;
 
-                const value = await handleInitialSyncValuesAndGetResult(
+                const value = await resolveInitialSyncValues(
                     start.value,
                     () => this.value.value,
                     results,
-                    resolveConflictingSyncValuesOnStartup ?? resolveStartupConflictsWithRemoteStateAndLatestEdit,
-                    this.logger
+                    resolveConflictingSyncValuesOnStartup ?? resolveStartupConflictsWithRemoteStateAndLatestEdit
                 );
 
-                if (!deepEquals(value, start.value)) this.setNewValue(value, "CONFLICT");
+                // Taken on before it is written, so that it can't replace an edit made while it is written,
+                // and compared with the value held now, since the application may already hold it
+                if (!deepEquals(value, this.value.value)) this.setNewValue(value, "CONFLICT");
+                await writeInitialSyncValues(this.value.value, results, this.logger);
 
                 const emptySyncs = results
                     .filter(({ result }) => result.type === "value" && result.value === null)

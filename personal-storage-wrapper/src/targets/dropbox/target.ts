@@ -3,6 +3,7 @@ import { Result } from "../result";
 import { Deserialiser, Target, TargetValue } from "../types";
 import { catchRedirectForAuth, getUserMetadata, redirectForAuth, runAuthInPopup } from "./auth";
 import { runDropboxQuery, runDropboxQueryForJSON } from "./requests";
+import { getRevisionTime } from "./revisions";
 import { DropboxConnection, DropboxTargetSerialisationConfig, DropboxTargetType, DropboxUserDetails } from "./types";
 
 export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSerialisationConfig> {
@@ -42,7 +43,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
 
     // Data handlers
     write = (buffer: ArrayBuffer): Result<Date> =>
-        this.fetchJSON<{ server_modified?: string }>("https://content.dropboxapi.com/2/files/upload", {
+        this.fetchJSON<{ server_modified?: string; rev?: string }>("https://content.dropboxapi.com/2/files/upload", {
             method: "POST",
             headers: {
                 "Content-Type": "application/octet-stream",
@@ -51,7 +52,7 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
             body: buffer,
         }).flatmap((result) =>
             result?.server_modified
-                ? Result.value(new Date(result.server_modified))
+                ? Result.value(getRevisionTime(new Date(result.server_modified), result.rev))
                 : Result.error<Date>("UNKNOWN", "Dropbox accepted the upload without saying when it was saved"),
         );
 
@@ -64,10 +65,10 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
                 headers: { "Dropbox-API-Arg": JSON.stringify({ path: "rev:" + write.rev }) },
             })
                 .pmap((response) => response.arrayBuffer())
-                .map((buffer) => ({ timestamp: write.server_modified, buffer }) as TargetValue);
+                .map((buffer) => ({ timestamp: write.timestamp, buffer }) as TargetValue);
         });
 
-    timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.server_modified);
+    timestamp = (): Result<Date | null> => this.getFileMetadata().map((result) => result && result.timestamp);
 
     delete = (): Result<null> =>
         this.fetchJSON<unknown>("https://api.dropboxapi.com/2/files/delete_v2", {
@@ -115,12 +116,13 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
             .supress("MISSING_FILE", null)
             .map((result) =>
                 result?.server_modified && result.rev
-                    ? { server_modified: new Date(result.server_modified), rev: result.rev }
+                    ? { timestamp: getRevisionTime(new Date(result.server_modified), result.rev), rev: result.rev }
                     : null,
             );
 }
 
 interface FileMetadata {
-    server_modified: Date;
+    /** When this revision was saved, to the millisecond: see `getRevisionTime` */
+    timestamp: Date;
     rev: string;
 }

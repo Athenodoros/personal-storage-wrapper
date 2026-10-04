@@ -262,7 +262,11 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
      */
 
     private onSyncsUpdate = (sendToChannel: boolean = true) => {
-        if (sendToChannel && !this.closed) this.channel.sendUpdatedSyncs(this.syncs);
+        // An operation that was running when the manager closed still finishes, and what it ends with is
+        // no longer the manager's to report or save: the application may have cleared the saved list since
+        if (this.closed) return;
+
+        if (sendToChannel) this.channel.sendUpdatedSyncs(this.syncs);
 
         this.config.onSyncStatesUpdate(this.getSyncsCopy());
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));

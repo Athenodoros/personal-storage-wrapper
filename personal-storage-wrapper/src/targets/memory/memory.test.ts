@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { compress, decompress } from "../../utilities/buffers/compression";
 import { decodeFromArrayBuffer, encodeToArrayBuffer } from "../../utilities/buffers/encoding";
 import { MemoryTarget } from "./target";
@@ -89,4 +89,16 @@ test("Correctly checks for equality", async () => {
     expect(memory1.equals(memory1)).toBe(true);
     expect(memory1.equals(memory2)).toBe(false);
     expect(memory1.equals(dummy as any)).toBe(false);
+});
+
+test("Stamps each write later than the last, even within a millisecond", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1000);
+    const target = new MemoryTarget();
+
+    const first = await target.write(encodeToArrayBuffer("A"));
+    const second = await target.write(encodeToArrayBuffer("B"));
+
+    expect(first.value?.valueOf()).toBe(1000);
+    expect(second.value?.valueOf()).toBe(1001);
+    now.mockRestore();
 });

@@ -11,12 +11,15 @@ import { OperationRunConfig, OperationRunOutput } from "./types";
 export type WriteRequest<T extends Target<any, any>> = "ALL" | Sync<T>[];
 
 /**
- * A sync that missed a write - in this session or an earlier one - may have been written to by
- * something else since: another context, or another device. It is checked before being written again,
- * whatever kind of target it is: one that nobody else has written to takes the value straight away,
- * and one that has moved on is left for a poll to reconcile, which is asked for here rather than left
- * to the poll timer, since polling may be off. Targets holding a value that couldn't be read are never
- * written to, which `writeToAndUpdateSync` enforces for every kind of write, so they aren't checked.
+ * Every sync is checked before it is written to, since something else - another context, or another
+ * device - may have written to it since this manager last did. Polling may be off, or not due yet,
+ * and a write that went ahead regardless would replace that value without anything having seen it.
+ * One that nobody else has written to takes the value straight away. One that has moved on is left
+ * for a poll to reconcile, which is asked for here rather than left to the poll timer, and one that
+ * can't be reached is left until the next write. Either way it has missed this value, which is
+ * recorded so that the poll, and any later startup, knows there is a change here it doesn't have.
+ * Targets holding a value that couldn't be read are never written to, which `writeToAndUpdateSync`
+ * enforces for every kind of write, so they aren't checked.
  */
 export const WriteOperationRunner = async <V extends Value, T extends Target<any, any>>({
     args,
@@ -26,12 +29,10 @@ export const WriteOperationRunner = async <V extends Value, T extends Target<any
     // Writes queued together are run as one, so it covers every sync any of them asked for: a new value
     // goes to all of them, and must not be narrowed to the few that another request named
     const targets = syncs.filter((sync) => args.some((arg) => arg === "ALL" || arg.includes(sync)));
-    const needsCheck = (sync: Sync<T>) => sync.missedWrite === true && !sync.unreadable;
-    if (!targets.some(needsCheck)) return { writes: targets };
 
     const decisions = await Promise.all(
         targets.map(async (sync): Promise<"WRITE" | "POLL" | "SKIP"> => {
-            if (!needsCheck(sync)) return "WRITE";
+            if (sync.unreadable) return "WRITE";
 
             const timestamp = await timestampFromSync(logger, sync);
             if (timestamp.type === "error") return "SKIP";
@@ -39,6 +40,10 @@ export const WriteOperationRunner = async <V extends Value, T extends Target<any
             return hasMovedOn(sync, timestamp.value) ? "POLL" : "WRITE";
         })
     );
+
+    targets.forEach((sync, index) => {
+        if (decisions[index] !== "WRITE") sync.missedWrite = true;
+    });
 
     const writes = targets.filter((_, index) => decisions[index] === "WRITE");
     return decisions.includes("POLL") ? { writes, poll: true } : { writes };

@@ -1,5 +1,8 @@
 /**
- * @vitest-environment jsdom
+ * Node's environment rather than jsdom's, for its `navigator.locks`, which tells a channel whether any
+ * other is listening: jsdom's navigator has no Web Locks API
+ *
+ * @vitest-environment node
  */
 
 import { expect, test, vi } from "vitest";

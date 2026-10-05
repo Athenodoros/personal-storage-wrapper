@@ -41,6 +41,11 @@ jobs:
                   cd $GITHUB_WORKSPACE
                   yarn format:check
 
+            - name: Run tests
+              run: |
+                  cd personal-storage-wrapper
+                  yarn vitest run
+
             - name: Build from source
               run: |
                   cd personal-storage-wrapper-example

@@ -8,16 +8,16 @@ test("Writes to a sync only if nothing else has written to it, and asks for a po
 
     // It holds what was last written to it from here, whether or not that write worked
     const inStep = await getTestSync({ value: "A", timestamp: 1000 });
-    inStep.lastSeenWriteTime = new Date(1000);
+    inStep.lastProcessedWriteTime = new Date(1000);
     const untouched = await getTestSync({ value: "A", timestamp: 1000 });
-    untouched.lastSeenWriteTime = new Date(1000);
+    untouched.lastProcessedWriteTime = new Date(1000);
     untouched.missedWrite = true;
 
     // Something else has written to it since, whether or not this manager's last write to it worked
     const movedOn = await getTestSync({ value: "OTHER", timestamp: 2000 });
-    movedOn.lastSeenWriteTime = new Date(1000);
+    movedOn.lastProcessedWriteTime = new Date(1000);
     const movedOnAfterMissing = await getTestSync({ value: "OTHER", timestamp: 2000 });
-    movedOnAfterMissing.lastSeenWriteTime = new Date(1000);
+    movedOnAfterMissing.lastProcessedWriteTime = new Date(1000);
     movedOnAfterMissing.missedWrite = true;
 
     const syncs = [empty, inStep, untouched, movedOn, movedOnAfterMissing];
@@ -40,10 +40,10 @@ test("Leaves a sync that can't be reached, without a poll, and records that it m
 
 test("Writes to every sync that any of a batch of writes asked for", async () => {
     const full = await getTestSync({ value: "A", timestamp: 1000 });
-    full.lastSeenWriteTime = new Date(1000);
+    full.lastProcessedWriteTime = new Date(1000);
     const empty = await getTestSync();
     const other = await getTestSync({ value: "A", timestamp: 1000 });
-    other.lastSeenWriteTime = new Date(1000);
+    other.lastProcessedWriteTime = new Date(1000);
     const syncs = [full, empty, other];
 
     // A new value goes everywhere, even when it is batched with a write to one empty sync, either way round
@@ -62,7 +62,7 @@ test("Writes to every sync that any of a batch of writes asked for", async () =>
 
 test("Doesn't check a sync holding a value that couldn't be read, since it is never written to", async () => {
     const unreadable = await getTestSync({ value: "A", timestamp: 2000 });
-    unreadable.lastSeenWriteTime = new Date(1000);
+    unreadable.lastProcessedWriteTime = new Date(1000);
     unreadable.missedWrite = true;
     unreadable.unreadable = true;
 

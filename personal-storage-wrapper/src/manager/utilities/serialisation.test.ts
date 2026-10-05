@@ -42,22 +42,22 @@ test("Correctly serialises and deserialises the same syncs", async () => {
  * The poll check that skips an unchanged remote compares this against a Date from the target, so a
  * sync restored from storage has to come back with a Date rather than the string JSON left behind.
  */
-test("Revives the last seen write time of a stored sync as a date", async () => {
-    const lastSeenWriteTime = new Date(1000);
-    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, lastSeenWriteTime }]);
+test("Revives the last processed write time of a stored sync as a date", async () => {
+    const lastProcessedWriteTime = new Date(1000);
+    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, lastProcessedWriteTime }]);
 
     const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
-    expect(sync.lastSeenWriteTime).toBeInstanceOf(Date);
-    expect(sync.lastSeenWriteTime!.valueOf()).toBe(lastSeenWriteTime.valueOf());
+    expect(sync.lastProcessedWriteTime).toBeInstanceOf(Date);
+    expect(sync.lastProcessedWriteTime!.valueOf()).toBe(lastProcessedWriteTime.valueOf());
 });
 
-test("Leaves a sync that has never been written to without a last seen write time", async () => {
+test("Leaves a sync that has never been written to without a last processed write time", async () => {
     const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true }]);
 
     const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
-    expect(sync.lastSeenWriteTime).toBeUndefined();
+    expect(sync.lastProcessedWriteTime).toBeUndefined();
 });
 
 /**
@@ -75,4 +75,23 @@ test("Remembers that a stored sync missed a write, but not an older version's de
     expect(missed.missedWrite).toBe(true);
     expect(desynced).not.toHaveProperty("desynced");
     expect(desynced.missedWrite).toBeUndefined();
+});
+
+/** Saved by an older version, which knew it as `lastSeenWriteTime`: losing it would lose the sync's history */
+test("Takes on the last processed write time an older version saved under its earlier name", async () => {
+    const storage = JSON.stringify([
+        {
+            type: "memory",
+            config: JSON.stringify({
+                target: new MemoryTarget().serialise(),
+                compressed: true,
+                lastSeenWriteTime: 1000,
+            }),
+        },
+    ]);
+
+    const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+
+    expect(sync.lastProcessedWriteTime).toEqual(new Date(1000));
+    expect(sync).not.toHaveProperty("lastSeenWriteTime");
 });

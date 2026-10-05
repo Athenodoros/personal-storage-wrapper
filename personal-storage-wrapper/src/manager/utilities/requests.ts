@@ -25,12 +25,13 @@ export const runWithLogger = <S, T extends Target<any, any>>(
 
 /**
  * Whether something else has written to a target since this sync last wrote to or read from it. Times
- * are compared rather than Dates: targets build a fresh Date on every call, and a lastSeenWriteTime
+ * are compared rather than Dates: targets build a fresh Date on every call, and a lastProcessedWriteTime
  * restored from storage is a string until it is revived. An empty target has not moved on.
  */
 export const hasMovedOn = <T extends Target<any, any>>(sync: Sync<T>, timestamp: Date | null) =>
     timestamp !== null &&
-    (sync.lastSeenWriteTime === undefined || timestamp.valueOf() !== new Date(sync.lastSeenWriteTime).valueOf());
+    (sync.lastProcessedWriteTime === undefined ||
+        timestamp.valueOf() !== new Date(sync.lastProcessedWriteTime).valueOf());
 
 export const timestampFromSync = <T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,
@@ -85,7 +86,7 @@ export const readFromSync = <V extends Value, T extends Target<any, any>>(
                 // `hasMovedOn` reads this as the last write from here, so an unreadable sync that
                 // missed a write looks untouched and is picked for a write - which is only safe because
                 // `writeToAndUpdateSync` refuses every write to an unreadable sync
-                if (result.timestamp) sync.lastSeenWriteTime = result.timestamp;
+                if (result.timestamp) sync.lastProcessedWriteTime = result.timestamp;
                 reportUnreadableValue(checks.onUnreadableValue, result, { type: "SYNC", sync });
             }
 
@@ -167,7 +168,7 @@ export const getValidationProblem = (value: unknown, validate?: (value: unknown)
  * would. Nothing has written to the target since, and nothing the manager saved is missing from it.
  */
 export const markInStep = <T extends Target<any, any>>(sync: Sync<T>, timestamp: Date) => {
-    sync.lastSeenWriteTime = timestamp;
+    sync.lastProcessedWriteTime = timestamp;
     sync.missedWrite = false;
 };
 

@@ -77,7 +77,7 @@ test("Handles conflicting remotes and writes everywhere", async () => {
 
 /**
  * Real targets build a fresh Date on every call rather than handing back the one they were given,
- * and a lastSeenWriteTime read back out of storage is a string until it is revived. Comparing those
+ * and a lastProcessedWriteTime read back out of storage is a string until it is revived. Comparing those
  * by identity meant a poll never recognised its own last write, and so downloaded the whole value
  * from every target on every tick.
  */
@@ -85,7 +85,7 @@ test("Recognises an unchanged remote whose timestamp is a new object each time",
     const written = new Date(1000);
 
     const sync = await getTestSync({ value: "VALUE1", timestamp: written });
-    sync.lastSeenWriteTime = new Date(written.valueOf());
+    sync.lastProcessedWriteTime = new Date(written.valueOf());
     sync.target.timestamp = () => Result.value<Date | null>(new Date(written.valueOf()));
     const download = vi.spyOn(sync.target, "read");
 
@@ -97,7 +97,7 @@ test("Recognises an unchanged remote whose timestamp is a new object each time",
 
 test("Still reads a remote whose timestamp has moved on", async () => {
     const sync = await getTestSync({ value: "VALUE1", timestamp: new Date(1000) });
-    sync.lastSeenWriteTime = new Date(500);
+    sync.lastProcessedWriteTime = new Date(500);
     sync.target.write(encodeToArrayBuffer(JSON.stringify("VALUE2")));
 
     const output = await PollOperationRunner(getTestOperationConfig({ args: [null], value: "VALUE1", syncs: [sync] }));
@@ -107,7 +107,7 @@ test("Still reads a remote whose timestamp has moved on", async () => {
 
 test("Marks a sync in step when a poll finds the manager's value in it", async () => {
     const sync = await getTestSync({ value: "VALUE1" });
-    sync.lastSeenWriteTime = new Date(0);
+    sync.lastProcessedWriteTime = new Date(0);
     sync.missedWrite = true;
 
     // Something else wrote the value this manager holds
@@ -115,6 +115,6 @@ test("Marks a sync in step when a poll finds the manager's value in it", async (
     const output = await PollOperationRunner(getTestOperationConfig({ args: [null], value: "VALUE2", syncs: [sync] }));
 
     expect(output).toEqual({ writes: [], update: undefined });
-    expect(sync.lastSeenWriteTime).toEqual((await sync.target.timestamp()).value);
+    expect(sync.lastProcessedWriteTime).toEqual((await sync.target.timestamp()).value);
     expect(sync.missedWrite).toBe(false);
 });

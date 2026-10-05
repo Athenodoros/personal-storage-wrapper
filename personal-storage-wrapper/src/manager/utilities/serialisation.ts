@@ -35,14 +35,21 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
             // `unreadable` is never saved, but an older version of this library may have saved it, and
             // `desynced`, which older versions also saved, is what `missedWrite` replaced. It was
             // cleared by any poll that reached the target, so it can't be relied on to mean the same.
-            const { desynced: _replacedByMissedWrite, unreadable: _heldUnreadableValue, ...sync } = JSON.parse(config);
+            // `lastSeenWriteTime` is what older versions saved `lastProcessedWriteTime` as.
+            const {
+                desynced: _replacedByMissedWrite,
+                unreadable: _heldUnreadableValue,
+                lastSeenWriteTime: savedUnderEarlierName,
+                ...saved
+            } = JSON.parse(config);
+            const sync = { ...saved, lastProcessedWriteTime: saved.lastProcessedWriteTime ?? savedUnderEarlierName };
             return {
                 ...sync,
                 // JSON has no dates, so this comes back as the string it was written as
-                lastSeenWriteTime:
-                    sync.lastSeenWriteTime === undefined || sync.lastSeenWriteTime === null
+                lastProcessedWriteTime:
+                    sync.lastProcessedWriteTime === undefined || sync.lastProcessedWriteTime === null
                         ? undefined
-                        : new Date(sync.lastSeenWriteTime),
+                        : new Date(sync.lastProcessedWriteTime),
                 target: await deserialisers[type](sync.target),
             };
         })

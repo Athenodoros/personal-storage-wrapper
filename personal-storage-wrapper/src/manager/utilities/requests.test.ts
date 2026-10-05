@@ -119,15 +119,48 @@ test("Records a value that didn't reach a sync, until one does", async () => {
     const sync = await getTestSync({ value: "A" });
 
     (sync.target as MemoryTarget).fails = true;
-    expect(await writeToAndUpdateSync(() => noop, sync, "B")).toBe(false);
+    expect(await writeToAndUpdateSync(() => noop, sync, "B")).toBe("MISSED");
     expect(sync.missedWrite).toBe(true);
 
     (sync.target as MemoryTarget).fails = false;
-    expect(await writeToAndUpdateSync(() => noop, sync, "C")).toBe(true);
+    expect(await writeToAndUpdateSync(() => noop, sync, "C")).toBe("SAVED");
     expect(sync.missedWrite).toBe(false);
 
     // A sync holding a value that couldn't be read is never written to, so it misses the value too
     sync.unreadable = true;
-    expect(await writeToAndUpdateSync(() => noop, sync, "D")).toBe(false);
+    expect(await writeToAndUpdateSync(() => noop, sync, "D")).toBe("MISSED");
     expect(sync.missedWrite).toBe(true);
+});
+
+test("Expects a target still to hold what was last seen there, and says when it doesn't", async () => {
+    const sync = await getTestSync({ value: "A", timestamp: 1000 });
+    const logger = vi.fn();
+
+    // Nothing has been seen yet, so the write goes ahead regardless
+    const write = vi.spyOn(sync.target, "write");
+    expect(await writeToAndUpdateSync(() => logger, sync, "B")).toBe("SAVED");
+    expect(write).toHaveBeenLastCalledWith(expect.any(ArrayBuffer), undefined);
+
+    // It expects what its own write left there
+    const written = sync.lastProcessedWriteTime!;
+    expect(await writeToAndUpdateSync(() => logger, sync, "C")).toBe("SAVED");
+    expect(write).toHaveBeenLastCalledWith(expect.any(ArrayBuffer), written);
+
+    // Something else writes after this context last looked: the write is refused, and logged as a conflict
+    (sync.target as MemoryTarget).value = { timestamp: new Date(Date.now() + 1000), buffer: new ArrayBuffer(0) };
+    logger.mockClear();
+    expect(await writeToAndUpdateSync(() => logger, sync, "D")).toBe("CONFLICT");
+    expect(sync.missedWrite).toBe(true);
+    expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "CONFLICT", sync });
+
+    // Once something looks again, it expects what that found
+    const seen = await timestampFromSync(() => noop, sync);
+    expect(await writeToAndUpdateSync(() => logger, sync, "E")).toBe("SAVED");
+    expect(write).toHaveBeenLastCalledWith(expect.any(ArrayBuffer), seen.value);
+
+    // Including an empty target
+    (sync.target as MemoryTarget).value = null;
+    await readFromSync(() => noop, sync);
+    expect(await writeToAndUpdateSync(() => logger, sync, "F")).toBe("SAVED");
+    expect(write).toHaveBeenLastCalledWith(expect.any(ArrayBuffer), null);
 });

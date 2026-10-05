@@ -534,16 +534,20 @@ test("Handles overlapping writes to same source with broadcast", async () => {
     managerA.setValue("B");
     managerB.setValue("C");
 
-    // Broadcasting arrives in its own time
+    // Broadcasting arrives in its own time, and B's write, refused because A's landed first, is made again
     await vi.waitFor(() => {
         expect(managerA.getValue()).toBe("C");
         expect(managerB.getValue()).toBe("C");
     });
-    expect(await value(sync)).toBe("C");
+    await vi.waitFor(async () => expect(await value(sync)).toBe("C"));
 });
 
-test("Handles overlapping writes to same source without broadcast", async () => {
-    const resolveConflictingSyncsUpdate = vi.fn();
+/**
+ * B checks the target before A's write lands, and writes after it. B's write used to go straight over
+ * A's, which B had never seen. It is refused instead, and B's conflict handler decides, having read A's.
+ */
+test("Doesn't write over another manager's save to the same target, without broadcast", async () => {
+    const resolveConflictingSyncsUpdate = vi.fn(async (local: string) => local);
 
     const sync = await getTestSync({ value: "A", delay: DELAY });
     const managerA = await getTestManager([sync], { resolveConflictingSyncsUpdate });
@@ -553,17 +557,22 @@ test("Handles overlapping writes to same source without broadcast", async () => 
     await vi.advanceTimersByTimeAsync(DELAY * 0.2);
     managerB.setValue("C");
 
-    await vi.advanceTimersByTimeAsync(DELAY * 2.5); // Wait for any dust to settle
-    expect(managerA.getValue()).toBe("B");
-    expect(managerB.getValue()).toBe("C");
-    expect(await value(sync)).toBe("C");
+    // Each step takes the target's delay. A's check and write land after 1 and 2; B's check after 1.2,
+    // its refused write after 2.2, then its poll's check and read after 3.2 and 4.2.
+    await vi.advanceTimersByTimeAsync(DELAY * 4.5);
+    expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith("C", expect.anything(), [
+        { sync: expect.anything(), value: expect.objectContaining({ value: "B" }) },
+    ]);
 
+    // B's handler kept its own value, which it writes over A's knowingly
+    await vi.advanceTimersByTimeAsync(DELAY);
+    expect(await value(sync)).toBe("C");
+    expect(managerA.getValue()).toBe("B");
+
+    // Only the target has moved on since A last saw it, so A takes B's value without asking
     await settle(managerA.poll());
     expect(managerA.getValue()).toBe("C");
-    expect(managerB.getValue()).toBe("C");
-    expect(await value(sync)).toBe("C");
-
-    expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
+    expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
 });
 
 test("Handles poll soon after new value from broadcast", async () => {
@@ -849,6 +858,15 @@ test("Never saves whether a target was unreadable", async () => {
     manager.close();
 });
 
+// The same list is saved and sent to other contexts, neither of which has seen what this one has
+test("Never saves or broadcasts what it last saw in a target", async () => {
+    const manager = await getTestManager([await getTestSync({ value: "A" })]);
+
+    expect(manager.getSyncsState()[0].lastSeenValueTimestamp).toBeInstanceOf(Date);
+    expect(getConfigFromSyncs(manager.getSyncsState())).not.toContain("lastSeenValueTimestamp");
+    manager.close();
+});
+
 test("Writes to a target again once a poll finds it empty", async () => {
     const corrupt = getCorruptSync();
     const manager = await getTestManager([corrupt]);
@@ -1095,4 +1113,44 @@ test("Doesn't write over a value saved elsewhere since, even with polling off", 
 
     expect(seen).toEqual([{ value: "OTHER", missedWrite: true }]);
     expect(await value(local)).toBe("B");
+});
+
+/**
+ * The check before a write can't see a save that lands between it and the write. The write expects
+ * the target still to hold what the check found, so the target refuses it, and the poll that follows
+ * hands the other value to the conflict handler - with nothing written over it in the meantime.
+ */
+test("Doesn't write over a value saved between its check and its write", async () => {
+    const handleSyncOperationLog = vi.fn();
+    const sync = await getTestSync({ value: "A", delay: DELAY });
+    const other = await getBufferFromValue("OTHER", false);
+
+    // What the handler is shown, and whether the other value was still there to be shown
+    let shown: { conflicts: string[]; untouched: boolean } | null = null;
+    const resolveConflictingSyncsUpdate: ConflictingRemoteBehaviour<string, DefaultTarget> = async (
+        local,
+        _,
+        conflicts
+    ) => {
+        shown = {
+            conflicts: conflicts.map(({ value }) => value.value),
+            untouched: sync.target.value?.buffer === other,
+        };
+        return local;
+    };
+    const manager = await getTestManager([sync], { handleSyncOperationLog, resolveConflictingSyncsUpdate });
+
+    // The check is answered after the target's delay, and the write lands one delay later: another device saves in between
+    manager.setValue("B");
+    await vi.advanceTimersByTimeAsync(DELAY * 1.5);
+    sync.target.value = { timestamp: new Date(), buffer: other };
+
+    // The refused write lands after 2, and the poll's check and read after 3 and 4
+    await vi.advanceTimersByTimeAsync(DELAY * 3);
+    expect(handleSyncOperationLog).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "CONFLICT", sync });
+    expect(shown).toEqual({ conflicts: ["OTHER"], untouched: true });
+
+    // The handler kept this manager's value, which is then written over the other, knowingly
+    await vi.advanceTimersByTimeAsync(DELAY);
+    expect(await value(sync)).toBe("B");
 });

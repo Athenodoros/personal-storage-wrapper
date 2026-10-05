@@ -124,6 +124,8 @@ export const runDropboxQueryForJSON = <T>(
             if (summary.startsWith("path/not_found") || summary.startsWith("path_lookup/not_found"))
                 return Result.error("MISSING_FILE");
             if (summary.startsWith("path/malformed_path")) return Result.error("INVALID_FILE_REFERENCE");
+            // An upload refused because the file isn't the revision it was meant to replace, or exists already
+            if (summary.startsWith("path/conflict")) return Result.error("CONFLICT", summary);
 
             // Dropbox's own description of what it refused, which is the most useful thing there is
             return Result.error<T>("UNKNOWN", summary);

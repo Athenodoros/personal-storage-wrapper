@@ -6,7 +6,6 @@ import { expect, test } from "vitest";
 import { MemoryTarget } from "../../targets/memory";
 import { encodeTextToBuffer } from "../../utilities/buffers";
 import { compress } from "../../utilities/buffers/compression";
-import { Sync } from "../types";
 import { DefaultDeserialisers } from "./defaults";
 import { getBufferFromValue, getConfigFromSyncs, getSyncsFromConfig, getValueFromBuffer } from "./serialisation";
 
@@ -65,12 +64,19 @@ test("Leaves a sync that has never been written to without a last processed writ
  * versions saved meant something looser, so it is dropped rather than read as a missed write.
  */
 test("Remembers that a stored sync missed a write, but not an older version's desynced", async () => {
-    const storage = getConfigFromSyncs([
-        { target: new MemoryTarget(), compressed: true, missedWrite: true },
-        { target: new MemoryTarget(), compressed: true, desynced: true } as Sync<MemoryTarget>,
-    ]);
-
-    const [missed, desynced] = await getSyncsFromConfig(storage, DefaultDeserialisers);
+    const [missed] = await getSyncsFromConfig(
+        getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, missedWrite: true }]),
+        DefaultDeserialisers
+    );
+    const [desynced] = await getSyncsFromConfig(
+        JSON.stringify([
+            {
+                type: "memory",
+                config: JSON.stringify({ target: new MemoryTarget().serialise(), compressed: true, desynced: true }),
+            },
+        ]),
+        DefaultDeserialisers
+    );
 
     expect(missed.missedWrite).toBe(true);
     expect(desynced).not.toHaveProperty("desynced");

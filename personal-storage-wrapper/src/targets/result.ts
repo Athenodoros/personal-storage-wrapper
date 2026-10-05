@@ -5,7 +5,8 @@ export type ResultErrorType =
     | "EXPIRED_AUTH"
     | "INVALID_FILE_REFERENCE"
     | "MISSING_FILE"
-    | "CORRUPT_VALUE";
+    | "CORRUPT_VALUE"
+    | "CONFLICT";
 
 export interface ValueResult<Value> {
     type: "value";

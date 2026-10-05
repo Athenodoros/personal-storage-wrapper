@@ -31,26 +31,22 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
         configs.map(async ({ config, type }) => {
             if (deserialisers[type] === undefined) return null;
 
-            // `missedWrite` is kept, so that a later startup knows the target fell behind.
-            // `unreadable` is never saved, but an older version of this library may have saved it, and
-            // `desynced`, which older versions also saved, is what `missedWrite` replaced. It was
-            // cleared by any poll that reached the target, so it can't be relied on to mean the same.
-            // `lastSeenWriteTime` is what older versions saved `lastProcessedWriteTime` as.
             const {
-                desynced: _replacedByMissedWrite,
-                unreadable: _heldUnreadableValue,
                 lastSeenWriteTime: savedUnderEarlierName,
+                lastProcessedWriteTime = savedUnderEarlierName,
+                desynced: _replacedByMissedWrite,
+                unreadable: _foundAgainOnStartup,
+                target,
                 ...saved
-            } = JSON.parse(config);
-            const sync = { ...saved, lastProcessedWriteTime: saved.lastProcessedWriteTime ?? savedUnderEarlierName };
+            } = JSON.parse(config) as LegacySyncSerialisationFormat<T>;
+
             return {
-                ...sync,
-                // JSON has no dates, so this comes back as the string it was written as
+                ...saved,
                 lastProcessedWriteTime:
-                    sync.lastProcessedWriteTime === undefined || sync.lastProcessedWriteTime === null
+                    lastProcessedWriteTime === undefined || lastProcessedWriteTime === null
                         ? undefined
-                        : new Date(sync.lastProcessedWriteTime),
-                target: await deserialisers[type](sync.target),
+                        : new Date(lastProcessedWriteTime),
+                target: await deserialisers[type](target),
             };
         })
     );
@@ -67,11 +63,37 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
 
 export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: Sync<T>[]): string => {
     const config: SyncSerialisedConfig<T>[] = syncs.map((sync) => {
-        return {
-            type: sync.target.type,
-            // Whether a target's value can be read is found again on each startup, rather than remembered
-            config: JSON.stringify({ ...sync, unreadable: undefined, target: sync.target.serialise() }),
+        const saved: SyncSerialisationFormat<T> = {
+            target: sync.target.serialise(),
+            compressed: sync.compressed,
+            missedWrite: sync.missedWrite,
+            lastProcessedWriteTime: sync.lastProcessedWriteTime,
         };
+        return { type: sync.target.type, config: JSON.stringify(saved) };
     });
     return JSON.stringify(config);
+};
+
+/**
+ * A sync as it is saved, and sent to other contexts. What its target holds, and whether that can be
+ * read, are left out: each context finds them out for itself.
+ */
+type SyncSerialisationFormat<T extends Target<any, any>> = Omit<
+    Sync<T>,
+    "target" | "unreadable" | "lastSeenValueTimestamp"
+> & { target: ReturnType<T["serialise"]> };
+
+/**
+ * A sync as it may be read back: saved by this version, whose dates come back as strings, or an older
+ * one. Older versions saved `lastProcessedWriteTime` as `lastSeenWriteTime`, and `desynced`, which
+ * `missedWrite` replaced but which can't be read as one, and they may have saved `unreadable`.
+ */
+type LegacySyncSerialisationFormat<T extends Target<any, any>> = Omit<
+    SyncSerialisationFormat<T>,
+    "lastProcessedWriteTime"
+> & {
+    lastProcessedWriteTime?: string | null;
+    lastSeenWriteTime?: string | null;
+    desynced?: boolean;
+    unreadable?: boolean;
 };

@@ -18,7 +18,13 @@ export const runWithLogger = <S, T extends Target<any, any>>(
     logger()({ sync, operation, stage: "START" });
     const promise = runner();
 
-    promise.then(({ type }) => logger()({ sync, operation, stage: type === "value" ? "SUCCESS" : "ERROR" }));
+    promise.then(({ type, error }) =>
+        logger()({
+            sync,
+            operation,
+            stage: type === "value" ? "SUCCESS" : error === "CONFLICT" ? "CONFLICT" : "ERROR",
+        })
+    );
 
     return promise;
 };
@@ -36,7 +42,11 @@ export const hasMovedOn = <T extends Target<any, any>>(sync: Sync<T>, timestamp:
 export const timestampFromSync = <T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,
     sync: Sync<T>
-): Result<Date | null> => runWithLogger(logger, sync, "POLL", () => sync.target.timestamp());
+): Result<Date | null> =>
+    runWithLogger(logger, sync, "POLL", () => sync.target.timestamp()).map((timestamp) => {
+        sync.lastSeenValueTimestamp = timestamp;
+        return timestamp;
+    });
 
 /**
  * What a read checks a value against once it is decoded, and who to tell when it is refused. Both are
@@ -80,13 +90,18 @@ export const readFromSync = <V extends Value, T extends Target<any, any>>(
         runWithLogger(logger, sync, "DOWNLOAD", () =>
             decodeTargetValue<V>(sync.target.read(), sync.compressed, checks.validate)
         ).then((result) => {
-            if (result.type === "value") sync.unreadable = false;
-            else if (result.error === "CORRUPT_VALUE") {
+            if (result.type === "value") {
+                sync.unreadable = false;
+                sync.lastSeenValueTimestamp = result.value?.timestamp ?? null;
+            } else if (result.error === "CORRUPT_VALUE") {
                 sync.unreadable = true;
                 // `hasMovedOn` reads this as the last write from here, so an unreadable sync that
                 // missed a write looks untouched and is picked for a write - which is only safe because
                 // `writeToAndUpdateSync` refuses every write to an unreadable sync
-                if (result.timestamp) sync.lastProcessedWriteTime = result.timestamp;
+                if (result.timestamp) {
+                    sync.lastProcessedWriteTime = result.timestamp;
+                    sync.lastSeenValueTimestamp = result.timestamp;
+                }
                 reportUnreadableValue(checks.onUnreadableValue, result, { type: "SYNC", sync });
             }
 
@@ -170,31 +185,40 @@ export const getValidationProblem = (value: unknown, validate?: (value: unknown)
 export const markInStep = <T extends Target<any, any>>(sync: Sync<T>, timestamp: Date) => {
     sync.lastProcessedWriteTime = timestamp;
     sync.missedWrite = false;
+    sync.lastSeenValueTimestamp = timestamp;
 };
 
+/** CONFLICT: refused because something else wrote to the target since this manager looked */
+export type WriteOutcome = "SAVED" | "MISSED" | "CONFLICT";
+
 /**
- * Writes the value, and says whether it was saved. A sync holding a value that couldn't be read is
- * never written to, so that the value is still there for the application to deal with - and so it
- * has missed this value, as much as one whose write failed.
+ * Writes the value, expecting the target still to hold what this context last saw there. A sync
+ * holding a value that couldn't be read is never written to, so that the value is still there for the
+ * application to deal with - and so it has missed this value, as much as one whose write failed.
  */
 export const writeToAndUpdateSync = async <V extends Value, T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,
     sync: Sync<T>,
     value: V
-): Promise<boolean> => {
+): Promise<WriteOutcome> => {
     if (sync.unreadable) {
         sync.missedWrite = true;
-        return false;
+        return "MISSED";
     }
 
     const buffer = await getBufferFromValue(value, sync.compressed);
-    const result = await runWithLogger(logger, sync, "UPLOAD", () => sync.target.write(buffer));
+    const result = await runWithLogger(logger, sync, "UPLOAD", () =>
+        sync.target.write(buffer, sync.lastSeenValueTimestamp)
+    );
 
     if (result.type === "value") {
         markInStep(sync, result.value);
-        return true;
+        return "SAVED";
     }
 
     sync.missedWrite = true;
-    return false;
+    if (result.error !== "CONFLICT") return "MISSED";
+
+    sync.lastSeenValueTimestamp = undefined; // Unknown until something looks again
+    return "CONFLICT";
 };

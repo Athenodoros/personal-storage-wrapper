@@ -102,3 +102,21 @@ test("Stamps each write later than the last, even within a millisecond", async (
     expect(second.value?.valueOf()).toBe(1001);
     now.mockRestore();
 });
+
+test("Refuses a write that expects something other than what it holds", async () => {
+    const target = new MemoryTarget();
+    const buffer = encodeToArrayBuffer(TEST_STRING);
+
+    // Expecting it empty, which it is
+    const first = await target.write(buffer, null);
+    expect(first.type).toBe("value");
+
+    // Expecting it empty, which it no longer is, or expecting a value that isn't the one it holds
+    expect(await target.write(buffer, null)).toMatchObject({ type: "error", error: "CONFLICT" });
+    expect(await target.write(buffer, new Date(0))).toMatchObject({ type: "error", error: "CONFLICT" });
+    expect(target.value?.timestamp).toEqual(first.value);
+
+    // Expecting what it holds, or nothing in particular
+    expect((await target.write(buffer, first.value)).type).toBe("value");
+    expect((await target.write(buffer)).type).toBe("value");
+});

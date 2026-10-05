@@ -23,6 +23,8 @@ export interface Sync<T extends Target<any, any> = DefaultTarget> {
      * between sessions: each startup reads every target again.
      */
     unreadable?: boolean;
+
+    lastSeenValueTimestamp?: Date | null; // What a write to the target expects, from this session's last look: its value's timestamp, or null for none. Not saved.
     lastProcessedWriteTime?: Date; // The target's timestamp for the last value the manager wrote, took on, or found unreadable
 }
 

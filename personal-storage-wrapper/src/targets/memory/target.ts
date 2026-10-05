@@ -36,14 +36,23 @@ export class MemoryTarget implements Target<MemoryTargetType, MemoryTargetSerial
     // Data handlers
     read = (): Result<TargetValue> => this.delayed(() => this.value);
     timestamp = (): Result<Date | null> => this.delayed(() => this.value?.timestamp ?? null);
-    write = (buffer: ArrayBuffer): Result<Date> =>
+    write = (buffer: ArrayBuffer, expectedValueTimestamp?: Date | null): Result<Date> =>
         this.delayed(() => {
+            // Compared when the write lands, as a target that checks and writes in one step would
+            const held = this.value?.timestamp.valueOf() ?? null;
+            if (expectedValueTimestamp !== undefined && held !== (expectedValueTimestamp?.valueOf() ?? null))
+                return null;
+
             // Each write is stamped later than the last. The manager tells that something else has written
             // to a target by its timestamp changing, so two writes in the same millisecond would look like one.
             const timestamp = new Date(Math.max(Date.now(), (this.value?.timestamp.valueOf() ?? 0) + 1));
             this.value = { timestamp, buffer };
             return timestamp;
-        });
+        }).flatmap((timestamp) =>
+            timestamp === null
+                ? Result.error<Date>("CONFLICT", "The target no longer holds the value the write expected")
+                : Result.value(timestamp)
+        );
 
     // Serialisation
     static deserialise: Deserialiser<MemoryTarget, false> = (config) =>

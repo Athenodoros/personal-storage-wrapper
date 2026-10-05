@@ -1,7 +1,7 @@
 import { Sync } from "./syncs";
 
 export type SyncOperation = "POLL" | "UPLOAD" | "DOWNLOAD";
-export type SyncLogStage = "START" | "SUCCESS" | "OFFLINE" | "ERROR";
+export type SyncLogStage = "START" | "SUCCESS" | "OFFLINE" | "ERROR" | "CONFLICT";
 
 export interface SyncOperationLog<SyncType extends Sync<any> = Sync<any>> {
     operation: SyncOperation;

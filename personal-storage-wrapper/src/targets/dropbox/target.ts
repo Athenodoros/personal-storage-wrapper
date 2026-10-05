@@ -12,6 +12,8 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     readonly user: DropboxUserDetails;
     readonly path: string;
 
+    private seen: SeenFile = { type: "UNKNOWN" };
+
     private constructor(connection: DropboxConnection, user: DropboxUserDetails, path: string) {
         this.connection = connection;
         this.user = user;
@@ -46,19 +48,38 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     ): Result<DropboxTarget | null> => this.createFromMaybeConnection(runAuthInPopup(clientId, redirectURI), path);
 
     // Data handlers
-    write = (buffer: ArrayBuffer): Result<Date> =>
-        this.fetchJSON<{ server_modified?: string; rev?: string }>("https://content.dropboxapi.com/2/files/upload", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/octet-stream",
-                "Dropbox-API-Arg": `{"path": "${this.path}","mode": "overwrite"}`,
-            },
-            body: buffer,
-        }).flatmap((result) =>
-            result?.server_modified
-                ? Result.value(getRevisionTime(new Date(result.server_modified), result.rev))
-                : Result.error<Date>("UNKNOWN", "Dropbox accepted the upload without saying when it was saved")
-        );
+    write = (buffer: ArrayBuffer, expectedValueTimestamp?: Date | null): Result<Date> => {
+        const mode = this.getWriteMode(expectedValueTimestamp);
+        if (mode === null) return Result.error("CONFLICT", "The file isn't at the revision the write expected");
+
+        return this.fetchJSON<{ server_modified?: string; rev?: string }>(
+            "https://content.dropboxapi.com/2/files/upload",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/octet-stream",
+                    "Dropbox-API-Arg": JSON.stringify({ path: this.path, mode }),
+                },
+                body: buffer,
+            }
+        ).flatmap((result) => {
+            if (!result?.server_modified)
+                return Result.error<Date>("UNKNOWN", "Dropbox accepted the upload without saying when it was saved");
+
+            const timestamp = getRevisionTime(new Date(result.server_modified), result.rev);
+            this.seen = result.rev ? { type: "REVISION", timestamp, rev: result.rev } : { type: "UNKNOWN" };
+            return Result.value(timestamp);
+        });
+    };
+
+    // Dropbox refuses an update of a revision that has been replaced, and an add over an existing file
+    private getWriteMode = (expectedValueTimestamp: Date | null | undefined) => {
+        if (expectedValueTimestamp === undefined) return "overwrite";
+        if (expectedValueTimestamp === null) return "add";
+        if (this.seen.type === "REVISION" && this.seen.timestamp.valueOf() === expectedValueTimestamp.valueOf())
+            return { ".tag": "update", update: this.seen.rev };
+        return null; // A revision this target hasn't seen can't be checked
+    };
 
     read = (): Result<TargetValue> =>
         this.getFileMetadata().flatmap((write) => {
@@ -118,11 +139,14 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
             }
         )
             .supress("MISSING_FILE", null)
-            .map((result) =>
-                result?.server_modified && result.rev
-                    ? { timestamp: getRevisionTime(new Date(result.server_modified), result.rev), rev: result.rev }
-                    : null
-            );
+            .map((result) => {
+                const metadata =
+                    result?.server_modified && result.rev
+                        ? { timestamp: getRevisionTime(new Date(result.server_modified), result.rev), rev: result.rev }
+                        : null;
+                this.seen = metadata ? { type: "REVISION", ...metadata } : { type: "MISSING" };
+                return metadata;
+            });
 }
 
 interface FileMetadata {
@@ -130,3 +154,6 @@ interface FileMetadata {
     timestamp: Date;
     rev: string;
 }
+
+/** What a target last found at its path: nothing yet, no file, or a revision of it */
+type SeenFile = { type: "UNKNOWN" } | { type: "MISSING" } | ({ type: "REVISION" } & FileMetadata);

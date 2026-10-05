@@ -323,6 +323,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         const operations = this.operations[operation];
         this.operations[operation] = [];
         const saved: Sync<T>[] = [];
+        let conflicted = false;
 
         /**
          * Whatever happens in here, the queue has to be handed back. An operation runner that
@@ -353,19 +354,20 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
             if (output.writes && output.writes.length)
                 await Promise.all(
                     uniqEquals(output.writes, (s1, s2) => s1.target.equals(s2.target)).map(async (sync) => {
-                        if (
-                            this.syncs.includes(sync) &&
-                            (await writeToAndUpdateSync(this.logger, sync, this.value.value))
-                        )
-                            saved.push(sync);
+                        if (!this.syncs.includes(sync)) return;
+
+                        const outcome = await writeToAndUpdateSync(this.logger, sync, this.value.value);
+                        if (outcome === "SAVED") saved.push(sync);
+                        if (outcome === "CONFLICT") conflicted = true;
                     })
                 );
 
             // Callback if dirty syncs
             if (!deepEquals(originalSyncs, this.syncs)) this.onSyncsUpdate(!output.skipChannel);
 
-            // Runs once this operation hands back the queue, in the finally below
-            if (output.poll && !this.operations.poll.length)
+            // Runs once this operation hands back the queue, in the finally below. A refused write asks for one
+            // too, so that what was written in its place is read at once.
+            if ((output.poll || conflicted) && !this.operations.poll.length)
                 this.operations.poll.push({ argument: null, callback: noop });
         } catch (error) {
             console.error("PersonalStorageManager: the " + operation + " operation failed", error);

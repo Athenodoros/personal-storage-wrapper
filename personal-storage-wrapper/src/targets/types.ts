@@ -6,7 +6,7 @@ export interface Target<Type extends string, SerialisationConfig> {
     type: Type;
 
     // Data handlers
-    write: (buffer: ArrayBuffer) => Result<Date>;
+    write: (buffer: ArrayBuffer, expectedValueTimestamp?: Date | null) => Result<Date>;
     read: () => Result<TargetValue>;
     timestamp: () => Result<Date | null>;
 

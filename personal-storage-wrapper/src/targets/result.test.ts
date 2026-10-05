@@ -1,7 +1,9 @@
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { DELAY, expectToSettleAfter, settle } from "../manager/utilities/test";
 import { Result } from "./result";
 
-const DELAY = 10;
+beforeEach(() => void vi.useFakeTimers());
+afterEach(() => void vi.useRealTimers());
 
 test("Correctly initialises for resolve and reject", async () => {
     expect(await Result.value(7)).toEqual({ type: "value", value: 7 });
@@ -22,36 +24,33 @@ test("Correctly handles flatmaps", async () => {
 });
 
 test("Result.rall waits for all results", async () => {
-    const start = new Date();
-    expect(await Result.rall([slowValue(7, DELAY), Result.value(8)])).toEqual({ type: "value", value: [7, 8] });
-    expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+    const combined = Result.rall([slowValue(7, DELAY), Result.value(8)]);
+    const result = await expectToSettleAfter(combined, DELAY);
+    expect(result).toEqual({ type: "value", value: [7, 8] });
 });
 
 test("Result.rall fails quickly given an error", async () => {
-    const start = new Date();
-    expect(await Result.rall([slowValue(7, DELAY), Result.error("OFFLINE")])).toEqual({
-        type: "error",
-        error: "OFFLINE",
-    });
-    expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
+    const combined = Result.rall([slowValue(7, DELAY), Result.error("OFFLINE")]);
+    const result = await expectToSettleAfter(combined, 0);
+    expect(result).toEqual({ type: "error", error: "OFFLINE" });
 });
 
 test("Result.rany gives the first result without waiting ", async () => {
-    const start = new Date();
-    expect(await Result.rany([slowValue(7, DELAY), Result.value(8)])).toEqual({ type: "value", value: 8 });
-    expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
+    const combined = Result.rany([slowValue(7, DELAY), Result.value(8)]);
+    const result = await expectToSettleAfter(combined, 0);
+    expect(result).toEqual({ type: "value", value: 8 });
 });
 
 test("Result.rall waits for first success", async () => {
-    const start = new Date();
-    expect(await Result.rany([slowValue(7, DELAY), Result.error("OFFLINE")])).toEqual({ type: "value", value: 7 });
-    expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+    const combined = Result.rany([slowValue(7, DELAY), Result.error("OFFLINE")]);
+    const result = await expectToSettleAfter(combined, DELAY);
+    expect(result).toEqual({ type: "value", value: 7 });
 });
 
 test("Result.rall returns failures correctly", async () => {
-    const start = new Date();
-    expect(await Result.rany([Result.error("OFFLINE"), slowError(DELAY)])).toEqual({ type: "error", error: "OFFLINE" });
-    expect(new Date().valueOf() - start.valueOf()).toBeGreaterThanOrEqual(DELAY - 1);
+    const combined = Result.rany([Result.error("OFFLINE"), slowError(DELAY)]);
+    const result = await expectToSettleAfter(combined, DELAY);
+    expect(result).toEqual({ type: "error", error: "OFFLINE" });
 });
 
 test("Result.flatten correctly returns", async () => {
@@ -113,10 +112,9 @@ test("Result.flatten correctly returns", async () => {
 });
 
 test("Result.flatten errors quickly", async () => {
-    const start = new Date();
     const test = { a: 1, b: slowValue(1, DELAY), c: { d: Result.error("OFFLINE") } };
-    expect(await Result.flatten(test)).toEqual({ type: "error", error: "OFFLINE" });
-    expect(new Date().valueOf() - start.valueOf()).toBeLessThan(DELAY - 1);
+    const result = await expectToSettleAfter(Result.flatten(test), 0);
+    expect(result).toEqual({ type: "error", error: "OFFLINE" });
 });
 
 test("Result.suppress suppresses correctly", async () => {
@@ -156,7 +154,7 @@ test("Turns a throw in an async executor into an error rather than never returni
         throw new TypeError("Failed to fetch");
     });
 
-    expect(await withTimeout(result)).toEqual({ type: "error", error: "UNKNOWN", detail: "Failed to fetch" });
+    expect(await settle(result)).toEqual({ type: "error", error: "UNKNOWN", detail: "Failed to fetch" });
 });
 
 test("Turns a rejecting map callback into an error rather than never returning", async () => {
@@ -171,11 +169,7 @@ test("Turns a rejecting map callback into an error rather than never returning",
     });
 
     const thrown = { type: "error", error: "UNKNOWN", detail: "Not the file that was expected" };
-    expect(await withTimeout(mapped)).toEqual(thrown);
-    expect(await withTimeout(pmapped)).toEqual(thrown);
-    expect(await withTimeout(flatmapped)).toEqual(thrown);
+    expect(await settle(mapped)).toEqual(thrown);
+    expect(await settle(pmapped)).toEqual(thrown);
+    expect(await settle(flatmapped)).toEqual(thrown);
 });
-
-/** Resolves to a marker rather than hanging the test runner, so a regression fails instead of timing out */
-const withTimeout = <T>(result: Result<T>) =>
-    Promise.race([result, new Promise((resolve) => setTimeout(() => resolve("NEVER RETURNED"), DELAY * 10))]);

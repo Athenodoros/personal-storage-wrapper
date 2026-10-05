@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { DefaultDeserialisers } from "../main";
 import { MemoryTarget } from "../targets";
 import { noop } from "../utilities/data";
@@ -13,10 +13,12 @@ import { PSMBroadcastChannel } from "./utilities/channel";
 import { DefaultTarget } from "./utilities/defaults";
 import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
 import { getBufferFromValue, getConfigFromSyncs } from "./utilities/serialisation";
-import { delay, getTestSync } from "./utilities/test";
+import { DELAY, getTestSync, settle } from "./utilities/test";
 
-const DELAY = 20;
 const DEFAULT_VALUE = "DEFAULT_VALUE";
+
+beforeEach(() => void vi.useFakeTimers());
+afterEach(() => void vi.useRealTimers());
 
 test("Can create a PSM correctly", async () => {
     const onSyncStatesUpdate = vi.fn();
@@ -35,15 +37,17 @@ test("Handles conflicting results correctly on startup", async () => {
 
     const id = "conflicting-results-update-handler-check";
     const resolveConflictingSyncValuesOnStartup = vi.fn(async () => "D");
-    getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup: async () => "C", id }, true);
+    startTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup: async () => "C", id }, true);
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup, id }, true);
 
     // Created from the first value read, without waiting for the slower sync, so nothing is resolved yet
     expect(resolveConflictingSyncValuesOnStartup).not.toHaveBeenCalled();
     expect(manager.getValue()).toBe("A");
-    await until(() => manager.getValue() === "D");
+    await vi.advanceTimersByTimeAsync(DELAY);
+    expect(manager.getValue()).toBe("D");
 
-    expect(await value(syncA)).toBe("D");
+    // Written once the conflict is resolved, a step at a time
+    await vi.waitFor(async () => expect(await value(syncA)).toBe("D"));
 });
 
 test("Handles operations during startup and returns promise to actioned result", async () => {
@@ -55,7 +59,7 @@ test("Handles operations during startup and returns promise to actioned result",
 
     const promise = manager.removeSync(syncB);
     expect(manager.getValue()).toBe("A");
-    await promise;
+    await settle(promise);
     expect(manager.getValue()).toBe("C");
     expect(manager.getSyncsState()).toEqual([syncA]);
 
@@ -79,13 +83,13 @@ test("Updates state and broadcasts to channel immediately in callback but pushes
 
     manager.setValue("B");
     expect(manager.getValue()).toBe("B");
-    await delay(DELAY * 0.5);
-
-    expect(listener).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith({ value: "B", timestamp: expect.any(Date) });
+    await vi.advanceTimersByTimeAsync(DELAY * 0.5);
     expect(await value(syncA)).toBe("A");
 
-    await delay(DELAY * 1);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+    expect(listener).toHaveBeenCalledWith({ value: "B", timestamp: expect.any(Date) });
+
+    await vi.advanceTimersByTimeAsync(DELAY);
 
     expect(listener).toHaveBeenCalledOnce(); // Doesn't clobber new value after remote read
     expect(await value(syncA)).toBe("B");
@@ -100,14 +104,16 @@ test("Provides newest value to startup conflict handler", async () => {
 
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "B", delay: DELAY });
+
+    // What the syncs hold before startup reads them, and writes over the one that disagrees
+    const valueA = (await settle(readFromSync(() => noop, syncA))).value;
+    const valueB = (await settle(readFromSync(() => noop, syncB))).value;
+
     const manager = await getTestManager([syncA, syncB], {
         resolveConflictingSyncValuesOnStartup: handler,
     });
     manager.setValue("C");
-
-    const valueA = (await readFromSync(() => noop, syncA)).value;
-    const valueB = (await readFromSync(() => noop, syncB)).value;
-    await delay(DELAY * 1.5);
+    await vi.advanceTimersByTimeAsync(DELAY);
 
     expect(handler).toHaveBeenCalledOnce();
     expect(handler).toHaveBeenCalledWith("A", expect.any(Function), [
@@ -128,10 +134,10 @@ test("Keeps edits made while the startup conflict handler runs, if it keeps the 
     const manager = await getTestManager([syncA, syncB], { onValueUpdate, resolveConflictingSyncValuesOnStartup });
 
     // The handler might be waiting on the user, who goes on editing
-    await delay(DELAY * 1.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 1.5);
     manager.setValue("C");
     decide();
-    await delay(DELAY * 2.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 2.5);
 
     expect(manager.getValue()).toBe("C");
     expect(await value(syncA)).toBe("C");
@@ -150,10 +156,10 @@ test("Takes the value the startup conflict handler returns, over edits made whil
     const syncB = await getTestSync({ value: "B", delay: DELAY });
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup });
 
-    await delay(DELAY * 1.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 1.5);
     manager.setValue("C");
     decide();
-    await delay(DELAY * 2.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 2.5);
 
     expect(manager.getValue()).toBe("A");
     expect(await value(syncA)).toBe("A");
@@ -173,10 +179,10 @@ test("Keeps an edit made while the result of a startup conflict is written", asy
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncValuesOnStartup });
 
     // The slower target is still being written when the user edits
-    await handled;
-    await delay(DELAY * 0.5);
+    await settle(handled);
+    await vi.advanceTimersByTimeAsync(DELAY * 0.5);
     manager.setValue("D");
-    await delay(DELAY * 3);
+    await vi.advanceTimersByTimeAsync(DELAY * 3);
 
     expect(manager.getValue()).toBe("D");
     expect(await value(syncA)).toBe("D");
@@ -192,17 +198,15 @@ test("Successfully adds a sync and pushes to channel", async () => {
     const syncA = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA], { id });
 
-    await delay(DELAY);
-    expect(listener).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
     expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA]));
     listener.mockClear();
 
     const syncB = await getTestSync({ value: "A" });
-    await manager.addSync(syncB);
+    await settle(manager.addSync(syncB));
     expect(manager.getSyncsState()).toEqual([syncA, syncB]);
 
-    await delay(DELAY);
-    expect(listener).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
     expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA, syncB]));
 });
 
@@ -216,16 +220,14 @@ test("Successfully removes a sync and pushes to channel", async () => {
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB], { id });
 
-    await delay(DELAY);
-    expect(listener).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
     expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA, syncB]));
     listener.mockClear();
 
-    await manager.removeSync(syncB);
+    await settle(manager.removeSync(syncB));
     expect(manager.getSyncsState()).toEqual([syncA]);
 
-    await delay(DELAY);
-    expect(listener).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
     expect(getConfigFromSyncs(listener.mock.calls[0][0])).toEqual(getConfigFromSyncs([syncA]));
 });
 
@@ -237,9 +239,8 @@ test("Successfully updates syncs from channel", async () => {
     const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
     const syncA = await getTestSync({ value: "A" });
     channel.sendUpdatedSyncs([syncA]);
-    await delay(DELAY);
 
-    expect(getConfigFromSyncs(manager.getSyncsState())).toEqual(getConfigFromSyncs([syncA]));
+    await vi.waitFor(() => expect(getConfigFromSyncs(manager.getSyncsState())).toEqual(getConfigFromSyncs([syncA])));
 });
 
 test("Successfully updates values from channel", async () => {
@@ -248,9 +249,8 @@ test("Successfully updates values from channel", async () => {
 
     const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
     channel.sendNewValue({ value: "UPDATE", timestamp: new Date() });
-    await delay(DELAY);
 
-    expect(manager.getValue()).toEqual("UPDATE");
+    await vi.waitFor(() => expect(manager.getValue()).toEqual("UPDATE"));
 });
 
 test("Successfully polls on manual trigger and writes to remotes", async () => {
@@ -258,10 +258,10 @@ test("Successfully polls on manual trigger and writes to remotes", async () => {
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB]);
 
-    await writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE");
+    await settle(writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE"));
     expect(manager.getValue()).toEqual("A");
 
-    await manager.poll();
+    await settle(manager.poll());
     expect(manager.getValue()).toEqual("UPDATE");
     expect(await value(syncB)).toEqual("UPDATE");
 });
@@ -271,10 +271,12 @@ test("Successfully polls on schedule and writes to remotes", async () => {
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB], { pollPeriodInSeconds: DELAY / 1000 });
 
-    await writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE");
+    await settle(writeToAndUpdateSync(() => noop, { ...syncA }, "UPDATE"));
     expect(manager.getValue()).toEqual("A");
 
-    await until(async () => (await value(syncB)) === "UPDATE");
+    // The poll is due once the period has passed, and writes to syncB once it has read syncA
+    await vi.advanceTimersByTimeAsync(DELAY);
+    await vi.waitFor(async () => expect(await value(syncB)).toEqual("UPDATE"));
     expect(manager.getValue()).toEqual("UPDATE");
 });
 
@@ -282,10 +284,10 @@ test("Writes again to a sync that missed a write, if nothing else has written to
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB]);
-    await delay(1); // Startup finds the manager's value in it, and records it as in step
+    await vi.advanceTimersByTimeAsync(1); // Startup finds the manager's value in it, and records it as in step
     syncB.missedWrite = true;
 
-    const result = await manager.setValue("B");
+    const result = await settle(manager.setValue("B"));
 
     expect(result.saved).toEqual([syncA, syncB]);
     expect(await value(syncB)).toEqual("B");
@@ -297,19 +299,20 @@ test("Reconciles a sync that missed a write and has moved on before writing to i
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
-    await delay(1); // Startup finds the manager's value in it, and records it as in step
+    await vi.advanceTimersByTimeAsync(1); // Startup finds the manager's value in it, and records it as in step
 
     // Its write failed, and since then something else has written to it
     syncB.missedWrite = true;
-    await delay(1);
-    await writeToAndUpdateSync(() => noop, { ...syncB }, "OTHER");
+    await vi.advanceTimersByTimeAsync(1);
+    await settle(writeToAndUpdateSync(() => noop, { ...syncB }, "OTHER"));
 
-    const result = await manager.setValue("B");
-    expect(result.saved).toEqual([syncA]);
-    expect(result.failed).toEqual([syncB]);
+    // Which targets, since the poll it asks for may already have updated the syncs these were copied from
+    const result = await settle(manager.setValue("B"));
+    expect(result.saved.map(({ target }) => target)).toEqual([syncA.target]);
+    expect(result.failed.map(({ target }) => target)).toEqual([syncB.target]);
 
     // A poll is run for it straight away, even with polling off, and the conflict handler decides
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith("B", expect.anything(), [
         { sync: syncB, value: expect.objectContaining({ value: "OTHER" }) },
     ]);
@@ -322,7 +325,7 @@ test("Updates callbacks in real time on cached creation", async () => {
 
     const logger1 = vi.fn();
     const handler1 = vi.fn();
-    const manager1 = getTestManager(
+    const manager1 = startTestManager(
         [sync],
         { handleSyncOperationLog: logger1, id, onSyncStatesUpdate: handler1 },
         true
@@ -335,15 +338,15 @@ test("Updates callbacks in real time on cached creation", async () => {
         true
     );
 
-    // The read, and then the check and the write of the empty sync
-    await until(() => logger2.mock.calls.length >= 6);
+    // The check and the write of the empty sync, each after the sync's delay
+    await vi.advanceTimersByTimeAsync(DELAY * 2);
 
     (sync.target as MemoryTarget).fails = true;
     const logger3 = vi.fn();
     const manager3 = await getTestManager([sync], { handleSyncOperationLog: logger3, id }, true);
-    await manager3.poll();
+    await settle(manager3.poll());
 
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
 
     expect(await manager1).toBe(manager2);
     expect(await manager1).toBe(manager3);
@@ -374,15 +377,15 @@ test("Calls onSyncsUpdate once with multiple changes (eg. add sync and desync an
         onSyncStatesUpdate: handler,
     });
 
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
     expect(handler).toHaveBeenCalledOnce();
     handler.mockClear();
 
     (syncA.target as MemoryTarget).fails = true;
     const syncB = await getTestSync({ value: "B" });
-    await manager.addSync(syncB);
+    await settle(manager.addSync(syncB));
 
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
     expect(handler).toHaveBeenCalledOnce();
 });
 
@@ -395,19 +398,19 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     const syncC = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB, syncC], { resolveConflictingSyncsUpdate });
 
-    await writeToAndUpdateSync(() => noop, { ...syncA }, "A");
-    await writeToAndUpdateSync(() => noop, { ...syncB }, "B");
+    await settle(writeToAndUpdateSync(() => noop, { ...syncA }, "A"));
+    await settle(writeToAndUpdateSync(() => noop, { ...syncB }, "B"));
     (syncA.target as MemoryTarget).fails = true;
     (syncB.target as MemoryTarget).fails = true;
 
-    await manager.setValue("C");
+    await settle(manager.setValue("C"));
     expect(syncA.missedWrite).toBe(true);
     expect(syncB.missedWrite).toBe(true);
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
     (syncB.target as MemoryTarget).fails = false;
-    await manager.poll();
+    await settle(manager.poll());
 
     expect(syncA.missedWrite).toBe(false);
     expect(syncB.missedWrite).toBe(false);
@@ -435,15 +438,15 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate });
 
-    await writeToAndUpdateSync(() => noop, { ...syncA }, "B");
+    await settle(writeToAndUpdateSync(() => noop, { ...syncA }, "B"));
     (syncA.target as MemoryTarget).fails = true;
 
-    await manager.setValue("B");
+    await settle(manager.setValue("B"));
     expect(syncA.missedWrite).toBe(true);
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
-    await manager.poll();
+    await settle(manager.poll());
 
     expect(syncA.missedWrite).toBe(false);
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
@@ -466,7 +469,7 @@ test("Correctly logs during read/write cycle", async () => {
     logger.mockClear();
 
     (syncB.target as MemoryTarget).fails = false;
-    await manager.poll();
+    await settle(manager.poll());
 
     expect(logger).toHaveBeenCalledTimes(6);
     expect(logger).toHaveBeenCalledWith({ operation: "POLL", stage: "START", sync: syncA });
@@ -477,7 +480,7 @@ test("Correctly logs during read/write cycle", async () => {
     expect(logger).toHaveBeenCalledWith({ operation: "DOWNLOAD", stage: "SUCCESS", sync: syncB });
     logger.mockClear();
 
-    await manager.setValue("B");
+    await settle(manager.setValue("B"));
 
     // Each sync is checked before it is written to
     expect(logger).toHaveBeenCalledTimes(8);
@@ -496,9 +499,11 @@ test("Correctly handles new value during operation, then queued addition/removal
     const syncB = await getTestSync({ value: "A", delay: DELAY });
     const syncC = await getTestSync({ value: "C" });
     const manager = await getTestManager([syncA, syncB], { resolveConflictingSyncsUpdate: async () => "D" });
-    await delay(DELAY * 1.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 1.5);
 
-    await Promise.all([manager.poll(), manager.setValue("B"), manager.addSync(syncC), manager.removeSync(syncB)]);
+    await settle(
+        Promise.all([manager.poll(), manager.setValue("B"), manager.addSync(syncC), manager.removeSync(syncB)])
+    );
 
     expect(await value(syncA)).toBe("D");
     expect(await value(syncB)).toBe("A"); // Removals before additions
@@ -510,7 +515,7 @@ test("Writes to empty syncs with fallback values", async () => {
     const syncA = await getTestSync();
     const syncB = await getTestSync({ fails: true });
     await getTestManager([syncA, syncB]);
-    await delay(DELAY); // The write is queued once the manager exists, and checks the sync first
+    await vi.advanceTimersByTimeAsync(DELAY); // The write is queued once the manager exists, and checks the sync first
 
     expect(await value(syncA)).toBe("DEFAULT_VALUE");
 });
@@ -529,9 +534,11 @@ test("Handles overlapping writes to same source with broadcast", async () => {
     managerA.setValue("B");
     managerB.setValue("C");
 
-    await delay(DELAY); // For broadcasting to complete
-    expect(managerA.getValue()).toBe("C");
-    expect(managerB.getValue()).toBe("C");
+    // Broadcasting arrives in its own time
+    await vi.waitFor(() => {
+        expect(managerA.getValue()).toBe("C");
+        expect(managerB.getValue()).toBe("C");
+    });
     expect(await value(sync)).toBe("C");
 });
 
@@ -543,15 +550,15 @@ test("Handles overlapping writes to same source without broadcast", async () => 
     const managerB = await getTestManager([{ ...sync }], { resolveConflictingSyncsUpdate });
 
     managerA.setValue("B");
-    await delay(DELAY * 0.2);
+    await vi.advanceTimersByTimeAsync(DELAY * 0.2);
     managerB.setValue("C");
 
-    await delay(DELAY * 2.5); // Wait for any dust to settle
+    await vi.advanceTimersByTimeAsync(DELAY * 2.5); // Wait for any dust to settle
     expect(managerA.getValue()).toBe("B");
     expect(managerB.getValue()).toBe("C");
     expect(await value(sync)).toBe("C");
 
-    await managerA.poll();
+    await settle(managerA.poll());
     expect(managerA.getValue()).toBe("C");
     expect(managerB.getValue()).toBe("C");
     expect(await value(sync)).toBe("C");
@@ -569,20 +576,20 @@ test("Handles poll soon after new value from broadcast", async () => {
     (sync.target as MemoryTarget).delay = DELAY * 2;
     managerA.setValue("B");
 
-    await delay(DELAY * 0.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 0.5);
     (sync.target as MemoryTarget).delay = 0;
 
-    expect(managerB.getValue()).toEqual("B");
     expect(await value(sync)).toBe("A");
-    await managerB.poll();
+    await vi.waitFor(() => expect(managerB.getValue()).toEqual("B"));
+    await settle(managerB.poll());
     expect(managerB.getValue()).toEqual("B");
     expect(await value(sync)).toBe("A");
 
-    await delay(DELAY * 2);
+    await vi.advanceTimersByTimeAsync(DELAY * 2);
 
     expect(managerB.getValue()).toEqual("B");
     expect(await value(sync)).toBe("B");
-    await managerB.poll();
+    await settle(managerB.poll());
     expect(managerB.getValue()).toEqual("B");
     expect(await value(sync)).toBe("B");
 });
@@ -596,13 +603,13 @@ test("Stops responding to anything once closed, and frees its id for reuse", asy
     const onValueUpdate = vi.fn();
 
     const manager = await getTestManager([sync], { id: "closed-manager", onValueUpdate });
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
     onValueUpdate.mockClear();
 
     manager.close();
 
-    await manager.setValue("B");
-    await delay(DELAY);
+    await settle(manager.setValue("B"));
+    await vi.advanceTimersByTimeAsync(DELAY);
     expect(onValueUpdate).not.toHaveBeenCalled();
     expect(await value(sync)).toBe("A");
 
@@ -623,15 +630,15 @@ test("Saves nothing about its syncs once closed, even from an operation that was
     const onSyncStatesUpdate = vi.fn();
 
     const manager = await getTestManager([sync], { saveSyncData, onSyncStatesUpdate });
-    await delay(DELAY * 3);
+    await vi.advanceTimersByTimeAsync(DELAY * 3);
     saveSyncData.mockClear();
     onSyncStatesUpdate.mockClear();
 
     const saving = manager.setValue("B");
-    await delay(DELAY * 0.5);
+    await vi.advanceTimersByTimeAsync(DELAY * 0.5);
     manager.close();
-    await saving;
-    await delay(DELAY * 3);
+    await settle(saving);
+    await vi.advanceTimersByTimeAsync(DELAY * 3);
 
     expect(saveSyncData).not.toHaveBeenCalled();
     expect(onSyncStatesUpdate).not.toHaveBeenCalled();
@@ -642,12 +649,12 @@ test("Stops listening to other managers once closed", async () => {
 
     const listener = await getTestManager([], { id: "shared-channel-id", onValueUpdate });
     const speaker = await getTestManager([], { id: "shared-channel-id", ignoreDuplicateCheck: true });
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
     onValueUpdate.mockClear();
 
     listener.close();
-    await speaker.setValue("BROADCAST");
-    await delay(DELAY);
+    await settle(speaker.setValue("BROADCAST"));
+    await vi.advanceTimersByTimeAsync(DELAY);
 
     expect(onValueUpdate).not.toHaveBeenCalled();
     expect(listener.getValue()).toBe(DEFAULT_VALUE);
@@ -672,11 +679,11 @@ test("Hands the operation queue back when an operation fails", async () => {
         },
     });
 
-    await withTimeout(manager.addTarget(conflicting.target, false));
+    await settle(manager.addTarget(conflicting.target, false));
     expect(errors).toHaveBeenCalled();
 
-    await withTimeout(manager.setValue("AFTER"));
-    await delay(DELAY);
+    await settle(manager.setValue("AFTER"));
+    await vi.advanceTimersByTimeAsync(DELAY);
     expect(await value(existing)).toBe("AFTER");
 
     errors.mockRestore();
@@ -696,7 +703,7 @@ const getCorruptSync = (): Sync<MemoryTarget> => ({
     compressed: true,
 });
 
-const rawBuffer = async (sync: Sync<MemoryTarget>) => (await sync.target.read()).value?.buffer;
+const rawBuffer = async (sync: Sync<MemoryTarget>) => (await settle(sync.target.read())).value?.buffer;
 
 test("Takes a value another context saved while this one was reading", async () => {
     // Saved a second ago, and read just now
@@ -707,9 +714,8 @@ test("Takes a value another context saved while this one was reading", async () 
     // The other context's save landed after that one, but before this manager was created
     const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
     channel.sendNewValue({ value: "B", timestamp: new Date(new Date().valueOf() - 500) });
-    await delay(DELAY);
 
-    expect(manager.getValue()).toBe("B");
+    await vi.waitFor(() => expect(manager.getValue()).toBe("B"));
     channel.close();
     manager.close();
 });
@@ -718,27 +724,25 @@ test("Rejects creation when the initial value can't be made, and lets the id be 
     const config = { getDefaultSyncs: async () => [await getTestSync()], getSyncData: () => null, id: "failed-start" };
 
     await expect(
-        withTimeout(
+        settle(
             PersonalStorageManager.create<string>(() => {
                 throw new Error("No initial value");
             }, config)
         )
     ).rejects.toThrow("No initial value");
 
-    const { manager } = await withTimeout(PersonalStorageManager.create("AFTER", config));
+    const { manager } = await settle(PersonalStorageManager.create("AFTER", config));
     expect(manager.getValue()).toBe("AFTER");
     manager.close();
 });
 
 test("Rejects creation when the handler for failed targets throws", async () => {
     await expect(
-        withTimeout(
-            getTestManager([await getTestSync({ fails: true })], {
-                handleAllEmptyAndFailedSyncsOnStartup: async () => {
-                    throw new Error("Handler failed");
-                },
-            })
-        )
+        getTestManager([await getTestSync({ fails: true })], {
+            handleAllEmptyAndFailedSyncsOnStartup: async () => {
+                throw new Error("Handler failed");
+            },
+        })
     ).rejects.toThrow("Handler failed");
 });
 
@@ -746,14 +750,14 @@ test("Tries a cached creation again after one fails", async () => {
     const config = { getDefaultSyncs: async () => [await getTestSync()], getSyncData: () => null, id: "failed-cache" };
 
     await expect(
-        withTimeout(
+        settle(
             PersonalStorageManager.createWithCache<string>(async () => {
                 throw new Error("No initial value");
             }, config)
         )
     ).rejects.toThrow();
 
-    const { manager } = await withTimeout(PersonalStorageManager.createWithCache("AFTER", config));
+    const { manager } = await settle(PersonalStorageManager.createWithCache("AFTER", config));
     expect(manager.getValue()).toBe("AFTER");
     manager.close();
 });
@@ -765,7 +769,7 @@ test("Never writes over a value that won't decode, and says so", async () => {
     const working = await getTestSync({ value: "A" });
 
     const manager = await getTestManager([corrupt, working], { onUnreadableValue });
-    await delay(DELAY);
+    await vi.waitFor(() => expect(onUnreadableValue).toHaveBeenCalled()); // Decoding takes its own time
 
     expect(manager.getValue()).toBe("A");
     expect(onUnreadableValue).toHaveBeenCalledWith(
@@ -774,7 +778,7 @@ test("Never writes over a value that won't decode, and says so", async () => {
     );
     expect(manager.getSyncsState()[0].unreadable).toBe(true);
 
-    const result = await manager.setValue("B");
+    const result = await settle(manager.setValue("B"));
     expect(result.saved).toEqual([working]);
     expect(result.failed).toEqual([corrupt]);
     expect(await rawBuffer(corrupt)).toBe(before);
@@ -805,7 +809,7 @@ test("Treats a value that fails validation like one that won't decode", async ()
         { type: "SYNC", sync: newer }
     );
 
-    await manager.setValue("B");
+    await settle(manager.setValue("B"));
     expect(await rawBuffer(newer)).toBe(before);
 
     manager.close();
@@ -824,8 +828,8 @@ test("Refuses a value from another context that fails validation", async () => {
 
     const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
     channel.sendNewValue({ value: "INVALID", timestamp: new Date() });
-    await delay(DELAY);
 
+    await vi.waitFor(() => expect(onUnreadableValue).toHaveBeenCalled());
     expect(manager.getValue()).toBe(DEFAULT_VALUE);
     expect(onValueUpdate).not.toHaveBeenCalledWith("INVALID", expect.anything());
     expect(onUnreadableValue).toHaveBeenCalledWith(
@@ -851,7 +855,7 @@ test("Writes to a target again once a poll finds it empty", async () => {
     expect(manager.getSyncsState()[0].unreadable).toBe(true);
 
     corrupt.target.value = null;
-    await manager.poll();
+    await settle(manager.poll());
 
     expect(manager.getSyncsState()[0].unreadable).toBe(false);
     expect(await value(corrupt)).toBe(DEFAULT_VALUE);
@@ -878,10 +882,10 @@ test("Says which syncs a value was saved to", async () => {
     const working = await getTestSync({ value: "A" });
     const failing = await getTestSync({ value: "A" });
     const manager = await getTestManager([working, failing]);
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
 
     failing.target.fails = true;
-    const result = await manager.setValue("B");
+    const result = await settle(manager.setValue("B"));
 
     expect(result.saved).toEqual([working]);
     expect(result.failed).toEqual([failing]);
@@ -890,9 +894,9 @@ test("Says which syncs a value was saved to", async () => {
 
 test("Hands out copies of its syncs with a save result", async () => {
     const manager = await getTestManager([await getTestSync({ value: "A" })]);
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
 
-    const result = await manager.setValue("B");
+    const result = await settle(manager.setValue("B"));
     result.saved[0].missedWrite = true;
 
     expect(manager.getSyncsState()[0].missedWrite).toBe(false);
@@ -906,24 +910,20 @@ test("Starts, and keeps taking values, when onUnreadableValue throws", async () 
     });
     const error = vi.spyOn(console, "error").mockImplementation(noop);
 
-    const manager = await withTimeout(
-        getTestManager([getCorruptSync()], {
-            id,
-            onUnreadableValue,
-            validate: (value) => (value === "INVALID" ? "Not allowed" : null),
-        })
-    );
+    const manager = await getTestManager([getCorruptSync()], {
+        id,
+        onUnreadableValue,
+        validate: (value) => (value === "INVALID" ? "Not allowed" : null),
+    });
     expect(onUnreadableValue).toHaveBeenCalledOnce();
 
     const channel = new PSMBroadcastChannel(id, new ListBuffer<string>(), DefaultDeserialisers, noop, noop);
     channel.sendNewValue({ value: "INVALID", timestamp: new Date() });
-    await delay(DELAY);
-    expect(onUnreadableValue).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(onUnreadableValue).toHaveBeenCalledTimes(2));
 
     channel.sendNewValue({ value: "VALID", timestamp: new Date() });
-    await delay(DELAY);
-    expect(manager.getValue()).toBe("VALID");
-    await withTimeout(manager.poll());
+    await vi.waitFor(() => expect(manager.getValue()).toBe("VALID"));
+    await settle(manager.poll());
 
     channel.close();
     manager.close();
@@ -934,16 +934,16 @@ test("Reports an unreadable value once, until something writes over it", async (
     const onUnreadableValue = vi.fn();
     const corrupt = getCorruptSync();
     const manager = await getTestManager([corrupt, await getTestSync({ value: "A" })], { onUnreadableValue });
-    await until(() => onUnreadableValue.mock.calls.length > 0);
+    await vi.waitFor(() => expect(onUnreadableValue).toHaveBeenCalled()); // Decoding takes its own time
     expect(onUnreadableValue).toHaveBeenCalledOnce();
 
-    await manager.poll();
-    await manager.poll();
+    await settle(manager.poll());
+    await settle(manager.poll());
     expect(onUnreadableValue).toHaveBeenCalledOnce();
 
     // Something else writes another value it can't use
     corrupt.target.value = { timestamp: new Date(Date.now() + 1000), buffer: new Uint8Array([4, 5, 6]).buffer };
-    await manager.poll();
+    await settle(manager.poll());
     expect(onUnreadableValue).toHaveBeenCalledTimes(2);
     expect(manager.getSyncsState()[0].unreadable).toBe(true);
 
@@ -956,7 +956,7 @@ test("Saves a value set during startup to every sync, alongside the write to an 
     const manager = await getTestManager([full, empty]);
 
     // Set while startup still waits on the empty sync, which it then queues a write to
-    const result = await manager.setValue("B");
+    const result = await settle(manager.setValue("B"));
 
     expect(result.saved).toEqual([full, empty]);
     expect(await value(full)).toBe("B");
@@ -990,7 +990,7 @@ test("Starts from the default syncs when the saved ones can't be read", async ()
     ];
 
     for (const getSyncData of unreadable) {
-        const { manager, syncsSource } = await withTimeout(getTestCreation([sync], { getSyncData }));
+        const { manager, syncsSource } = await getTestCreation([sync], { getSyncData });
         expect(syncsSource).toBe("UNREADABLE");
         expect(manager.getSyncsState()).toEqual([sync]);
         expect(manager.getValue()).toBe("A");
@@ -1005,28 +1005,10 @@ test("Starts from the default syncs when the saved ones can't be read", async ()
  * Utilities
  */
 
-/**
- * Waits until the check passes. For what depends on how busy the machine is rather than on the code -
- * a poll timer, or decoding - where a fixed wait long enough for a loaded machine would slow every run.
- */
-const until = async (check: () => boolean | Promise<boolean>) => {
-    const end = Date.now() + DELAY * 25;
-    while (!(await check())) {
-        if (Date.now() > end) throw new Error("The condition was never met");
-        await delay(1);
-    }
-};
-
-const withTimeout = <T>(promise: Promise<T>) =>
-    Promise.race([
-        promise,
-        delay(DELAY * 10).then(() => {
-            throw new Error("The operation never returned");
-        }),
-    ]);
-
 let id = 0;
-const getTestCreation = async (
+
+/** Starts creating a manager, whose startup waits on its syncs' timers */
+const startTestCreation = (
     syncs: Sync<DefaultTarget>[],
     config?: Partial<PSMCreationConfig<string, DefaultTarget>>,
     cache?: boolean
@@ -1039,20 +1021,23 @@ const getTestCreation = async (
         pollPeriodInSeconds: null,
         ...config,
     });
+const startTestManager = async (...args: Parameters<typeof startTestCreation>) =>
+    (await startTestCreation(...args)).manager;
 
-const getTestManager = async (...args: Parameters<typeof getTestCreation>) => (await getTestCreation(...args)).manager;
+const getTestCreation = (...args: Parameters<typeof startTestCreation>) => settle(startTestCreation(...args));
+const getTestManager = (...args: Parameters<typeof startTestCreation>) => settle(startTestManager(...args));
 
-const value = async (sync: Sync<MemoryTarget>) => (await readFromSync(() => noop, sync)).value?.value;
+const value = async (sync: Sync<MemoryTarget>) => (await settle(readFromSync(() => noop, sync))).value?.value;
 
 test("Says on a later startup which target missed a write", async () => {
     const syncA = await getTestSync({ value: "A" });
     const syncB = await getTestSync({ value: "A" });
     const first = await getTestManager([syncA, syncB]);
-    await delay(1);
+    await vi.advanceTimersByTimeAsync(1);
 
     // Saved while one target could be reached and the other couldn't
     (syncB.target as MemoryTarget).fails = true;
-    await first.setValue("B");
+    await settle(first.setValue("B"));
     (syncB.target as MemoryTarget).fails = false;
     const saved = getConfigFromSyncs(first.getSyncsState());
     first.close();
@@ -1068,7 +1053,7 @@ test("Says on a later startup which target missed a write", async () => {
         return original;
     };
     const second = await getTestManager([], { getSyncData: () => saved, resolveConflictingSyncValuesOnStartup });
-    await delay(DELAY);
+    await vi.advanceTimersByTimeAsync(DELAY);
 
     expect(seen).toEqual([
         ["B", false],
@@ -1100,13 +1085,13 @@ test("Doesn't write over a value saved elsewhere since, even with polling off", 
         return value;
     };
     const manager = await getTestManager([local, shared], { resolveConflictingSyncsUpdate });
-    await delay(1);
+    await vi.advanceTimersByTimeAsync(1);
 
     // Another device's save, which nothing here has read
-    await shared.target.write(await getBufferFromValue("OTHER", false));
+    await settle(shared.target.write(await getBufferFromValue("OTHER", false)));
 
-    await manager.setValue("B");
-    await until(() => seen.length > 0);
+    await settle(manager.setValue("B"));
+    await vi.advanceTimersByTimeAsync(DELAY); // The poll it asks for runs at once
 
     expect(seen).toEqual([{ value: "OTHER", missedWrite: true }]);
     expect(await value(local)).toBe("B");

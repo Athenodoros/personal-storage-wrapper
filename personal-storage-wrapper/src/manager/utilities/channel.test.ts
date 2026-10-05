@@ -5,13 +5,14 @@
  * @vitest-environment node
  */
 
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
 import { ListBuffer } from "../../utilities/listbuffer";
 import { PSMBroadcastChannel } from "./channel";
-import { delay, getTestSync } from "./test";
+import { DELAY, getTestSync } from "./test";
 
-const DELAY = 10;
+beforeEach(() => void vi.useFakeTimers());
+afterEach(() => void vi.useRealTimers());
 
 test("Correctly updates values", async () => {
     const { value: valueA, syncs: syncsA, channel: channelA } = getTestChannel(0);
@@ -20,17 +21,15 @@ test("Correctly updates values", async () => {
     const timestamp = new Date();
     channelA.sendNewValue({ value: "TEST", timestamp });
 
-    await delay(DELAY);
-
+    await vi.waitFor(() => expect(valueB).toHaveBeenCalledOnce());
     expect(valueA).not.toHaveBeenCalled();
     expect(syncsA).not.toHaveBeenCalled();
-    expect(valueB).toHaveBeenCalledOnce();
     expect(valueB).toHaveBeenCalledWith({ value: "TEST", timestamp });
     expect(syncsB).not.toHaveBeenCalled();
     expect(channelB.recents.values()).toEqual(["TEST"]);
 
-    await delay(DELAY * 3);
-
+    // Kept for at least `maxMillis`, and dropped by a timer that runs that often
+    await vi.advanceTimersByTimeAsync(DELAY * 4);
     expect(channelB.recents.values()).toEqual([]);
 });
 
@@ -40,12 +39,10 @@ test("Correctly updates syncs", async () => {
 
     channelA.sendUpdatedSyncs([]);
 
-    await delay(DELAY);
-
+    await vi.waitFor(() => expect(syncsB).toHaveBeenCalledOnce());
     expect(valueA).not.toHaveBeenCalled();
     expect(syncsA).not.toHaveBeenCalled();
     expect(valueB).not.toHaveBeenCalled();
-    expect(syncsB).toHaveBeenCalledOnce();
     expect(syncsB).toHaveBeenCalledWith([]);
     expect(channelB.recents.values()).toEqual([]);
 });
@@ -55,16 +52,14 @@ test("Does not trigger on own updates", async () => {
     const { syncs: syncsB } = getTestChannel(2);
     channel.sendUpdatedSyncs([await getTestSync()]);
 
-    await delay(DELAY);
-
+    // By the time the other channel has it, this one would have too
+    await vi.waitFor(() => expect(syncsB).toHaveBeenCalledOnce());
     expect(syncsA).not.toHaveBeenCalled();
-    expect(syncsB).toHaveBeenCalledOnce();
 });
 
 test("Does not post values with no other channel open", async () => {
     const post = vi.spyOn(BroadcastChannel.prototype, "postMessage");
     const { channel } = getTestChannel(3);
-    await delay(DELAY);
 
     await channel.sendNewValue({ value: "ALONE", timestamp: new Date() });
     expect(post).not.toHaveBeenCalled();
@@ -76,13 +71,12 @@ test("Does not post values with no other channel open", async () => {
 test("Sends every value, rather than the latest, once another channel is open", async () => {
     const { channel: channelA } = getTestChannel(4);
     const { value: valueB, channel: channelB } = getTestChannel(4);
-    await delay(DELAY);
+    await vi.waitFor(async () => expect(await countListening(4)).toBe(2));
 
     channelA.sendNewValue({ value: "FIRST", timestamp: new Date() });
     channelA.sendNewValue({ value: "SECOND", timestamp: new Date() });
-    await delay(DELAY);
 
-    expect(valueB).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(valueB).toHaveBeenCalledTimes(2));
     expect(channelB.recents.values()).toEqual(["SECOND", "FIRST"]);
 
     channelA.close();
@@ -92,10 +86,10 @@ test("Sends every value, rather than the latest, once another channel is open", 
 test("Stops posting values once the other channel closes", async () => {
     const { channel: channelA } = getTestChannel(5);
     const { channel: channelB } = getTestChannel(5);
-    await delay(DELAY);
+    await vi.waitFor(async () => expect(await countListening(5)).toBe(2));
 
     channelB.close();
-    await delay(DELAY);
+    await vi.waitFor(async () => expect(await countListening(5)).toBe(1));
 
     const post = vi.spyOn(BroadcastChannel.prototype, "postMessage");
     await channelA.sendNewValue({ value: "ALONE", timestamp: new Date() });
@@ -107,16 +101,17 @@ test("Stops posting values once the other channel closes", async () => {
 
 test("Does not post a value sent just before closing", async () => {
     const { channel: channelA } = getTestChannel(6);
-    const { value: valueB, channel: channelB } = getTestChannel(6);
-    await delay(DELAY);
+    const { channel: channelB } = getTestChannel(6);
+    await vi.waitFor(async () => expect(await countListening(6)).toBe(2));
 
     // Posting to a closed BroadcastChannel throws, so this would reject if it went ahead
+    const post = vi.spyOn(BroadcastChannel.prototype, "postMessage");
     const sent = channelA.sendNewValue({ value: "LATE", timestamp: new Date() });
     channelA.close();
     await sent;
-    await delay(DELAY);
 
-    expect(valueB).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+    post.mockRestore();
     channelB.close();
 });
 
@@ -134,6 +129,15 @@ test("Always posts values without the Web Locks API", async () => {
     channel.close();
     Object.defineProperty(globalThis, "navigator", descriptor);
 });
+
+/**
+ * How many channels with this test id hold their lock, which each takes once it is listening: it is
+ * how a channel knows whether another is there to send to
+ */
+const countListening = async (id: any) =>
+    ((await navigator.locks.query()).held ?? []).filter(({ name }) =>
+        name?.startsWith("personal-storage-wrapper:" + id + "-psm:")
+    ).length;
 
 const getTestChannel = (id: any) => {
     const value = vi.fn();

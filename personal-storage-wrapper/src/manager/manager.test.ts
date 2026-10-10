@@ -688,7 +688,7 @@ test("Hands the operation queue back when an operation fails", async () => {
         },
     });
 
-    await settle(manager.addTarget(conflicting.target, false));
+    await settle(manager.addTarget(conflicting.target, { compressed: false }));
     expect(errors).toHaveBeenCalled();
 
     await settle(manager.setValue("AFTER"));

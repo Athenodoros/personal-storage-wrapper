@@ -226,9 +226,14 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 
     private getSyncsCopy = (): Sync<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
     public getSyncsState = this.getSyncsCopy;
-    public addTarget = (target: T, compressed: boolean = true): Promise<void> =>
-        this.enqueueOperation("addition", { target, compressed }).then(ignoreResult);
-    public addSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("addition", sync).then(ignoreResult);
+    /**
+     * Starts syncing to a target. A value already there is reconciled with the manager's by
+     * `resolveConflictingSyncsUpdate`, unless it is `replacing`: a value the application read there
+     * itself and has decided the manager's value replaces, which is then written over without asking.
+     */
+    public addTarget = (target: T, { compressed = true, replacing }: AdditionOptions<V> = {}): Promise<void> =>
+        this.enqueueOperation("addition", { sync: { target, compressed }, replacing }).then(ignoreResult);
+    public addSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("addition", { sync }).then(ignoreResult);
     public removeSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("removal", sync).then(ignoreResult);
     public poll = (): Promise<void> => this.enqueueOperation("poll", null).then(ignoreResult);
 
@@ -389,3 +394,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 }
 
 const ignoreResult = () => undefined;
+
+export interface AdditionOptions<V extends Value> {
+    compressed?: boolean;
+    replacing?: V;
+}

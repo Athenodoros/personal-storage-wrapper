@@ -179,6 +179,16 @@ export const getValidationProblem = (value: unknown, validate?: (value: unknown)
 };
 
 /**
+ * Records that the manager has decided to write over the value a target holds, with the timestamp the
+ * target has for it. Should the write then fail, the target has missed a write, but nothing else has
+ * written to it since: its value is known, and lost nothing the manager hasn't seen.
+ */
+export const markReplacing = <T extends Target<any, any>>(sync: Sync<T>, timestamp: Date) => {
+    sync.lastProcessedWriteTime = timestamp;
+    sync.lastSeenValueTimestamp = timestamp;
+};
+
+/**
  * Records that a target holds the manager's value, with the timestamp it has for it, as a write of it
  * would. Nothing has written to the target since, and nothing the manager saved is missing from it.
  */

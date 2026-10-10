@@ -83,8 +83,17 @@ test("Remembers that a stored sync missed a write, but not an older version's de
         DefaultDeserialisers
     );
 
+    // A target this session couldn't reach has missed nothing, and the next session finds out for itself
+    const [unreachable] = await getSyncsFromConfig(
+        getConfigFromSyncs([
+            { target: new MemoryTarget(), compressed: true, status: { type: "UNREACHABLE", cause: "OFFLINE" } },
+        ]),
+        DefaultDeserialisers
+    );
+
     // Why it missed one is this session's to find out
     expect(missed.status).toEqual({ type: "BEHIND", cause: "INHERITED" });
+    expect(unreachable.status).toEqual({ type: "IN_STEP" });
     expect(desynced).not.toHaveProperty("desynced");
     expect(desynced.status).toEqual({ type: "IN_STEP" });
 });

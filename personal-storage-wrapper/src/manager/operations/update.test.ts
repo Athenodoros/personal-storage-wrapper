@@ -19,6 +19,10 @@ test("Takes the syncs another context sent, keeping what this one found out abou
     failing.status = { type: "BEHIND", cause: "FAILED" };
     const caughtUp = await getTestSync();
     caughtUp.status = { type: "BEHIND", cause: "FAILED" };
+    const unreachable = await getTestSync();
+    unreachable.status = { type: "UNREACHABLE", cause: "OFFLINE" };
+    const missedElsewhere = await getTestSync();
+    missedElsewhere.status = { type: "UNREACHABLE", cause: "OFFLINE" };
 
     // Another context's copies of the same targets, which only say whether each is behind
     const behind: SyncStatus = { type: "BEHIND", cause: "INHERITED" };
@@ -26,16 +30,23 @@ test("Takes the syncs another context sent, keeping what this one found out abou
         { ...unreadable, status: behind },
         { ...failing, status: behind },
         { ...caughtUp, status: { type: "IN_STEP" } },
+        { ...unreachable, status: { type: "IN_STEP" } },
+        { ...missedElsewhere, status: behind },
     ];
 
     const output = await UpdateOperationRunner(
-        getTestOperationConfig({ args: [sent], syncs: [unreadable, failing, caughtUp] })
+        getTestOperationConfig({
+            args: [sent],
+            syncs: [unreadable, failing, caughtUp, unreachable, missedElsewhere],
+        })
     );
 
     expect(output.syncs?.map(({ status }) => status)).toEqual([
         { type: "UNREADABLE" },
         { type: "BEHIND", cause: "FAILED" },
         { type: "IN_STEP" },
+        { type: "UNREACHABLE", cause: "OFFLINE" },
+        behind,
     ]);
     expect(output.skipChannel).toBe(true);
 });

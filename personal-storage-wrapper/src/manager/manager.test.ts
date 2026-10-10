@@ -966,6 +966,25 @@ test("Says which syncs a value was saved to", async () => {
     manager.close();
 });
 
+test("Says which syncs couldn't be reached on startup, until a poll reaches them", async () => {
+    const working = await getTestSync({ value: "A" });
+    const failing = await getTestSync({ value: "A", fails: true });
+    const onSyncStatesUpdate = vi.fn();
+    const manager = await getTestManager([working, failing], { onSyncStatesUpdate });
+    await vi.advanceTimersByTimeAsync(DELAY);
+
+    expect(manager.getSyncsState().map(({ status }) => status)).toEqual([
+        { type: "IN_STEP" },
+        { type: "UNREACHABLE", cause: "OFFLINE" },
+    ]);
+    expect(onSyncStatesUpdate).toHaveBeenLastCalledWith(manager.getSyncsState());
+
+    failing.target.fails = false;
+    await settle(manager.poll());
+    expect(manager.getSyncsState()[1].status).toEqual({ type: "IN_STEP" });
+    manager.close();
+});
+
 test("Hands out copies of its syncs with a save result", async () => {
     const manager = await getTestManager([await getTestSync({ value: "A" })]);
     await vi.advanceTimersByTimeAsync(DELAY);

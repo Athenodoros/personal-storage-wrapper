@@ -15,11 +15,17 @@ export interface Sync<T extends Target<any, any> = DefaultTarget> {
 
 /**
  * How a target stands against the manager's value. Only whether it is behind is remembered between
- * sessions, and sent to other contexts: each finds out for itself why, and whether it can read it.
+ * sessions, and sent to other contexts: each finds out for itself why, whether it can read it, and
+ * whether it can reach it.
  */
 export type SyncStatus =
     /** Nothing the manager has saved is missing from the target, as far as it knows */
     | { type: "IN_STEP" }
+    /**
+     * Nothing the manager has saved is missing from the target, as far as it knows, but the last request
+     * to it failed. The next request that works puts it back in step, and a write that fails puts it behind.
+     */
+    | { type: "UNREACHABLE"; cause: RequestFailure }
     /** The target may not hold the manager's latest value, so it is checked before it is written again */
     | { type: "BEHIND"; cause: BehindCause }
     /**
@@ -37,6 +43,9 @@ export type BehindCause =
     | "FAILED"
     /** Behind when an earlier session saved the syncs, or another context sent them, neither of which says why */
     | "INHERITED";
+
+/** Why a request to a target failed, short of the target answering with something the manager can't use */
+export type RequestFailure = Extract<BehindCause, "OFFLINE" | "FAILED">;
 
 /**
  * A sync as an application gives it to a manager, to start with or to add. A sync with no status

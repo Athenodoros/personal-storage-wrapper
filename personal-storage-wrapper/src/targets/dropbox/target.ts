@@ -41,6 +41,18 @@ export class DropboxTarget implements Target<DropboxTargetType, DropboxTargetSer
     static catchRedirectForAuth = (path: string = "/data.bak"): Result<DropboxTarget | null> =>
         this.createFromMaybeConnection(catchRedirectForAuth(), path);
 
+    /**
+     * A target for a refresh token obtained some other way, such as one an application kept from before
+     * it used this library. Asking Dropbox whose account it is also checks that the token still works.
+     */
+    static fromRefreshToken = (clientId: string, refreshToken: string, path: string): Result<DropboxTarget> => {
+        const connection = { clientId, refreshToken, accessToken: "", expiry: new Date(0) };
+        return getUserMetadata(connection).map((user) => new DropboxTarget(connection, user, path));
+    };
+
+    /** The same account, at another path. The two share a connection, so a refreshed token serves both. */
+    withPath = (path: string): DropboxTarget => new DropboxTarget(this.connection, this.user, path);
+
     static setupInPopup = (
         clientId: string,
         redirectURI?: string,

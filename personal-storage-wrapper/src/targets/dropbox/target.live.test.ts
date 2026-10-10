@@ -39,6 +39,22 @@ describe.skipIf(!TOKEN)("Dropbox", () => {
         await getDevice().delete();
     });
 
+    test("makes a target from a refresh token, for its account, that can read another path of it", async () => {
+        const path = PATH + ".from-token";
+        const made = await DropboxTarget.fromRefreshToken(CLIENT_ID, TOKEN!, path);
+        expect(made.value?.user.id).toMatch(/^dbid:/);
+        expect((await made.value!.write(encodeToArrayBuffer("FROM A TOKEN"))).type).toBe("value");
+
+        const elsewhere = (await DropboxTarget.fromRefreshToken(CLIENT_ID, TOKEN!, PATH)).value!;
+        expect(await contents(elsewhere.withPath(path))).toBe("FROM A TOKEN");
+        expect((await made.value!.delete()).type).toBe("value");
+
+        expect(await DropboxTarget.fromRefreshToken(CLIENT_ID, "not-a-refresh-token", PATH)).toMatchObject({
+            type: "error",
+            error: "INVALID_AUTH",
+        });
+    }, 30_000);
+
     test("adds the file where none is expected, and refuses to add it over one that is there", async () => {
         const device = getDevice();
         expect(await device.timestamp()).toEqual({ type: "value", value: null });

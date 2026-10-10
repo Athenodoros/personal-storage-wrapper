@@ -122,3 +122,50 @@ test("Reports Dropbox's refusal of an out-of-date revision as a conflict", async
         detail: "path/conflict/file/..",
     });
 });
+
+/** Answers a token refresh for one refresh token, and the account request with whoever it belongs to */
+const stubAccount = (refreshToken: string) => {
+    const authorisations: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("oauth2/token"))
+            return url.includes("refresh_token=" + refreshToken)
+                ? { status: 200, json: async () => ({ access_token: "fresh", expires_in: 14400 }) }
+                : { status: 400, json: async () => ({ error: "invalid_grant" }) };
+
+        authorisations.push((init!.headers as Record<string, string>).authorization);
+        if (url.endsWith("users/get_current_account"))
+            return {
+                status: 200,
+                json: async () => ({ account_id: "dbid:1", email: "a@example.com", name: { display_name: "A" } }),
+            };
+        return { status: 200, json: async () => REVISION };
+    }) as unknown as typeof fetch;
+    return authorisations;
+};
+
+test("Makes a target from a refresh token, for the account it belongs to, if Dropbox still accepts it", async () => {
+    stubAccount("kept");
+
+    const target = await DropboxTarget.fromRefreshToken("app", "kept", "/data.json.gz");
+    expect(target.value?.user).toEqual({ id: "dbid:1", email: "a@example.com", name: "A" });
+    expect(target.value?.path).toBe("/data.json.gz");
+
+    expect(await DropboxTarget.fromRefreshToken("app", "revoked", "/data.json.gz")).toMatchObject({
+        type: "error",
+        error: "INVALID_AUTH",
+    });
+});
+
+test("Reads another path of the same account with the same connection", async () => {
+    const authorisations = stubAccount("kept");
+    const target = (await DropboxTarget.fromRefreshToken("app", "kept", "/data.json.gz")).value!;
+
+    const other = target.withPath("/data.zip");
+    await other.timestamp();
+
+    expect(other.path).toBe("/data.zip");
+    expect(other.user).toEqual(target.user);
+    expect(other.equals(target)).toBe(false);
+    expect(authorisations).toEqual(["Bearer fresh", "Bearer fresh"]);
+});

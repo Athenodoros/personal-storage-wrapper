@@ -8,7 +8,7 @@ import { Result } from "../../targets/result";
 import { compress } from "../../utilities/buffers/compression";
 import { encodeToArrayBuffer } from "../../utilities/buffers/encoding";
 import { noop } from "../../utilities/data";
-import { Sync } from "../types";
+import { Sync, toSync } from "../types";
 import { readFromSync, readValueFromTarget, runWithLogger, timestampFromSync, writeToAndUpdateSync } from "./requests";
 import { getTestSync } from "./test";
 
@@ -44,7 +44,7 @@ test("Correctly logs failures", async () => {
 
 test("Writes and reads uncompressed values correctly", async () => {
     const start = new Date();
-    const sync = { target: new MemoryTarget(), compressed: false };
+    const sync = toSync({ target: new MemoryTarget(), compressed: false });
 
     await writeToAndUpdateSync(() => noop, sync, 1);
 
@@ -62,7 +62,7 @@ test("Writes and reads uncompressed values correctly", async () => {
 
 test("Writes and reads compressed values correctly", async () => {
     const start = new Date();
-    const sync = { target: new MemoryTarget(), compressed: true };
+    const sync = toSync({ target: new MemoryTarget(), compressed: true });
 
     await writeToAndUpdateSync(() => noop, sync, 1);
 
@@ -82,7 +82,7 @@ test("Reads a target's value without syncing to it", async () => {
     const target = new MemoryTarget();
     expect((await readValueFromTarget(target)).value).toBe(null);
 
-    await writeToAndUpdateSync(() => noop, { target, compressed: true }, { some: "value" });
+    await writeToAndUpdateSync(() => noop, toSync({ target, compressed: true }), { some: "value" });
 
     const read = await readValueFromTarget<{ some: string }, MemoryTarget>(target);
     expect(read.value?.value).toEqual({ some: "value" });
@@ -90,7 +90,7 @@ test("Reads a target's value without syncing to it", async () => {
 
 test("Reports a target holding something it cannot decode, rather than never returning", async () => {
     const target = new MemoryTarget();
-    await writeToAndUpdateSync(() => noop, { target, compressed: false }, "not compressed");
+    await writeToAndUpdateSync(() => noop, toSync({ target, compressed: false }), "not compressed");
 
     // Read as though it were compressed, so decoding it throws
     const result = await readValueFromTarget(target, true);
@@ -115,21 +115,26 @@ const runRequestTest = async (fails: boolean, runner: (sync: Sync<MemoryTarget>)
     return { logger, sync };
 };
 
-test("Records a value that didn't reach a sync, until one does", async () => {
+test("Records a value that didn't reach a sync, and why, until one does", async () => {
     const sync = await getTestSync({ value: "A" });
+    const write = vi.spyOn(sync.target, "write");
 
     (sync.target as MemoryTarget).fails = true;
     expect(await writeToAndUpdateSync(() => noop, sync, "B")).toBe("MISSED");
-    expect(sync.missedWrite).toBe(true);
+    expect(sync.status).toEqual({ type: "BEHIND", cause: "OFFLINE" });
 
     (sync.target as MemoryTarget).fails = false;
-    expect(await writeToAndUpdateSync(() => noop, sync, "C")).toBe("SAVED");
-    expect(sync.missedWrite).toBe(false);
+    write.mockReturnValueOnce(Result.error("UNKNOWN", "Refused"));
+    expect(await writeToAndUpdateSync(() => noop, sync, "C")).toBe("MISSED");
+    expect(sync.status).toEqual({ type: "BEHIND", cause: "FAILED" });
 
-    // A sync holding a value that couldn't be read is never written to, so it misses the value too
-    sync.unreadable = true;
-    expect(await writeToAndUpdateSync(() => noop, sync, "D")).toBe("MISSED");
-    expect(sync.missedWrite).toBe(true);
+    expect(await writeToAndUpdateSync(() => noop, sync, "D")).toBe("SAVED");
+    expect(sync.status).toEqual({ type: "IN_STEP" });
+
+    // A sync holding a value that couldn't be read is never written to, and stays that way
+    sync.status = { type: "UNREADABLE" };
+    expect(await writeToAndUpdateSync(() => noop, sync, "E")).toBe("MISSED");
+    expect(sync.status).toEqual({ type: "UNREADABLE" });
 });
 
 test("Expects a target still to hold what was last seen there, and says when it doesn't", async () => {
@@ -150,7 +155,7 @@ test("Expects a target still to hold what was last seen there, and says when it 
     (sync.target as MemoryTarget).value = { timestamp: new Date(Date.now() + 1000), buffer: new ArrayBuffer(0) };
     logger.mockClear();
     expect(await writeToAndUpdateSync(() => logger, sync, "D")).toBe("CONFLICT");
-    expect(sync.missedWrite).toBe(true);
+    expect(sync.status).toEqual({ type: "BEHIND", cause: "MOVED_ON" });
     expect(logger).toHaveBeenCalledWith({ operation: "UPLOAD", stage: "CONFLICT", sync });
 
     // Once something looks again, it expects what that found

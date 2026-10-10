@@ -1,7 +1,7 @@
 import { expect, vi } from "vitest";
 import { DropboxTarget } from "../../targets";
 import { MemoryTarget } from "../../targets/memory";
-import { Sync, Value } from "../types";
+import { Sync, toSync, Value } from "../types";
 import { getBufferFromValue } from "../utilities/serialisation";
 
 /**
@@ -80,18 +80,19 @@ const getTestSyncAndValue = async <V extends Value>({
         buffer: await getBufferFromValue(raw, compressed),
     };
     const target = new MemoryTarget({ value, preserveValueOnSave: true, ...config });
-    const sync: Sync<MemoryTarget> = { target, compressed };
+    const sync: Sync<MemoryTarget> = toSync({ target, compressed });
 
     return { sync, value };
 };
 
 export const getTestDropBoxSync = async ({ compressed = false }: { compressed?: boolean } = {}): Promise<
     Sync<DropboxTarget>
-> => ({
-    target: DropboxTarget.deserialise({
-        connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date().toISOString() },
-        user: { id: "", email: "", name: "" },
-        path: "/data.bak",
-    }),
-    compressed,
-});
+> =>
+    toSync({
+        target: DropboxTarget.deserialise({
+            connection: { clientId: "", refreshToken: "", accessToken: "", expiry: new Date().toISOString() },
+            user: { id: "", email: "", name: "" },
+            path: "/data.bak",
+        }),
+        compressed,
+    });

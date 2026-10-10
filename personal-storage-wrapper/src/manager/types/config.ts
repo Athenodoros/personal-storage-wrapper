@@ -2,7 +2,7 @@ import { ErrorResult, ResultValueType } from "../../targets/result";
 import { Deserialiser, Target } from "../../targets/types";
 import { DefaultTarget } from "../utilities/defaults";
 import { SyncOperationLogger } from "./logs";
-import { Sync } from "./syncs";
+import { NewSync, Sync } from "./syncs";
 import { TimestampedValue, Value } from "./values";
 
 export type ValueUpdateOrigin = "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT" | "CREATION";
@@ -24,7 +24,7 @@ export interface PSMConfig<V extends Value, T extends Target<any, any> = Default
     /**
      * Checked against every value read from a target or sent by another context, before the manager
      * uses it: null if the value can be used, or why it can't. A target whose value fails is treated as
-     * holding a corrupt one - it is marked `unreadable` and never written to - and a value from another
+     * holding a corrupt one - it is marked `UNREADABLE` and never written to - and a value from another
      * context that fails is dropped. The value is untrusted, so it is typed as unknown.
      */
     validate: (value: unknown) => string | null;
@@ -48,7 +48,7 @@ export interface PSMCreationConfig<V extends Value, T extends Target<any, any> =
 
     // Syncs Config
     getSyncData: () => string | null;
-    getDefaultSyncs: () => Promise<Sync<T>[]>;
+    getDefaultSyncs: () => Promise<NewSync<T>[]>;
 
     // Value Cache
     valueCacheMillis: number | undefined;

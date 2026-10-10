@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, deepEqualsList } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
-import { hasMovedOn, markInStep, readFromSync, timestampFromSync } from "../utilities/requests";
+import { clearUnreadable, hasMovedOn, markInStep, readFromSync, timestampFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 export const PollOperationRunner = async <V extends Value, T extends Target<any, any>>({
@@ -25,7 +25,7 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
             }
             // An empty target has nothing in it to lose, whatever it held before
             if (timestamp.value === null) {
-                sync.unreadable = false;
+                clearUnreadable(sync);
                 writes.push(sync);
                 return;
             }
@@ -33,7 +33,7 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
             // Nothing else has written to it, so it holds the last value written here - unless that
             // write failed, in which case it is sent again
             if (!hasMovedOn(sync, timestamp.value)) {
-                if (sync.missedWrite) writes.push(sync);
+                if (sync.status.type === "BEHIND") writes.push(sync);
                 return;
             }
 
@@ -50,7 +50,10 @@ export const PollOperationRunner = async <V extends Value, T extends Target<any,
         })
     );
 
-    if (deepEqualsList(conflicts.map(({ value }) => value.value)) && conflicts.some(({ sync }) => !sync.missedWrite)) {
+    if (
+        deepEqualsList(conflicts.map(({ value }) => value.value)) &&
+        conflicts.some(({ sync }) => sync.status.type === "IN_STEP")
+    ) {
         update = { value: conflicts[0].value.value, origin: "REMOTE" };
         conflicts.forEach(({ sync, value }) => markInStep(sync, value.timestamp));
         writes = syncs.filter(

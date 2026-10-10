@@ -1,6 +1,6 @@
 import { Target } from "../../targets";
-import { Sync, Value } from "../types";
-import { hasMovedOn, timestampFromSync } from "../utilities/requests";
+import { BehindCause, Sync, Value } from "../types";
+import { getBehindCause, hasMovedOn, markBehind, timestampFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 /**
@@ -31,20 +31,22 @@ export const WriteOperationRunner = async <V extends Value, T extends Target<any
     const targets = syncs.filter((sync) => args.some((arg) => arg === "ALL" || arg.includes(sync)));
 
     const decisions = await Promise.all(
-        targets.map(async (sync): Promise<"WRITE" | "POLL" | "SKIP"> => {
-            if (sync.unreadable) return "WRITE";
+        targets.map(async (sync): Promise<{ type: "WRITE" } | { type: "SKIP"; cause: BehindCause }> => {
+            if (sync.status.type === "UNREADABLE") return { type: "WRITE" };
 
             const timestamp = await timestampFromSync(logger, sync);
-            if (timestamp.type === "error") return "SKIP";
+            if (timestamp.type === "error") return { type: "SKIP", cause: getBehindCause(timestamp.error) };
 
-            return hasMovedOn(sync, timestamp.value) ? "POLL" : "WRITE";
+            return hasMovedOn(sync, timestamp.value) ? { type: "SKIP", cause: "MOVED_ON" } : { type: "WRITE" };
         })
     );
 
     targets.forEach((sync, index) => {
-        if (decisions[index] !== "WRITE") sync.missedWrite = true;
+        const decision = decisions[index];
+        if (decision.type === "SKIP") markBehind(sync, decision.cause);
     });
 
-    const writes = targets.filter((_, index) => decisions[index] === "WRITE");
-    return decisions.includes("POLL") ? { writes, poll: true } : { writes };
+    const writes = targets.filter((_, index) => decisions[index].type === "WRITE");
+    const poll = decisions.some((decision) => decision.type === "SKIP" && decision.cause === "MOVED_ON");
+    return poll ? { writes, poll: true } : { writes };
 };

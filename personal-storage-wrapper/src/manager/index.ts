@@ -1,6 +1,9 @@
 export type {
     // Basic Types
     Sync,
+    NewSync,
+    SyncStatus,
+    BehindCause,
     Value,
     TimestampedValue,
     MaybeValue,
@@ -46,6 +49,7 @@ export {
 } from "./utilities/defaults";
 
 export { PersonalStorageManager } from "./manager";
+export { toSync } from "./types";
 export type { AdditionOptions } from "./manager";
 export type { CreatedPSM } from "./manager";
 

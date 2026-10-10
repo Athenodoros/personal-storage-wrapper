@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { MemoryTarget } from "../../targets/memory";
 import { encodeTextToBuffer } from "../../utilities/buffers";
 import { compress } from "../../utilities/buffers/compression";
+import { toSync } from "../types";
 import { DefaultDeserialisers } from "./defaults";
 import { getBufferFromValue, getConfigFromSyncs, getSyncsFromConfig, getValueFromBuffer } from "./serialisation";
 
@@ -29,7 +30,7 @@ test("Correctly serialises and deserialises compressed buffers", async () => {
 
 test("Correctly serialises and deserialises the same syncs", async () => {
     const target = new MemoryTarget();
-    const syncs = [{ target, compressed: true }];
+    const syncs = [toSync({ target, compressed: true })];
     const storage = getConfigFromSyncs(syncs);
     const result = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
@@ -43,7 +44,9 @@ test("Correctly serialises and deserialises the same syncs", async () => {
  */
 test("Revives the last processed write time of a stored sync as a date", async () => {
     const lastProcessedWriteTime = new Date(1000);
-    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, lastProcessedWriteTime }]);
+    const storage = getConfigFromSyncs([
+        toSync({ target: new MemoryTarget(), compressed: true, lastProcessedWriteTime }),
+    ]);
 
     const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
@@ -52,7 +55,7 @@ test("Revives the last processed write time of a stored sync as a date", async (
 });
 
 test("Leaves a sync that has never been written to without a last processed write time", async () => {
-    const storage = getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true }]);
+    const storage = getConfigFromSyncs([toSync({ target: new MemoryTarget(), compressed: true })]);
 
     const [sync] = await getSyncsFromConfig(storage, DefaultDeserialisers);
 
@@ -65,7 +68,9 @@ test("Leaves a sync that has never been written to without a last processed writ
  */
 test("Remembers that a stored sync missed a write, but not an older version's desynced", async () => {
     const [missed] = await getSyncsFromConfig(
-        getConfigFromSyncs([{ target: new MemoryTarget(), compressed: true, missedWrite: true }]),
+        getConfigFromSyncs([
+            { target: new MemoryTarget(), compressed: true, status: { type: "BEHIND", cause: "FAILED" } },
+        ]),
         DefaultDeserialisers
     );
     const [desynced] = await getSyncsFromConfig(
@@ -78,9 +83,10 @@ test("Remembers that a stored sync missed a write, but not an older version's de
         DefaultDeserialisers
     );
 
-    expect(missed.missedWrite).toBe(true);
+    // Why it missed one is this session's to find out
+    expect(missed.status).toEqual({ type: "BEHIND", cause: "INHERITED" });
     expect(desynced).not.toHaveProperty("desynced");
-    expect(desynced.missedWrite).toBeUndefined();
+    expect(desynced.status).toEqual({ type: "IN_STEP" });
 });
 
 /** Saved by an older version, which knew it as `lastSeenWriteTime`: losing it would lose the sync's history */

@@ -12,6 +12,7 @@ import {
     ConflictingSyncStartupBehaviour,
     Deserialisers,
     InitialValue,
+    NewSync,
     PSMConfig,
     PSMCreationConfig,
     SaveResult,
@@ -19,6 +20,7 @@ import {
     Sync,
     SyncsSource,
     TimestampedValue,
+    toSync,
     Value,
     ValueUpdateOrigin,
 } from "./types";
@@ -232,8 +234,9 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
      * itself and has decided the manager's value replaces, which is then written over without asking.
      */
     public addTarget = (target: T, { compressed = true, replacing }: AdditionOptions<V> = {}): Promise<void> =>
-        this.enqueueOperation("addition", { sync: { target, compressed }, replacing }).then(ignoreResult);
-    public addSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("addition", { sync }).then(ignoreResult);
+        this.enqueueOperation("addition", { sync: toSync({ target, compressed }), replacing }).then(ignoreResult);
+    public addSync = (sync: NewSync<T>): Promise<void> =>
+        this.enqueueOperation("addition", { sync: toSync(sync) }).then(ignoreResult);
     public removeSync = (sync: Sync<T>): Promise<void> => this.enqueueOperation("removal", sync).then(ignoreResult);
     public poll = (): Promise<void> => this.enqueueOperation("poll", null).then(ignoreResult);
 

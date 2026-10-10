@@ -137,6 +137,32 @@ test("Records a value that didn't reach a sync, and why, until one does", async 
     expect(sync.status).toEqual({ type: "UNREADABLE" });
 });
 
+test("Records that a sync that has missed nothing couldn't be reached, and why, until a request works", async () => {
+    const sync = await getTestSync({ value: "A" });
+
+    (sync.target as MemoryTarget).fails = true;
+    await timestampFromSync(() => noop, sync);
+    expect(sync.status).toEqual({ type: "UNREACHABLE", cause: "OFFLINE" });
+
+    (sync.target as MemoryTarget).fails = false;
+    vi.spyOn(sync.target, "read").mockReturnValueOnce(Result.error("INVALID_AUTH", "Refused"));
+    await readFromSync(() => noop, sync);
+    expect(sync.status).toEqual({ type: "UNREACHABLE", cause: "FAILED" });
+
+    await readFromSync(() => noop, sync);
+    expect(sync.status).toEqual({ type: "IN_STEP" });
+
+    // A sync that has missed a write is still behind when a read fails, and a write that fails puts one behind
+    sync.status = { type: "BEHIND", cause: "MOVED_ON" };
+    (sync.target as MemoryTarget).fails = true;
+    await timestampFromSync(() => noop, sync);
+    expect(sync.status).toEqual({ type: "BEHIND", cause: "MOVED_ON" });
+
+    sync.status = { type: "UNREACHABLE", cause: "OFFLINE" };
+    await writeToAndUpdateSync(() => noop, sync, "B");
+    expect(sync.status).toEqual({ type: "BEHIND", cause: "OFFLINE" });
+});
+
 test("Expects a target still to hold what was last seen there, and says when it doesn't", async () => {
     const sync = await getTestSync({ value: "A", timestamp: 1000 });
     const logger = vi.fn();

@@ -68,7 +68,7 @@ export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: readonly S
         const saved: SyncSerialisationFormat<T> = {
             target: sync.target.serialise(),
             compressed: sync.compressed,
-            missedWrite: sync.status.type !== "IN_STEP",
+            missedWrite: sync.status.type === "BEHIND" || sync.status.type === "UNREADABLE",
             lastProcessedWriteTime: sync.lastProcessedWriteTime,
         };
         return { type: sync.target.type, config: JSON.stringify(saved) };
@@ -78,7 +78,7 @@ export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: readonly S
 
 /**
  * A sync as it is saved, and sent to other contexts. Of its status, only whether it is behind: why, and
- * whether its value can be read, each context finds out for itself, as it does what its target holds.
+ * whether it can be read or reached, each context finds out for itself, as it does what its target holds.
  */
 type SyncSerialisationFormat<T extends Target<any, any>> = Omit<
     Sync<T>,

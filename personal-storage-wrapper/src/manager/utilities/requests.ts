@@ -3,6 +3,7 @@ import { ErrorResult, getErrorDetail, Result } from "../../targets/result";
 import {
     BehindCause,
     MaybeValue,
+    RequestFailure,
     Sync,
     SyncOperation,
     SyncOperationLogger,
@@ -51,10 +52,16 @@ export const timestampFromSync = <T extends Target<any, any>>(
     logger: () => SyncOperationLogger<Sync<T>>,
     sync: Sync<T>
 ): Result<Date | null> =>
-    runWithLogger(logger, sync, "POLL", () => sync.target.timestamp()).map((timestamp) => {
-        sync.lastSeenValueTimestamp = timestamp;
-        return timestamp;
-    });
+    new Result((resolve) =>
+        runWithLogger(logger, sync, "POLL", () => sync.target.timestamp()).then((result) => {
+            if (result.type === "value") {
+                markReached(sync);
+                sync.lastSeenValueTimestamp = result.value;
+            } else markUnreachable(sync, result.error);
+
+            resolve(result);
+        })
+    );
 
 /**
  * What a read checks a value against once it is decoded, and who to tell when it is refused. Both are
@@ -83,7 +90,8 @@ export const readValueFromTarget = <V extends Value, T extends Target<any, any>>
 /**
  * Reads a sync, and records on it whether what it holds can be used: a value that won't decode or
  * fails validation makes it `UNREADABLE`, so that nothing is written over it, and a usable value
- * leaves it behind until the manager has dealt with it. A target that can't be reached says nothing.
+ * leaves it behind until the manager has dealt with it. One that can't be reached is `UNREACHABLE`,
+ * unless it is behind already.
  *
  * An unreadable value has still been seen, so its timestamp is recorded as one: polls then leave the
  * target alone, rather than reading and reporting the same value again each time, until something
@@ -100,8 +108,10 @@ export const readFromSync = <V extends Value, T extends Target<any, any>>(
         ).then((result) => {
             if (result.type === "value") {
                 clearUnreadable(sync);
+                markReached(sync);
                 sync.lastSeenValueTimestamp = result.value?.timestamp ?? null;
-            } else if (result.error === "CORRUPT_VALUE") {
+            } else if (result.error !== "CORRUPT_VALUE") markUnreachable(sync, result.error);
+            else {
                 sync.status = { type: "UNREADABLE" };
                 // `hasMovedOn` reads this as the last write from here, so an unreadable sync looks
                 // untouched and may be picked for a write - which is only safe because
@@ -204,6 +214,18 @@ export const markBehind = <T extends Target<any, any>>(sync: Sync<T>, cause: Beh
 /** Why a request that failed leaves a target behind */
 export const getBehindCause = (error: ErrorResult["error"]): BehindCause =>
     error === "OFFLINE" ? "OFFLINE" : error === "CONFLICT" ? "MOVED_ON" : "FAILED";
+
+/** Records that a request to a target failed, on one that has missed nothing, which a failed read doesn't change */
+const markUnreachable = <T extends Target<any, any>>(sync: Sync<T>, error: ErrorResult["error"]) => {
+    const cause: RequestFailure = error === "OFFLINE" ? "OFFLINE" : "FAILED";
+    if (sync.status.type === "IN_STEP" || sync.status.type === "UNREACHABLE")
+        sync.status = { type: "UNREACHABLE", cause };
+};
+
+/** Records that a request to a target worked, which puts one that only couldn't be reached back in step */
+const markReached = <T extends Target<any, any>>(sync: Sync<T>) => {
+    if (sync.status.type === "UNREACHABLE") sync.status = { type: "IN_STEP" };
+};
 
 /** A target that held a value that couldn't be read holds something else now, which the manager hasn't seen */
 export const clearUnreadable = <T extends Target<any, any>>(sync: Sync<T>) => {

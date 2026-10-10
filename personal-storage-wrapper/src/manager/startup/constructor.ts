@@ -108,20 +108,11 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
 const getStartingSyncs = async <T extends Target<any, any>>(
     getSyncData: () => string | null,
     getDefaultSyncs: () => Promise<Sync<T>[]>,
-    keepDefaultSyncs: boolean,
     deserialisers: Deserialisers<T>
 ): Promise<{ syncs: Sync<T>[]; source: SyncsSource }> => {
     try {
         const saved = getSyncData();
-        if (saved) {
-            const syncs = await getSyncsFromConfig<T>(saved, deserialisers);
-            if (!keepDefaultSyncs) return { syncs, source: "SAVED" };
-
-            const lost = (await getDefaultSyncs()).filter(
-                ({ target }) => !syncs.some((sync) => sync.target.equals(target))
-            );
-            return { syncs: [...lost, ...syncs], source: "SAVED" };
-        }
+        if (saved) return { syncs: await getSyncsFromConfig<T>(saved, deserialisers), source: "SAVED" };
     } catch (error) {
         console.error("PersonalStorageManager: the saved syncs could not be read, so the defaults are used", error);
         return { syncs: await getDefaultSyncs(), source: "UNREADABLE" };
@@ -160,7 +151,6 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
             Sync<T>[]
         >,
         getSyncData = () => getSyncDataFromLocalStorage(id),
-        keepDefaultSyncs = false,
     } = initialisationConfig;
 
     /**
@@ -180,7 +170,7 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
     let start: StartValue<V, T>;
     let syncsSource: SyncsSource;
     try {
-        const { syncs, source } = await getStartingSyncs(getSyncData, getDefaultSyncs, keepDefaultSyncs, deserialisers);
+        const { syncs, source } = await getStartingSyncs(getSyncData, getDefaultSyncs, deserialisers);
         syncsSource = source;
 
         // Get initial values, including updating logger after PSM creation, and return manager

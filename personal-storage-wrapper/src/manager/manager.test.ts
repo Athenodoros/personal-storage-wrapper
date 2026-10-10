@@ -995,21 +995,6 @@ test("Says where its syncs came from", async () => {
     [saved, defaults].forEach(({ manager }) => manager.close());
 });
 
-test("Puts back a default sync that the saved list has lost, only when asked to", async () => {
-    const local = await getTestSync({ value: "A" });
-    const remote = await getTestSync();
-    const getSyncData = () => getConfigFromSyncs([remote]);
-
-    const kept = await getTestManager([local], { getSyncData, keepDefaultSyncs: true });
-    expect(kept.getSyncsState().map(({ target }) => target)).toEqual([local.target, expect.any(MemoryTarget)]);
-    expect(kept.getValue()).toBe("A");
-
-    const lost = await getTestManager([local], { getSyncData });
-    expect(lost.getSyncsState()).toHaveLength(1);
-
-    [kept, lost].forEach((manager) => manager.close());
-});
-
 test("Tells the handler for a startup with nothing read where its syncs came from", async () => {
     const handleAllEmptyAndFailedSyncsOnStartup = vi.fn(async () => ({ behaviour: "DEFAULT" as const }));
     const sync = await getTestSync({ fails: true });

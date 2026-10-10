@@ -49,12 +49,6 @@ export interface PSMCreationConfig<V extends Value, T extends Target<any, any> =
     // Syncs Config
     getSyncData: () => string | null;
     getDefaultSyncs: () => Promise<Sync<T>[]>;
-    /**
-     * Whether a saved list that has lost one of the default syncs - its target is in none of the saved
-     * ones - gets it back, ahead of the others. For an application whose default target is where the
-     * data always lives, and which a list without it would never read from or write to again.
-     */
-    keepDefaultSyncs: boolean;
 
     // Value Cache
     valueCacheMillis: number | undefined;

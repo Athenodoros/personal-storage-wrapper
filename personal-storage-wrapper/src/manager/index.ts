@@ -46,6 +46,7 @@ export {
 } from "./utilities/defaults";
 
 export { PersonalStorageManager } from "./manager";
+export type { AdditionOptions } from "./manager";
 export type { CreatedPSM } from "./manager";
 
 // Reading a target without syncing to it, for deciding whether to sync to it at all

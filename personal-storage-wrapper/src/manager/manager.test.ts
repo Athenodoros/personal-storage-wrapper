@@ -243,6 +243,57 @@ test("Successfully updates syncs from channel", async () => {
     await vi.waitFor(() => expect(getConfigFromSyncs(manager.getSyncsState())).toEqual(getConfigFromSyncs([syncA])));
 });
 
+test("Keeps the syncs state the same array until the syncs change, and tells subscribers when they do", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const manager = await getTestManager([syncA]);
+    const listener = vi.fn();
+    manager.subscribeToSyncs(listener);
+
+    const before = manager.getSyncsState();
+    expect(manager.getSyncsState()).toBe(before);
+    expect(Object.isFrozen(before) && Object.isFrozen(before[0])).toBe(true);
+
+    const syncB = await getTestSync({ value: "A" });
+    await settle(manager.addSync(syncB));
+
+    const after = manager.getSyncsState();
+    expect(after).not.toBe(before);
+    expect(after).toEqual([syncA, syncB]);
+    expect(listener).toHaveBeenLastCalledWith(after);
+    expect(before).toHaveLength(1);
+});
+
+test("Stops telling a subscriber once it unsubscribes or the manager closes, whatever another subscriber throws", async () => {
+    const syncA = await getTestSync({ value: "A" });
+    const saveSyncData = vi.fn();
+    const manager = await getTestManager([syncA], { saveSyncData });
+
+    const unsubscribed = vi.fn();
+    const closed = vi.fn();
+    manager.subscribeToSyncs(() => {
+        throw new Error("A listener that throws");
+    });
+    const unsubscribe = manager.subscribeToSyncs(unsubscribed);
+    manager.subscribeToSyncs(closed);
+    vi.spyOn(console, "error").mockImplementationOnce(noop);
+    saveSyncData.mockClear();
+
+    await settle(manager.addSync(await getTestSync({ value: "A" })));
+    expect(unsubscribed).toHaveBeenCalledOnce();
+    expect(closed).toHaveBeenCalledOnce();
+    expect(saveSyncData).toHaveBeenCalledOnce();
+
+    unsubscribe();
+    vi.spyOn(console, "error").mockImplementationOnce(noop);
+    await settle(manager.addSync(await getTestSync({ value: "A" })));
+    expect(unsubscribed).toHaveBeenCalledOnce();
+    expect(closed).toHaveBeenCalledTimes(2);
+
+    manager.close();
+    await settle(manager.addSync(await getTestSync({ value: "A" })));
+    expect(closed).toHaveBeenCalledTimes(2);
+});
+
 test("Successfully updates values from channel", async () => {
     const id = "update-value-broadcast-test";
     const manager = await getTestManager([], { id });

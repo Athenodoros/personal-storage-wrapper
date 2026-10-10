@@ -63,7 +63,7 @@ export const getSyncsFromConfig = async <T extends Target<any, any>>(
     return syncs as unknown[] as Sync<T>[];
 };
 
-export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: Sync<T>[]): string => {
+export const getConfigFromSyncs = <T extends Target<any, any>>(syncs: readonly Sync<T>[]): string => {
     const config: SyncSerialisedConfig<T>[] = syncs.map((sync) => {
         const saved: SyncSerialisationFormat<T> = {
             target: sync.target.serialise(),

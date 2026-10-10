@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, uniqEquals } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
-import { markInStep, markReplacing, readFromSync } from "../utilities/requests";
+import { markInStep, readFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 /**
@@ -40,7 +40,8 @@ export const AdditionOperationRunner = async <V extends Value, T extends Target<
                 } else if (deepEquals(result.value.value, value)) {
                     markInStep(sync, result.value.timestamp);
                 } else if (replacing !== undefined && deepEquals(result.value.value, replacing)) {
-                    markReplacing(sync, result.value.timestamp);
+                    // Processed, so that a write that then fails still leaves nothing written there unseen
+                    sync.lastProcessedWriteTime = result.value.timestamp;
                     writes.push(sync);
                 } else {
                     conflicts.push({ sync, value: result.value });

@@ -8,7 +8,7 @@ import { MemoryTarget } from "../targets";
 import { noop } from "../utilities/data";
 import { ListBuffer } from "../utilities/listbuffer";
 import { PersonalStorageManager } from "./manager";
-import { ConflictingRemoteBehaviour, PSMCreationConfig, Sync } from "./types";
+import { ConflictingRemoteBehaviour, PSMCreationConfig, Sync, SyncStatus, toSync } from "./types";
 import { PSMBroadcastChannel } from "./utilities/channel";
 import { DefaultTarget } from "./utilities/defaults";
 import { readFromSync, writeToAndUpdateSync } from "./utilities/requests";
@@ -285,13 +285,13 @@ test("Writes again to a sync that missed a write, if nothing else has written to
     const syncB = await getTestSync({ value: "A" });
     const manager = await getTestManager([syncA, syncB]);
     await vi.advanceTimersByTimeAsync(1); // Startup finds the manager's value in it, and records it as in step
-    syncB.missedWrite = true;
+    syncB.status = { type: "BEHIND", cause: "INHERITED" };
 
     const result = await settle(manager.setValue("B"));
 
     expect(result.saved).toEqual([syncA, syncB]);
     expect(await value(syncB)).toEqual("B");
-    expect(manager.getSyncsState()[1].missedWrite).toBe(false);
+    expect(manager.getSyncsState()[1].status).toEqual({ type: "IN_STEP" });
 });
 
 test("Reconciles a sync that missed a write and has moved on before writing to it", async () => {
@@ -302,7 +302,7 @@ test("Reconciles a sync that missed a write and has moved on before writing to i
     await vi.advanceTimersByTimeAsync(1); // Startup finds the manager's value in it, and records it as in step
 
     // Its write failed, and since then something else has written to it
-    syncB.missedWrite = true;
+    syncB.status = { type: "BEHIND", cause: "INHERITED" };
     await vi.advanceTimersByTimeAsync(1);
     await settle(writeToAndUpdateSync(() => noop, { ...syncB }, "OTHER"));
 
@@ -404,16 +404,16 @@ test("Correctly recovers from desyncs by calling conflict handler", async () => 
     (syncB.target as MemoryTarget).fails = true;
 
     await settle(manager.setValue("C"));
-    expect(syncA.missedWrite).toBe(true);
-    expect(syncB.missedWrite).toBe(true);
+    expect(syncA.status).toEqual({ type: "BEHIND", cause: "OFFLINE" });
+    expect(syncB.status).toEqual({ type: "BEHIND", cause: "OFFLINE" });
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
     (syncB.target as MemoryTarget).fails = false;
     await settle(manager.poll());
 
-    expect(syncA.missedWrite).toBe(false);
-    expect(syncB.missedWrite).toBe(false);
+    expect(syncA.status).toEqual({ type: "IN_STEP" });
+    expect(syncB.status).toEqual({ type: "IN_STEP" });
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
     expect(resolveConflictingSyncsUpdate).toHaveBeenCalledWith<
         Parameters<ConflictingRemoteBehaviour<string, DefaultTarget>>
@@ -442,13 +442,13 @@ test("Correctly recovers from descyncs without needing conflict handler", async 
     (syncA.target as MemoryTarget).fails = true;
 
     await settle(manager.setValue("B"));
-    expect(syncA.missedWrite).toBe(true);
+    expect(syncA.status).toEqual({ type: "BEHIND", cause: "OFFLINE" });
 
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     (syncA.target as MemoryTarget).fails = false;
     await settle(manager.poll());
 
-    expect(syncA.missedWrite).toBe(false);
+    expect(syncA.status).toEqual({ type: "IN_STEP" });
     expect(resolveConflictingSyncsUpdate).not.toHaveBeenCalled();
     expect(manager.getValue()).toBe("B");
     expect(await value(syncA)).toEqual("B");
@@ -704,13 +704,14 @@ test("Hands the operation queue back when an operation fails", async () => {
  */
 
 /** A sync whose target holds bytes that don't decode to anything */
-const getCorruptSync = (): Sync<MemoryTarget> => ({
-    target: new MemoryTarget({
-        value: { timestamp: new Date(), buffer: new Uint8Array([1, 2, 3]).buffer },
-        preserveValueOnSave: true,
-    }),
-    compressed: true,
-});
+const getCorruptSync = (): Sync<MemoryTarget> =>
+    toSync({
+        target: new MemoryTarget({
+            value: { timestamp: new Date(), buffer: new Uint8Array([1, 2, 3]).buffer },
+            preserveValueOnSave: true,
+        }),
+        compressed: true,
+    });
 
 const rawBuffer = async (sync: Sync<MemoryTarget>) => (await settle(sync.target.read())).value?.buffer;
 
@@ -785,7 +786,7 @@ test("Never writes over a value that won't decode, and says so", async () => {
         expect.objectContaining({ error: "CORRUPT_VALUE", buffer: before }),
         { type: "SYNC", sync: corrupt }
     );
-    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+    expect(manager.getSyncsState()[0].status).toEqual({ type: "UNREADABLE" });
 
     const result = await settle(manager.setValue("B"));
     expect(result.saved).toEqual([working]);
@@ -850,11 +851,15 @@ test("Refuses a value from another context that fails validation", async () => {
     manager.close();
 });
 
-test("Never saves whether a target was unreadable", async () => {
+test("Saves only that a target is behind, not that it was unreadable", async () => {
     const manager = await getTestManager([getCorruptSync()]);
 
-    expect(manager.getSyncsState()[0].unreadable).toBe(true);
-    expect(getConfigFromSyncs(manager.getSyncsState())).not.toContain("unreadable");
+    expect(manager.getSyncsState()[0].status).toEqual({ type: "UNREADABLE" });
+    const [saved] = (JSON.parse(getConfigFromSyncs(manager.getSyncsState())) as { config: string }[]).map(
+        ({ config }) => JSON.parse(config)
+    );
+    expect(saved).toMatchObject({ missedWrite: true });
+    expect(saved).not.toHaveProperty("status");
     manager.close();
 });
 
@@ -870,12 +875,12 @@ test("Never saves or broadcasts what it last saw in a target", async () => {
 test("Writes to a target again once a poll finds it empty", async () => {
     const corrupt = getCorruptSync();
     const manager = await getTestManager([corrupt]);
-    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+    expect(manager.getSyncsState()[0].status).toEqual({ type: "UNREADABLE" });
 
     corrupt.target.value = null;
     await settle(manager.poll());
 
-    expect(manager.getSyncsState()[0].unreadable).toBe(false);
+    expect(manager.getSyncsState()[0].status).toEqual({ type: "IN_STEP" });
     expect(await value(corrupt)).toBe(DEFAULT_VALUE);
     manager.close();
 });
@@ -915,9 +920,9 @@ test("Hands out copies of its syncs with a save result", async () => {
     await vi.advanceTimersByTimeAsync(DELAY);
 
     const result = await settle(manager.setValue("B"));
-    result.saved[0].missedWrite = true;
+    result.saved[0].status = { type: "BEHIND", cause: "INHERITED" };
 
-    expect(manager.getSyncsState()[0].missedWrite).toBe(false);
+    expect(manager.getSyncsState()[0].status).toEqual({ type: "IN_STEP" });
     manager.close();
 });
 
@@ -963,7 +968,7 @@ test("Reports an unreadable value once, until something writes over it", async (
     corrupt.target.value = { timestamp: new Date(Date.now() + 1000), buffer: new Uint8Array([4, 5, 6]).buffer };
     await settle(manager.poll());
     expect(onUnreadableValue).toHaveBeenCalledTimes(2);
-    expect(manager.getSyncsState()[0].unreadable).toBe(true);
+    expect(manager.getSyncsState()[0].status).toEqual({ type: "UNREADABLE" });
 
     manager.close();
 });
@@ -1067,7 +1072,7 @@ test("Says on a later startup which target missed a write", async () => {
         _: () => string,
         syncs: { sync: Sync; value: { value: string } }[]
     ) => {
-        seen = syncs.map(({ sync, value }) => [value.value, sync.missedWrite ?? false]);
+        seen = syncs.map(({ sync, value }) => [value.value, sync.status.type !== "IN_STEP"]);
         return original;
     };
     const second = await getTestManager([], { getSyncData: () => saved, resolveConflictingSyncValuesOnStartup });
@@ -1079,7 +1084,7 @@ test("Says on a later startup which target missed a write", async () => {
     ]);
 
     // Once it has the value, it no longer says so
-    expect(second.getSyncsState().map(({ missedWrite }) => missedWrite)).toEqual([false, false]);
+    expect(second.getSyncsState().map(({ status }) => status.type)).toEqual(["IN_STEP", "IN_STEP"]);
 });
 
 /**
@@ -1093,13 +1098,13 @@ test("Doesn't write over a value saved elsewhere since, even with polling off", 
     const local = await getTestSync({ value: "A", timestamp: 1000 });
     const shared = await getTestSync({ value: "A", timestamp: 1000 });
 
-    let seen: { value: string; missedWrite: boolean }[] = [];
+    let seen: { value: string; status: SyncStatus }[] = [];
     const resolveConflictingSyncsUpdate: ConflictingRemoteBehaviour<string, DefaultTarget> = async (
         value,
         _,
         conflicts
     ) => {
-        seen = conflicts.map(({ sync, value }) => ({ value: value.value, missedWrite: sync.missedWrite === true }));
+        seen = conflicts.map(({ sync, value }) => ({ value: value.value, status: sync.status }));
         return value;
     };
     const manager = await getTestManager([local, shared], { resolveConflictingSyncsUpdate });
@@ -1111,7 +1116,7 @@ test("Doesn't write over a value saved elsewhere since, even with polling off", 
     await settle(manager.setValue("B"));
     await vi.advanceTimersByTimeAsync(DELAY); // The poll it asks for runs at once
 
-    expect(seen).toEqual([{ value: "OTHER", missedWrite: true }]);
+    expect(seen).toEqual([{ value: "OTHER", status: { type: "BEHIND", cause: "MOVED_ON" } }]);
     expect(await value(local)).toBe("B");
 });
 

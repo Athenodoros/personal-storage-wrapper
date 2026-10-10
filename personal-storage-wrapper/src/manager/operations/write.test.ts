@@ -11,22 +11,22 @@ test("Writes to a sync only if nothing else has written to it, and asks for a po
     inStep.lastProcessedWriteTime = new Date(1000);
     const untouched = await getTestSync({ value: "A", timestamp: 1000 });
     untouched.lastProcessedWriteTime = new Date(1000);
-    untouched.missedWrite = true;
+    untouched.status = { type: "BEHIND", cause: "INHERITED" };
 
     // Something else has written to it since, whether or not this manager's last write to it worked
     const movedOn = await getTestSync({ value: "OTHER", timestamp: 2000 });
     movedOn.lastProcessedWriteTime = new Date(1000);
     const movedOnAfterMissing = await getTestSync({ value: "OTHER", timestamp: 2000 });
     movedOnAfterMissing.lastProcessedWriteTime = new Date(1000);
-    movedOnAfterMissing.missedWrite = true;
+    movedOnAfterMissing.status = { type: "BEHIND", cause: "INHERITED" };
 
     const syncs = [empty, inStep, untouched, movedOn, movedOnAfterMissing];
     const output = await WriteOperationRunner(getTestOperationConfig({ syncs, args: ["ALL"] }));
     expect(output).toEqual({ writes: [empty, inStep, untouched], poll: true });
 
     // The value isn't there, which the poll and any later startup need to know
-    expect(movedOn.missedWrite).toBe(true);
-    expect(movedOnAfterMissing.missedWrite).toBe(true);
+    expect(movedOn.status).toEqual({ type: "BEHIND", cause: "MOVED_ON" });
+    expect(movedOnAfterMissing.status).toEqual({ type: "BEHIND", cause: "MOVED_ON" });
 });
 
 test("Leaves a sync that can't be reached, without a poll, and records that it missed the write", async () => {
@@ -35,7 +35,7 @@ test("Leaves a sync that can't be reached, without a poll, and records that it m
 
     const output = await WriteOperationRunner(getTestOperationConfig({ syncs: [synced, unreachable], args: ["ALL"] }));
     expect(output).toEqual({ writes: [synced] });
-    expect(unreachable.missedWrite).toBe(true);
+    expect(unreachable.status).toEqual({ type: "BEHIND", cause: "OFFLINE" });
 });
 
 test("Writes to every sync that any of a batch of writes asked for", async () => {
@@ -63,8 +63,7 @@ test("Writes to every sync that any of a batch of writes asked for", async () =>
 test("Doesn't check a sync holding a value that couldn't be read, since it is never written to", async () => {
     const unreadable = await getTestSync({ value: "A", timestamp: 2000 });
     unreadable.lastProcessedWriteTime = new Date(1000);
-    unreadable.missedWrite = true;
-    unreadable.unreadable = true;
+    unreadable.status = { type: "UNREADABLE" };
 
     // Checking would find that it has moved on, and ask for a poll
     const output = await WriteOperationRunner(getTestOperationConfig({ syncs: [unreadable], args: ["ALL"] }));

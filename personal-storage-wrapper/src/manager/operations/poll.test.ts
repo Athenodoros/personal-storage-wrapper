@@ -108,7 +108,7 @@ test("Still reads a remote whose timestamp has moved on", async () => {
 test("Marks a sync in step when a poll finds the manager's value in it", async () => {
     const sync = await getTestSync({ value: "VALUE1" });
     sync.lastProcessedWriteTime = new Date(0);
-    sync.missedWrite = true;
+    sync.status = { type: "BEHIND", cause: "INHERITED" };
 
     // Something else wrote the value this manager holds
     await sync.target.write(encodeToArrayBuffer(JSON.stringify("VALUE2")));
@@ -116,5 +116,29 @@ test("Marks a sync in step when a poll finds the manager's value in it", async (
 
     expect(output).toEqual({ writes: [], update: undefined });
     expect(sync.lastProcessedWriteTime).toEqual((await sync.target.timestamp()).value);
-    expect(sync.missedWrite).toBe(false);
+    expect(sync.status).toEqual({ type: "IN_STEP" });
+});
+
+/**
+ * What replaced a value the manager couldn't read is new to it, so it isn't taken without asking, as a
+ * value that every disagreeing target agrees on is when one of them was in step
+ */
+test("Asks about a value written over one it couldn't read, rather than taking it", async () => {
+    const sync = await getTestSync({ value: "VALUE1" });
+    sync.status = { type: "UNREADABLE" };
+    sync.lastProcessedWriteTime = new Date(0);
+    await sync.target.write(encodeToArrayBuffer(JSON.stringify("VALUE2")));
+    const resolveConflictingSyncsUpdate = vi.fn(async (value: string) => value);
+
+    const output = await PollOperationRunner(
+        getTestOperationConfig({
+            args: [null],
+            value: "VALUE1",
+            syncs: [sync],
+            config: { resolveConflictingSyncsUpdate },
+        })
+    );
+
+    expect(resolveConflictingSyncsUpdate).toHaveBeenCalledOnce();
+    expect(output.update).toBeUndefined();
 });

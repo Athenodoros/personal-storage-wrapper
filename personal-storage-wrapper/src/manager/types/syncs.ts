@@ -7,26 +7,47 @@ export interface Sync<T extends Target<any, any> = DefaultTarget> {
     compressed: boolean;
 
     // Sync Status
-    /**
-     * The target may not hold the manager's latest value: a write to it failed, or was refused because
-     * it holds a value that couldn't be read, or it couldn't be reached when it was added. It is checked
-     * before it is written again, in case something else has written to it since. Unlike `unreadable`,
-     * this is remembered between sessions, so that a later startup can tell a target that fell behind
-     * from one that is up to date. A write that works, or a read that finds the manager's value there,
-     * clears it.
-     */
-    missedWrite?: boolean;
-    /**
-     * The target holds a value that could not be decoded, or that failed the manager's `validate`.
-     * Nothing is written to it while this is set, so that whatever is there is never lost to a write
-     * that did not know about it. A later read of a usable value clears it. It is not remembered
-     * between sessions: each startup reads every target again.
-     */
-    unreadable?: boolean;
+    status: SyncStatus;
 
     lastSeenValueTimestamp?: Date | null; // What a write to the target expects, from this session's last look: its value's timestamp, or null for none. Not saved.
     lastProcessedWriteTime?: Date; // The target's timestamp for the last value the manager wrote, took on, or found unreadable
 }
+
+/**
+ * How a target stands against the manager's value. Only whether it is behind is remembered between
+ * sessions, and sent to other contexts: each finds out for itself why, and whether it can read it.
+ */
+export type SyncStatus =
+    /** Nothing the manager has saved is missing from the target, as far as it knows */
+    | { type: "IN_STEP" }
+    /** The target may not hold the manager's latest value, so it is checked before it is written again */
+    | { type: "BEHIND"; cause: BehindCause }
+    /**
+     * The target holds a value that could not be decoded, or that failed the manager's `validate`. It is
+     * never written to, so that whatever is there is never lost to a write that did not know about it.
+     */
+    | { type: "UNREADABLE" };
+
+export type BehindCause =
+    /** The target couldn't be reached */
+    | "OFFLINE"
+    /** Something else wrote over the target, or deleted it, since the manager last looked: a poll reads it */
+    | "MOVED_ON"
+    /** A request failed for another reason, such as a refused authorisation, which may not pass by itself */
+    | "FAILED"
+    /** Behind when an earlier session saved the syncs, or another context sent them, neither of which says why */
+    | "INHERITED";
+
+/**
+ * A sync as an application gives it to a manager, to start with or to add. A sync with no status
+ * starts in step, as one that nothing has been saved to yet has missed nothing.
+ */
+export type NewSync<T extends Target<any, any> = DefaultTarget> = Omit<Sync<T>, "status"> &
+    Partial<Pick<Sync<T>, "status">>;
+
+/** The sync itself where it has a status, since the manager works on the objects it is given */
+export const toSync = <T extends Target<any, any>>(sync: NewSync<T>): Sync<T> =>
+    sync.status ? (sync as Sync<T>) : { ...sync, status: { type: "IN_STEP" } };
 
 /**
  * Where a manager's value came from when it was created: read from a target, the initial value it was

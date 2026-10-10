@@ -5,7 +5,7 @@ import { GDriveTarget, GDriveTargetType } from "../../targets/gdrive";
 import { IndexedDBTarget, IndexedDBTargetType } from "../../targets/indexeddb";
 import { MemoryTarget, MemoryTargetType } from "../../targets/memory";
 import { deepEquals, maxBy } from "../../utilities/data";
-import { Deserialisers, OfflineSyncStartupBehaviour, Sync, TimestampedValue, Value } from "../types";
+import { Deserialisers, NewSync, OfflineSyncStartupBehaviour, Sync, TimestampedValue, Value } from "../types";
 
 /**
  * Deserialiser definitions
@@ -56,7 +56,7 @@ export const clearSyncDataFromLocalStorage = (id?: string) => {
     }
 };
 
-export const getDefaultSyncStates = async (): Promise<[Sync<IndexedDBTarget>]> => {
+export const getDefaultSyncStates = async (): Promise<[NewSync<IndexedDBTarget>]> => {
     const target = await IndexedDBTarget.create();
     return [{ target, compressed: true }];
 };

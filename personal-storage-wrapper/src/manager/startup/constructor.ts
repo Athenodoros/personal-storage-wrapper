@@ -9,9 +9,11 @@ import {
     InitialValue,
     PSMConfig,
     PSMCreationConfig,
+    NewSync,
     Sync,
     SyncOperationLogger,
     SyncsSource,
+    toSync,
     Value,
 } from "../types";
 import {
@@ -106,7 +108,7 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
  */
 const getStartingSyncs = async <T extends Target<any, any>>(
     getSyncData: () => string | null,
-    getDefaultSyncs: () => Promise<Sync<T>[]>,
+    getDefaultSyncs: () => Promise<NewSync<T>[]>,
     deserialisers: Deserialisers<T>
 ): Promise<{ syncs: Sync<T>[]; source: SyncsSource }> => {
     try {
@@ -114,10 +116,10 @@ const getStartingSyncs = async <T extends Target<any, any>>(
         if (saved) return { syncs: await getSyncsFromConfig<T>(saved, deserialisers), source: "SAVED" };
     } catch (error) {
         console.error("PersonalStorageManager: the saved syncs could not be read, so the defaults are used", error);
-        return { syncs: await getDefaultSyncs(), source: "UNREADABLE" };
+        return { syncs: (await getDefaultSyncs()).map(toSync), source: "UNREADABLE" };
     }
 
-    return { syncs: await getDefaultSyncs(), source: "DEFAULT" };
+    return { syncs: (await getDefaultSyncs()).map(toSync), source: "DEFAULT" };
 };
 
 const managers = new Set<string>();
@@ -147,7 +149,7 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
         id = "psm-default-id",
         ignoreDuplicateCheck = false,
         getDefaultSyncs = (maybeDeserialisers ? () => Promise.resolve([]) : getDefaultSyncStates) as () => Promise<
-            Sync<T>[]
+            NewSync<T>[]
         >,
         getSyncData = () => getSyncDataFromLocalStorage(id),
     } = initialisationConfig;

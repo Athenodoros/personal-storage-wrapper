@@ -1,6 +1,14 @@
 import { Target } from "../../targets";
 import { ErrorResult, getErrorDetail, Result } from "../../targets/result";
-import { MaybeValue, Sync, SyncOperation, SyncOperationLogger, UnreadableValueSource, Value } from "../types";
+import {
+    BehindCause,
+    MaybeValue,
+    Sync,
+    SyncOperation,
+    SyncOperationLogger,
+    UnreadableValueSource,
+    Value,
+} from "../types";
 import { getBufferFromValue, getValueFromBuffer } from "./serialisation";
 
 // Exported only for tests
@@ -74,8 +82,8 @@ export const readValueFromTarget = <V extends Value, T extends Target<any, any>>
 
 /**
  * Reads a sync, and records on it whether what it holds can be used: a value that won't decode or
- * fails validation marks it `unreadable`, so that nothing is written over it, and a usable value or
- * an empty target clears that again. A target that can't be reached says nothing either way.
+ * fails validation makes it `UNREADABLE`, so that nothing is written over it, and a usable value
+ * leaves it behind until the manager has dealt with it. A target that can't be reached says nothing.
  *
  * An unreadable value has still been seen, so its timestamp is recorded as one: polls then leave the
  * target alone, rather than reading and reporting the same value again each time, until something
@@ -91,12 +99,12 @@ export const readFromSync = <V extends Value, T extends Target<any, any>>(
             decodeTargetValue<V>(sync.target.read(), sync.compressed, checks.validate)
         ).then((result) => {
             if (result.type === "value") {
-                sync.unreadable = false;
+                clearUnreadable(sync);
                 sync.lastSeenValueTimestamp = result.value?.timestamp ?? null;
             } else if (result.error === "CORRUPT_VALUE") {
-                sync.unreadable = true;
-                // `hasMovedOn` reads this as the last write from here, so an unreadable sync that
-                // missed a write looks untouched and is picked for a write - which is only safe because
+                sync.status = { type: "UNREADABLE" };
+                // `hasMovedOn` reads this as the last write from here, so an unreadable sync looks
+                // untouched and may be picked for a write - which is only safe because
                 // `writeToAndUpdateSync` refuses every write to an unreadable sync
                 if (result.timestamp) {
                     sync.lastProcessedWriteTime = result.timestamp;
@@ -184,8 +192,22 @@ export const getValidationProblem = (value: unknown, validate?: (value: unknown)
  */
 export const markInStep = <T extends Target<any, any>>(sync: Sync<T>, timestamp: Date) => {
     sync.lastProcessedWriteTime = timestamp;
-    sync.missedWrite = false;
+    sync.status = { type: "IN_STEP" };
     sync.lastSeenValueTimestamp = timestamp;
+};
+
+/** Records that a target has missed the manager's value. One that can't be read is behind already. */
+export const markBehind = <T extends Target<any, any>>(sync: Sync<T>, cause: BehindCause) => {
+    if (sync.status.type !== "UNREADABLE") sync.status = { type: "BEHIND", cause };
+};
+
+/** Why a request that failed leaves a target behind */
+export const getBehindCause = (error: ErrorResult["error"]): BehindCause =>
+    error === "OFFLINE" ? "OFFLINE" : error === "CONFLICT" ? "MOVED_ON" : "FAILED";
+
+/** A target that held a value that couldn't be read holds something else now, which the manager hasn't seen */
+export const clearUnreadable = <T extends Target<any, any>>(sync: Sync<T>) => {
+    if (sync.status.type === "UNREADABLE") sync.status = { type: "BEHIND", cause: "MOVED_ON" };
 };
 
 /** CONFLICT: refused because something else wrote to the target since this manager looked */
@@ -201,10 +223,7 @@ export const writeToAndUpdateSync = async <V extends Value, T extends Target<any
     sync: Sync<T>,
     value: V
 ): Promise<WriteOutcome> => {
-    if (sync.unreadable) {
-        sync.missedWrite = true;
-        return "MISSED";
-    }
+    if (sync.status.type === "UNREADABLE") return "MISSED";
 
     const buffer = await getBufferFromValue(value, sync.compressed);
     const result = await runWithLogger(logger, sync, "UPLOAD", () =>
@@ -216,7 +235,7 @@ export const writeToAndUpdateSync = async <V extends Value, T extends Target<any
         return "SAVED";
     }
 
-    sync.missedWrite = true;
+    markBehind(sync, getBehindCause(result.error));
     if (result.error !== "CONFLICT") return "MISSED";
 
     sync.lastSeenValueTimestamp = undefined; // Unknown until something looks again

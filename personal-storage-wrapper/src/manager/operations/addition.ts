@@ -1,7 +1,7 @@
 import { Target } from "../../targets";
 import { deepEquals, uniqEquals } from "../../utilities/data";
 import { ConflictingRemoteBehaviour, Sync, Value } from "../types";
-import { markInStep, readFromSync } from "../utilities/requests";
+import { getBehindCause, markBehind, markInStep, readFromSync } from "../utilities/requests";
 import { OperationRunConfig, OperationRunOutput } from "./types";
 
 /**
@@ -34,7 +34,7 @@ export const AdditionOperationRunner = async <V extends Value, T extends Target<
         requests.map(({ sync, replacing }) =>
             readFromSync<V, T>(logger, sync, config).then(async (result) => {
                 if (result.type === "error") {
-                    sync.missedWrite = true;
+                    markBehind(sync, getBehindCause(result.error));
                 } else if (result.value === null) {
                     writes.push(sync);
                 } else if (deepEquals(result.value.value, value)) {

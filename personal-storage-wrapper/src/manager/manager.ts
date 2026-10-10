@@ -46,6 +46,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 
     private operations: OperationState;
     private syncs: Sync<T>[];
+    private syncsSnapshot: readonly Sync<T>[] = [];
+    private syncsListeners = new Set<SyncsListener<T>>();
     private channel: PSMBroadcastChannel<V, T>;
     public config: PSMConfig<V, T>;
 
@@ -190,6 +192,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 
         this.operations.running = "startup";
         this.syncs = start.values.map(({ sync }) => sync);
+        this.syncsSnapshot = this.takeSyncsSnapshot();
 
         // Wait for all results to return, handle results, and start polling
         const originalSyncs = this.getSyncsCopy();
@@ -227,7 +230,19 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
      */
 
     private getSyncsCopy = (): Sync<T>[] => [...this.syncs.map((sync) => ({ ...sync }))];
-    public getSyncsState = this.getSyncsCopy;
+    private takeSyncsSnapshot = (): readonly Sync<T>[] =>
+        Object.freeze(this.syncs.map((sync) => Object.freeze({ ...sync })));
+
+    /** The syncs as last reported, which stays the same array until they change */
+    public getSyncsState = (): readonly Sync<T>[] => this.syncsSnapshot;
+    /**
+     * Calls `listener` with the new `getSyncsState()` whenever the syncs change, until the returned
+     * function is called or the manager closes
+     */
+    public subscribeToSyncs = (listener: SyncsListener<T>): (() => void) => {
+        if (!this.closed) this.syncsListeners.add(listener);
+        return () => void this.syncsListeners.delete(listener);
+    };
     /**
      * Starts syncing to a target. A value already there is reconciled with the manager's by
      * `resolveConflictingSyncsUpdate`, unless it is `replacing`: a value the application read there
@@ -265,6 +280,7 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
         if (this.closed) return;
 
         this.closed = true;
+        this.syncsListeners.clear();
         if (this.pollTimeout !== undefined) clearTimeout(this.pollTimeout);
         this.channel.close();
         deregisterPSM(this.id);
@@ -281,8 +297,18 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 
         if (sendToChannel) this.channel.sendUpdatedSyncs(this.syncs);
 
+        this.syncsSnapshot = this.takeSyncsSnapshot();
         this.config.onSyncStatesUpdate(this.getSyncsCopy());
         this.config.saveSyncData(getConfigFromSyncs(this.syncs));
+
+        // A listener is application code, and one that throws must not stop the others
+        this.syncsListeners.forEach((listener) => {
+            try {
+                listener(this.syncsSnapshot);
+            } catch (error) {
+                console.error("PersonalStorageManager: a syncs listener threw", error);
+            }
+        });
     };
 
     private setNewValue = (value: V, origin: ValueUpdateOrigin) => {
@@ -397,6 +423,8 @@ export class PersonalStorageManager<V extends Value, T extends Target<any, any> 
 }
 
 const ignoreResult = () => undefined;
+
+type SyncsListener<T extends Target<any, any>> = (syncs: readonly Sync<T>[]) => void;
 
 export interface AdditionOptions<V extends Value> {
     compressed?: boolean;

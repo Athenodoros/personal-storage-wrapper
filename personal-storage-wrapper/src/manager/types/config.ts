@@ -2,7 +2,7 @@ import { ErrorResult, ResultValueType } from "../../targets/result";
 import { Deserialiser, Target } from "../../targets/types";
 import { DefaultTarget } from "../utilities/defaults";
 import { SyncOperationLogger } from "./logs";
-import { Sync } from "./syncs";
+import { Sync, SyncsSource } from "./syncs";
 import { TimestampedValue, Value } from "./values";
 
 export type ValueUpdateOrigin = "REMOTE" | "BROADCAST" | "LOCAL" | "CONFLICT" | "CREATION";
@@ -49,6 +49,12 @@ export interface PSMCreationConfig<V extends Value, T extends Target<any, any> =
     // Syncs Config
     getSyncData: () => string | null;
     getDefaultSyncs: () => Promise<Sync<T>[]>;
+    /**
+     * Whether a saved list that has lost one of the default syncs - its target is in none of the saved
+     * ones - gets it back, ahead of the others. For an application whose default target is where the
+     * data always lives, and which a list without it would never read from or write to again.
+     */
+    keepDefaultSyncs: boolean;
 
     // Value Cache
     valueCacheMillis: number | undefined;
@@ -64,11 +70,17 @@ export type Deserialisers<T extends Target<any, any> = DefaultTarget> = {
 };
 
 export type OfflineSyncStartupBehaviour<V extends Value> = { behaviour: "DEFAULT" } | { behaviour: "VALUE"; value: V };
+/**
+ * Called on startup when no target held a value and at least one couldn't be read. `syncsSource` says
+ * where the syncs came from, since a target that couldn't be read may hold data the application should
+ * not start without, and a saved list that couldn't be read may have listed more of them.
+ */
 export type OfflineSyncStartupHandler<V extends Value, T extends Target<any, any> = DefaultTarget> = (
     syncs: {
         sync: Sync<T>;
         value: ResultValueType<V>;
-    }[]
+    }[],
+    syncsSource: SyncsSource
 ) => Promise<OfflineSyncStartupBehaviour<V>>;
 
 /**

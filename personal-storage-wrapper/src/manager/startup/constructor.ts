@@ -37,6 +37,7 @@ const getStartupReadChecks = <V extends Value, T extends Target<any, any>>(
 // Only exported for testing
 export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
     syncs: Sync<T>[],
+    syncsSource: SyncsSource,
     defaultInitialValue: InitialValue<V>,
     getLatestConfig: () => Partial<PSMCreationConfig<V, T>>,
     logger: () => SyncOperationLogger<Sync<T>>
@@ -77,7 +78,7 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
             if (results.some(({ value }) => value.type === "error") && results.every(({ value }) => !value.value)) {
                 const behaviour = await (
                     getLatestConfig().handleAllEmptyAndFailedSyncsOnStartup ?? resetToDefaultsOnOfflineTargets
-                )(results as { sync: Sync<T>; value: ResultValueType<V> }[]);
+                )(results as { sync: Sync<T>; value: ResultValueType<V> }[], syncsSource);
                 if (behaviour.behaviour === "VALUE" && !resolved) {
                     resolved = true;
                     resolve({ type: "final", value: behaviour.value, results, source: "FALLBACK" });
@@ -107,11 +108,20 @@ export const getPSMStartValue = <V extends Value, T extends Target<any, any>>(
 const getStartingSyncs = async <T extends Target<any, any>>(
     getSyncData: () => string | null,
     getDefaultSyncs: () => Promise<Sync<T>[]>,
+    keepDefaultSyncs: boolean,
     deserialisers: Deserialisers<T>
 ): Promise<{ syncs: Sync<T>[]; source: SyncsSource }> => {
     try {
         const saved = getSyncData();
-        if (saved) return { syncs: await getSyncsFromConfig<T>(saved, deserialisers), source: "SAVED" };
+        if (saved) {
+            const syncs = await getSyncsFromConfig<T>(saved, deserialisers);
+            if (!keepDefaultSyncs) return { syncs, source: "SAVED" };
+
+            const lost = (await getDefaultSyncs()).filter(
+                ({ target }) => !syncs.some((sync) => sync.target.equals(target))
+            );
+            return { syncs: [...lost, ...syncs], source: "SAVED" };
+        }
     } catch (error) {
         console.error("PersonalStorageManager: the saved syncs could not be read, so the defaults are used", error);
         return { syncs: await getDefaultSyncs(), source: "UNREADABLE" };
@@ -150,6 +160,7 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
             Sync<T>[]
         >,
         getSyncData = () => getSyncDataFromLocalStorage(id),
+        keepDefaultSyncs = false,
     } = initialisationConfig;
 
     /**
@@ -169,11 +180,11 @@ export async function createPSM<V extends Value, T extends Target<any, any>>(
     let start: StartValue<V, T>;
     let syncsSource: SyncsSource;
     try {
-        const { syncs, source } = await getStartingSyncs(getSyncData, getDefaultSyncs, deserialisers);
+        const { syncs, source } = await getStartingSyncs(getSyncData, getDefaultSyncs, keepDefaultSyncs, deserialisers);
         syncsSource = source;
 
         // Get initial values, including updating logger after PSM creation, and return manager
-        start = await getPSMStartValue<V, T>(syncs, defaultInitialValue, getLatestConfig, () =>
+        start = await getPSMStartValue<V, T>(syncs, source, defaultInitialValue, getLatestConfig, () =>
             getHandleSyncOperationLog()
         );
     } catch (error) {

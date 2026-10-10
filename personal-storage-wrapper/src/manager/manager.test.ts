@@ -810,9 +810,10 @@ test("Treats a value that fails validation like one that won't decode", async ()
 
     // Nothing usable was found, so the manager starts on its initial value without writing it anywhere
     expect(manager.getValue()).toBe(DEFAULT_VALUE);
-    expect(handleAllEmptyAndFailedSyncsOnStartup).toHaveBeenCalledWith([
-        { sync: newer, value: expect.objectContaining({ error: "CORRUPT_VALUE", detail: "Too new" }) },
-    ]);
+    expect(handleAllEmptyAndFailedSyncsOnStartup).toHaveBeenCalledWith(
+        [{ sync: newer, value: expect.objectContaining({ error: "CORRUPT_VALUE", detail: "Too new" }) }],
+        expect.any(String)
+    );
     expect(onUnreadableValue).toHaveBeenCalledWith(
         expect.objectContaining({ detail: "Too new", decoded: "FROM A NEWER VERSION", buffer: before }),
         { type: "SYNC", sync: newer }
@@ -992,6 +993,34 @@ test("Says where its syncs came from", async () => {
     expect(defaults.syncsSource).toBe("DEFAULT");
 
     [saved, defaults].forEach(({ manager }) => manager.close());
+});
+
+test("Puts back a default sync that the saved list has lost, only when asked to", async () => {
+    const local = await getTestSync({ value: "A" });
+    const remote = await getTestSync();
+    const getSyncData = () => getConfigFromSyncs([remote]);
+
+    const kept = await getTestManager([local], { getSyncData, keepDefaultSyncs: true });
+    expect(kept.getSyncsState().map(({ target }) => target)).toEqual([local.target, expect.any(MemoryTarget)]);
+    expect(kept.getValue()).toBe("A");
+
+    const lost = await getTestManager([local], { getSyncData });
+    expect(lost.getSyncsState()).toHaveLength(1);
+
+    [kept, lost].forEach((manager) => manager.close());
+});
+
+test("Tells the handler for a startup with nothing read where its syncs came from", async () => {
+    const handleAllEmptyAndFailedSyncsOnStartup = vi.fn(async () => ({ behaviour: "DEFAULT" as const }));
+    const sync = await getTestSync({ fails: true });
+
+    const manager = await getTestManager([sync], {
+        getSyncData: () => "not json",
+        handleAllEmptyAndFailedSyncsOnStartup,
+    });
+
+    expect(handleAllEmptyAndFailedSyncsOnStartup).toHaveBeenCalledWith(expect.any(Array), "UNREADABLE");
+    manager.close();
 });
 
 test("Starts from the default syncs when the saved ones can't be read", async () => {
